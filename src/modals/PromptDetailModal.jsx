@@ -1,9 +1,74 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Edit, Star, Copy, ChevronRight, Clock, User, Tag, Folder, FileText } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { applyVariables, splitContentByVariables } from '../utils/variableParser';
+import { applyVariables, extractVariables, splitContentByVariables } from '../utils/variableParser';
 import { copyToClipboard } from '../utils/clipboard';
-import VariableHighlighter from '../components/variables/VariableHighlighter';
+
+// 변수가 적용된 내용을 하이라이트하는 컴포넌트
+const HighlightedContent = ({ content, variableValues }) => {
+  if (!content) return null;
+  
+  // 원본 프롬프트에서 모든 변수 추출
+  const templateVariables = extractVariables(content);
+  
+  // 사용자가 입력한 변수명 목록
+  const userVariableNames = Object.keys(variableValues || {});
+  
+  // 프롬프트를 텍스트와 변수로 분리
+  const parts = splitContentByVariables(content);
+  
+  return (
+    <div className="bg-white p-4 rounded-lg border whitespace-pre-wrap">
+      {parts.map((part, index) => {
+        if (part.type === 'variable') {
+          // 매칭되는 사용자 변수 찾기 (변수 파서와 동일한 로직)
+          const matchedVarName = findMatchingVariable(part.name, userVariableNames);
+          const value = matchedVarName ? variableValues[matchedVarName] : '';
+          const hasValue = value && value.trim() !== '';
+          
+          // 값이 있으면 적용된 값 표시, 없으면 원래 변수 표시
+          return (
+            <span 
+              key={index} 
+              className={hasValue 
+                ? "bg-green-100 text-green-800 px-1 rounded" 
+                : "bg-yellow-100 text-yellow-800 px-1 rounded"}
+              title={hasValue ? `원래 변수: {${part.name}}` : '값이 적용되지 않음'}
+            >
+              {hasValue ? value : part.content}
+            </span>
+          );
+        } else {
+          return <span key={index}>{part.content}</span>;
+        }
+      })}
+    </div>
+  );
+};
+
+// 매칭되는 변수 찾기 (variableParser.js의 함수와 유사)
+const findMatchingVariable = (templateVarName, userVarNames) => {
+  // 동일한 변수명이 있으면 그것을 사용
+  if (userVarNames.includes(templateVarName)) {
+    return templateVarName;
+  }
+  
+  // 하드코딩된 매핑 (프로젝트 고유 매핑)
+  const hardcodedMapping = {
+    'v1.345 버전': '버전 기록',
+    'v1.455': '버전 기록',
+    '버전': '버전 기록',
+    '2025-04-07 월': '일자',
+    '날짜': '일자',
+    '주요 개선사항': '개선사항'
+  };
+  
+  if (hardcodedMapping[templateVarName] && userVarNames.includes(hardcodedMapping[templateVarName])) {
+    return hardcodedMapping[templateVarName];
+  }
+  
+  return null;
+};
 
 const PromptDetailModal = () => {
   const { 
@@ -34,16 +99,25 @@ const PromptDetailModal = () => {
         initialValues[variable.name] = variable.default_value || '';
       });
       setVariableValues(initialValues);
+      
+      // 초기 프롬프트 내용을 변수 적용 버전으로 설정
+      const initialProcessed = applyVariables(selectedPrompt.content, initialValues);
+      setProcessedContent(initialProcessed);
     }
   }, [selectedPrompt]);
   
-  // 변수 적용한 내용 업데이트
-  useEffect(() => {
+  // 변수값이 변경될 때마다 프롬프트 내용 업데이트
+  const updateProcessedContent = useCallback(() => {
     if (selectedPrompt) {
       const processed = applyVariables(selectedPrompt.content, variableValues);
       setProcessedContent(processed);
     }
   }, [selectedPrompt, variableValues]);
+  
+  // 변수값이 변경되면 프롬프트 내용 업데이트
+  useEffect(() => {
+    updateProcessedContent();
+  }, [updateProcessedContent]);
   
   // 외부 클릭 감지
   useEffect(() => {
@@ -100,10 +174,18 @@ const PromptDetailModal = () => {
   
   // 변수값 업데이트
   const handleVariableChange = (name, value) => {
-    setVariableValues(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setVariableValues(prev => {
+      const newValues = {
+        ...prev,
+        [name]: value
+      };
+      
+      // 즉시 프롬프트 내용 업데이트
+      const processed = applyVariables(selectedPrompt.content, newValues);
+      setProcessedContent(processed);
+      
+      return newValues;
+    });
   };
   
   // 텍스트 에디터 열기
@@ -191,8 +273,8 @@ const PromptDetailModal = () => {
             <div className="border-b p-6">
               <h3 className="font-medium text-gray-800 mb-3">변수 입력</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-48 overflow-y-auto">
-                {selectedPrompt.variables.map(variable => (
-                  <div key={variable.id || variable.name} className="flex flex-col">
+                {selectedPrompt.variables.map((variable, index) => (
+                  <div key={`${variable.id || variable.name}-${index}`} className="flex flex-col">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       {variable.name}
                     </label>
@@ -201,6 +283,7 @@ const PromptDetailModal = () => {
                         type="text"
                         value={variableValues[variable.name] || ''}
                         onChange={(e) => handleVariableChange(variable.name, e.target.value)}
+                        onBlur={(e) => handleVariableChange(variable.name, e.target.value)}
                         placeholder={variable.default_value || `${variable.name} 값 입력`}
                         className="flex-1 px-3 py-2 border rounded-l text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
                       />
@@ -302,7 +385,10 @@ const PromptDetailModal = () => {
                   </button>
                 </div>
                 <div className="h-64 overflow-y-auto">
-                  <HighlightedContent content={processedContent} />
+                  <HighlightedContent 
+                    content={selectedPrompt.content}
+                    variableValues={variableValues}
+                  />
                 </div>
               </div>
             </div>
@@ -352,58 +438,6 @@ const PromptDetailModal = () => {
           </div>
         )}
       </div>
-    </div>
-  );
-};
-
-// 변수가 포함된 내용을 하이라이트하는 컴포넌트
-const HighlightedContent = ({ content }) => {
-  const regex = /{([^}]+)}/g;
-  const parts = [];
-  let lastIndex = 0;
-  let match;
-  
-  // 정규식을 사용하여 {변수명} 패턴 찾기
-  while ((match = regex.exec(content)) !== null) {
-    if (match.index > lastIndex) {
-      // 변수 앞의 일반 텍스트 추가
-      parts.push({
-        type: 'text',
-        content: content.substring(lastIndex, match.index)
-      });
-    }
-    
-    // 변수 추가
-    parts.push({
-      type: 'variable',
-      name: match[1],
-      content: match[0]
-    });
-    
-    lastIndex = match.index + match[0].length;
-  }
-  
-  // 마지막 변수 이후의 텍스트 추가
-  if (lastIndex < content.length) {
-    parts.push({
-      type: 'text',
-      content: content.substring(lastIndex)
-    });
-  }
-  
-  return (
-    <div className="bg-white p-4 rounded-lg border whitespace-pre-wrap">
-      {parts.map((part, index) => {
-        if (part.type === 'variable') {
-          return (
-            <span key={index} className="bg-yellow-100 text-yellow-800 px-1 rounded">
-              {part.content}
-            </span>
-          );
-        } else {
-          return <span key={index}>{part.content}</span>;
-        }
-      })}
     </div>
   );
 };
