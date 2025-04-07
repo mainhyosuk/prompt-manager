@@ -39,7 +39,30 @@
 
 ### 주요 기능
 
-- 프로젝트 초기 설정
-- 기본 파일 구조 구현
-- React + Vite 환경 설정
-- Flask 백엔드 API 기본 구성 
+- 1단계: 프로젝트 초기 설정 및 기본 구조 구현
+  - React + Vite 환경 설정 및 프로젝트 생성
+  - Tailwind CSS 설정 및 기본 스타일 적용
+  - 폴더 구조 설정 및 핵심 컴포넌트 구현
+  - 상태 관리를 위한 Context API 구현
+  - 기본 UI 레이아웃 (사이드바, 헤더, 대시보드) 구현
+  - 기본 데이터베이스 스키마 설계
+
+### 코드 변경 사항
+
+- **프로젝트 설정**:
+  - `package.json`: 프로젝트 의존성 및 스크립트 구성
+  - `vite.config.js`: Vite 빌드 도구 설정
+  - `tailwind.config.js`: Tailwind CSS 구성
+  - `src/styles/index.css`: 기본 스타일 및 컴포넌트 스타일 정의
+
+- **핵심 컴포넌트**:
+  - `src/App.jsx`: 메인 앱 컴포넌트 구현
+  - `src/main.jsx`: 진입점 설정 및 앱 렌더링
+  - `src/context/AppContext.jsx`: 애플리케이션 상태 관리
+  - `src/pages/*`: 메인 페이지 컴포넌트
+  - `src/components/*`: 레이아웃, 프롬프트, 폴더, 태그 컴포넌트
+  - `src/modals/*`: 모달 컴포넌트 (프롬프트 추가/편집, 상세보기)
+
+- **Python 백엔드**:
+  - `python/main.py`: 메인 애플리케이션 진입점
+  - `python/db/database.py`: 기본 데이터베이스 구조 설정 
