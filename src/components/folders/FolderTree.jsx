@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useLayoutEffect, useMemo } from 'react';
 import { ChevronDown, ChevronRight, Star, Folder, FolderOpen, Package, Edit, Trash2, ArrowUp, ArrowDown, FilePlus } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
-import { updateFolder, deleteFolder } from '../../api/folderApi';
+import { updateFolder, deleteFolder, reorderFolder } from '../../api/folderApi';
 
 // 쓰로틀링 함수 추가
 const throttle = (func, delay) => {
@@ -242,12 +242,64 @@ const useContextMenu = (folderName) => {
   return { contextMenu, setContextMenu, closeContextMenu, folderItemRef };
 };
 
-// 드래그 시작 시 성능 최적화를 위한 클래스 추가 함수
+// 드래그 중 성능 최적화를 위한 클래스 추가 함수
 const optimizeDragPerformance = (enable) => {
   if (enable) {
     document.body.classList.add('dragging-active');
   } else {
     document.body.classList.remove('dragging-active');
+  }
+};
+
+// 드롭 마커 생성 및 관리 유틸리티 함수
+const createDropMarker = () => {
+  // 이미 존재하는 마커가 있으면 제거
+  const existingMarker = document.querySelector('.folder-drop-marker');
+  if (existingMarker) {
+    existingMarker.remove();
+  }
+  
+  // 새 드롭 마커 생성
+  const marker = document.createElement('div');
+  marker.className = 'folder-drop-marker';
+  marker.style.position = 'absolute';
+  marker.style.height = '2px';
+  marker.style.backgroundColor = '#2563eb';
+  marker.style.left = '0';
+  marker.style.right = '0';
+  marker.style.transform = 'scaleY(0)';
+  marker.style.transition = 'transform 0.15s ease-in-out';
+  marker.style.zIndex = '10';
+  
+  document.body.appendChild(marker);
+  return marker;
+};
+
+const showDropMarker = (targetElement, position = 'before') => {
+  const marker = document.querySelector('.folder-drop-marker') || createDropMarker();
+  
+  if (!targetElement) {
+    marker.style.transform = 'scaleY(0)';
+    return;
+  }
+  
+  const rect = targetElement.getBoundingClientRect();
+  marker.style.width = `${rect.width}px`;
+  marker.style.left = `${rect.left}px`;
+  
+  if (position === 'before') {
+    marker.style.top = `${rect.top - 1}px`;
+  } else {
+    marker.style.top = `${rect.bottom - 1}px`;
+  }
+  
+  marker.style.transform = 'scaleY(1)';
+};
+
+const hideDropMarker = () => {
+  const marker = document.querySelector('.folder-drop-marker');
+  if (marker) {
+    marker.style.transform = 'scaleY(0)';
   }
 };
 
@@ -278,7 +330,8 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
   // 드래그 앤 드롭 상태를 Ref로 관리하여 리렌더링 방지
   const dragStateRef = useRef({
     isDragging: false,
-    isDragOver: false
+    isDragOver: false,
+    dropPosition: null // 'before', 'inside', 'after'
   });
   
   // UI 업데이트를 위한 최소한의 상태만 유지
@@ -291,30 +344,6 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
   const isExpanded = expandedFolders[folder.name];
   const hasChildren = folder.children && folder.children.length > 0;
   const isDefaultFolder = ['모든 프롬프트', '즐겨찾기'].includes(folder.name);
-  
-  // 컴포넌트 언마운트 시 RAF 정리
-  useEffect(() => {
-    return () => {
-      if (rafIdRef.current) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-    };
-  }, []);
-  
-  // 드래그 시각적 피드백 업데이트를 위한 RAF 함수
-  const updateDragVisual = useCallback((isDraggedOver) => {
-    if (rafIdRef.current) {
-      cancelAnimationFrame(rafIdRef.current);
-    }
-    
-    rafIdRef.current = requestAnimationFrame(() => {
-      // Ref를 사용하여 상태 업데이트
-      dragStateRef.current.isDragOver = isDraggedOver;
-      forceUpdate({}); // 필요한 경우에만 리렌더링 트리거
-      rafIdRef.current = null;
-    });
-  }, []);
   
   // 아이콘 결정
   let FolderIcon = Folder;
@@ -336,116 +365,83 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
     }
   };
   
-  // 이름 변경 시작
-  const startRenaming = () => {
-    setIsRenaming(true);
-    setNewName(folder.name);
-    setTimeout(() => {
-      if (renameInputRef.current) {
-        renameInputRef.current.focus();
-        renameInputRef.current.select();
+  // 컴포넌트 언마운트 시 RAF 정리
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
       }
-    }, 10);
-  };
+    };
+  }, []);
   
-  // 이름 변경 적용
-  const applyRename = async () => {
-    if (newName.trim() && newName !== folder.name) {
-      try {
-        await updateFolder(folder.id, { name: newName.trim() });
-        await loadData();
-        if (selectedFolder === folder.name) {
-          setSelectedFolder(newName.trim());
-        }
-      } catch (error) {
-        console.error('폴더 이름 변경 실패:', error);
-        alert('폴더 이름을 변경하는데 실패했습니다.');
-      }
+  // 드래그 위치 확인 함수
+  const checkDragPosition = useCallback((e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mouseY = e.clientY;
+    const threshold = rect.height * 0.25; // 상단/하단 영역 비율
+    
+    // 대상 폴더의 상단에 가까운 경우
+    if (mouseY - rect.top <= threshold) {
+      return 'before';
+    } 
+    // 대상 폴더의 하단에 가까운 경우
+    else if (rect.bottom - mouseY <= threshold) {
+      return 'after';
     }
-    setIsRenaming(false);
-  };
+    // 내부로 이동 (기존 동작과 동일)
+    else {
+      return 'inside';
+    }
+  }, []);
   
-  // 폴더 삭제
-  const handleDelete = async () => {
-    if (['모든 프롬프트', '즐겨찾기'].includes(folder.name)) {
-      alert('기본 폴더는 삭제할 수 없습니다.');
-      return;
-    }
-
-    if (!window.confirm(`"${folder.name}" 폴더를 삭제하시겠습니까? 폴더 내 프롬프트가 있으면 삭제할 수 없습니다.`)) {
-      return;
+  // 드래그 시각적 피드백 업데이트를 위한 RAF 함수
+  const updateDragVisual = useCallback((isDraggedOver, position = null) => {
+    if (rafIdRef.current) {
+      cancelAnimationFrame(rafIdRef.current);
     }
     
-    try {
-      await deleteFolder(folder.id);
-      await loadData();
-      if (selectedFolder === folder.name) {
-        setSelectedFolder('모든 프롬프트');
+    rafIdRef.current = requestAnimationFrame(() => {
+      // Ref를 사용하여 상태 업데이트
+      dragStateRef.current.isDragOver = isDraggedOver;
+      dragStateRef.current.dropPosition = position;
+      
+      // 드롭 마커 위치 업데이트
+      if (isDraggedOver && (position === 'before' || position === 'after')) {
+        showDropMarker(folderItemRef.current, position);
+      } else if (position === 'inside') {
+        hideDropMarker();
+      } else {
+        hideDropMarker();
       }
-    } catch (error) {
-      console.error('폴더 삭제 실패:', error);
-      alert('폴더를 삭제하는데 실패했습니다. 폴더 내 프롬프트가 있거나 하위 폴더가 있는지 확인하세요.');
-    }
-  };
-  
-  // 폴더 이동 관련 함수
-  const startMove = (direction) => {
-    setIsMoveMode(true);
-    setMoveDirection(direction);
-  };
-  
-  const handleMove = async (direction) => {
-    startMove(direction);
-  };
-  
-  const finishMove = async (targetFolderId) => {
-    if (!targetFolderId) {
-      setIsMoveMode(false);
-      return;
-    }
-    
-    try {
-      await updateFolder(folder.id, {
-        name: folder.name,
-        parent_id: targetFolderId === 'root' ? null : targetFolderId
-      });
-      await loadData();
-      setIsMoveMode(false);
-    } catch (error) {
-      console.error('폴더 이동 실패:', error);
-      alert('폴더를 이동하는데 실패했습니다.');
-      setIsMoveMode(false);
-    }
-  };
-  
-  // 이름 변경 관련 함수
-  const cancelRename = () => setIsRenaming(false);
-  
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') applyRename();
-    else if (e.key === 'Escape') cancelRename();
-  };
-  
-  // 프롬프트 추가 함수
-  const handleAddPromptToFolder = () => {
-    handleAddPrompt(folder.id, folder.name);
-  };
+      
+      forceUpdate({}); // 필요한 경우에만 리렌더링 트리거
+      rafIdRef.current = null;
+    });
+  }, []);
   
   // 드래그 앤 드롭 이벤트 핸들러 최적화
   const handleDragOver = useCallback((e) => {
     e.preventDefault();
+    e.stopPropagation();
     
     // 자기 자신이거나 특별 폴더인 경우 드롭 불가
     if (isDefaultFolder) {
       return;
     }
     
-    // RAF를 사용하여 시각적 업데이트
-    updateDragVisual(true);
-  }, [isDefaultFolder, updateDragVisual]);
+    // 드래그 위치에 따라 다른 시각적 피드백 표시
+    const dropPosition = checkDragPosition(e);
+    
+    // 위치에 따른 피드백
+    updateDragVisual(true, dropPosition);
+  }, [isDefaultFolder, updateDragVisual, checkDragPosition]);
   
-  const handleDragLeave = useCallback(() => {
-    // RAF를 사용하여 시각적 업데이트
+  const handleDragLeave = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // 시각적 피드백 제거
     updateDragVisual(false);
   }, [updateDragVisual]);
   
@@ -454,7 +450,7 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
                            transition-all duration-150 ease-in-out
                            ${isSelected ? 'bg-blue-100' : ''}
                            ${dragStateRef.current.isDragging ? 'opacity-50' : ''}
-                           ${dragStateRef.current.isDragOver ? 'bg-blue-100 border border-blue-400' : ''}`;
+                           ${dragStateRef.current.isDragOver && dragStateRef.current.dropPosition === 'inside' ? 'bg-blue-100 border border-blue-400' : ''}`;
   
   // 드래그 시작/종료 시 전역 성능 최적화
   const handleDragStart = (e) => {
@@ -470,7 +466,10 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
     // 드래그 시작 데이터 설정
     e.dataTransfer.setData('application/json', JSON.stringify({
       folderId: folder.id,
-      folderName: folder.name
+      folderName: folder.name,
+      parentId: folder.parent_id,
+      position: folder.position,
+      level: level
     }));
     
     // Ref를 사용하여 상태 업데이트
@@ -515,17 +514,24 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
     
     // 성능 최적화를 위한 클래스 제거
     optimizeDragPerformance(false);
+    
+    // 드롭 마커 숨기기
+    hideDropMarker();
   };
   
   const handleDrop = async (e) => {
     e.preventDefault();
+    e.stopPropagation();
     
     // Ref를 사용하여 상태 업데이트
+    const dropPosition = dragStateRef.current.dropPosition;
     dragStateRef.current.isDragOver = false;
+    dragStateRef.current.dropPosition = null;
     forceUpdate({});
     
     // 특별 폴더인 경우 드롭 불가
     if (isDefaultFolder) {
+      hideDropMarker();
       return;
     }
     
@@ -536,24 +542,40 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
       
       // 자기 자신에게 드롭하는 경우 무시
       if (draggedFolderId === folder.id) {
+        hideDropMarker();
         return;
       }
       
       // 계층 구조에서 폴더 찾기
       const draggedFolder = findFolderById(folders, draggedFolderId);
-      if (!draggedFolder) return;
+      if (!draggedFolder) {
+        hideDropMarker();
+        return;
+      }
       
       // 드래그한 폴더가 대상 폴더의 부모인 경우(순환 참조) 방지
       if (isDescendant(draggedFolder, folder.id)) {
         alert('폴더를 자신의 하위 폴더로 이동할 수 없습니다.');
+        hideDropMarker();
         return;
       }
       
-      // 폴더 이동 API 호출
-      await updateFolder(draggedFolderId, {
-        name: draggedFolder.name,
-        parent_id: folder.id
-      });
+      console.log(`폴더 드롭: ${draggedFolder.name}를 ${folder.name}의 ${dropPosition}에 위치`);
+      
+      // 드롭 위치에 따른 처리
+      if (dropPosition === 'inside') {
+        // 폴더 내부로 이동
+        await reorderFolder(draggedFolderId, {
+          reference_folder_id: folder.id,
+          target_position: 'inside'
+        });
+      } else {
+        // 폴더 위/아래로 이동
+        await reorderFolder(draggedFolderId, {
+          reference_folder_id: folder.id,
+          target_position: dropPosition  // 'before' 또는 'after'
+        });
+      }
       
       // 데이터 다시 로드
       await loadData();
@@ -561,6 +583,8 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
     } catch (error) {
       console.error('폴더 이동 실패:', error);
       alert('폴더를 이동하는데 실패했습니다.');
+    } finally {
+      hideDropMarker();
     }
   };
   
@@ -573,6 +597,8 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
         style={{ userSelect: 'none', position: 'relative', pointerEvents: 'auto' }}
         data-folder-id={folder.id}
         data-folder-name={folder.name}
+        data-level={level}
+        data-is-default={isDefaultFolder ? "true" : "false"}
         draggable={!isDefaultFolder}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
@@ -608,8 +634,32 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            onBlur={applyRename}
-            onKeyDown={handleKeyDown}
+            onBlur={() => {
+              if (newName.trim() && newName !== folder.name) {
+                updateFolder(folder.id, { name: newName.trim() })
+                  .then(() => loadData())
+                  .catch(error => {
+                    console.error('폴더 이름 변경 실패:', error);
+                    alert('폴더 이름을 변경하는데 실패했습니다.');
+                  });
+              }
+              setIsRenaming(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                if (newName.trim() && newName !== folder.name) {
+                  updateFolder(folder.id, { name: newName.trim() })
+                    .then(() => loadData())
+                    .catch(error => {
+                      console.error('폴더 이름 변경 실패:', error);
+                      alert('폴더 이름을 변경하는데 실패했습니다.');
+                    });
+                }
+                setIsRenaming(false);
+              } else if (e.key === 'Escape') {
+                setIsRenaming(false);
+              }
+            }}
             className="flex-grow text-sm px-1 py-0.5 border rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
             onClick={(e) => e.stopPropagation()}
           />
@@ -633,10 +683,38 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
           y={contextMenu.y}
           folder={folder}
           onClose={closeContextMenu}
-          onRename={startRenaming}
-          onDelete={handleDelete}
-          onMove={handleMove}
-          onAddPrompt={handleAddPromptToFolder}
+          onRename={() => {
+            setIsRenaming(true);
+            setNewName(folder.name);
+            setTimeout(() => {
+              if (renameInputRef.current) {
+                renameInputRef.current.focus();
+                renameInputRef.current.select();
+              }
+            }, 10);
+          }}
+          onDelete={() => {
+            if (['모든 프롬프트', '즐겨찾기'].includes(folder.name)) {
+              alert('기본 폴더는 삭제할 수 없습니다.');
+              return;
+            }
+
+            if (!window.confirm(`"${folder.name}" 폴더를 삭제하시겠습니까? 폴더 내 프롬프트가 있으면 삭제할 수 없습니다.`)) {
+              return;
+            }
+            
+            deleteFolder(folder.id)
+              .then(() => loadData())
+              .catch(error => {
+                console.error('폴더 삭제 실패:', error);
+                alert('폴더를 삭제하는데 실패했습니다. 폴더 내 프롬프트가 있거나 하위 폴더가 있는지 확인하세요.');
+              });
+          }}
+          onMove={(direction) => {
+            setIsMoveMode(true);
+            setMoveDirection(direction);
+          }}
+          onAddPrompt={() => handleAddPrompt(folder.id, folder.name)}
         />
       )}
       
@@ -669,7 +747,21 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
               {moveDirection === 'up' && (
                 <button
                   className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 border-b"
-                  onClick={() => finishMove('root')}
+                  onClick={() => {
+                    updateFolder(folder.id, {
+                      name: folder.name,
+                      parent_id: null
+                    })
+                    .then(() => {
+                      loadData();
+                      setIsMoveMode(false);
+                    })
+                    .catch(error => {
+                      console.error('폴더 이동 실패:', error);
+                      alert('폴더를 이동하는데 실패했습니다.');
+                      setIsMoveMode(false);
+                    });
+                  }}
                 >
                   최상위 폴더 (루트)
                 </button>
@@ -682,7 +774,21 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
                 <button
                   key={f.id}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 border-b"
-                  onClick={() => finishMove(f.id)}
+                  onClick={() => {
+                    updateFolder(folder.id, {
+                      name: folder.name,
+                      parent_id: moveDirection === 'up' ? f.id : f.parent_id
+                    })
+                    .then(() => {
+                      loadData();
+                      setIsMoveMode(false);
+                    })
+                    .catch(error => {
+                      console.error('폴더 이동 실패:', error);
+                      alert('폴더를 이동하는데 실패했습니다.');
+                      setIsMoveMode(false);
+                    });
+                  }}
                 >
                   {f.name}
                 </button>
@@ -728,7 +834,9 @@ const FolderTree = React.memo(() => {
   
   // 드래그 상태를 Ref로 관리
   const dragStateRef = useRef({
-    isRootDragOver: false
+    isRootDragOver: false,
+    rootDropPosition: null, // 드롭 위치 (before, inside, after)
+    targetFolder: null // 대상 폴더
   });
   
   // UI 업데이트를 위한 최소한의 상태만 유지
@@ -737,8 +845,83 @@ const FolderTree = React.memo(() => {
   // RAF 참조 저장
   const rafIdRef = useRef(null);
   
+  // 드롭 마커 참조
+  const rootDropMarkerRef = useRef(null);
+  
+  // 마운트 시 드롭 마커 생성
+  useEffect(() => {
+    // 루트 드롭 마커 생성
+    rootDropMarkerRef.current = createDropMarker();
+    
+    return () => {
+      // 언마운트 시 드롭 마커 제거
+      if (rootDropMarkerRef.current) {
+        rootDropMarkerRef.current.remove();
+      }
+    };
+  }, []);
+  
+  // 드래그 위치 확인 함수
+  const checkRootDragPosition = useCallback((e, folderItems) => {
+    // 첫 번째/마지막 폴더와 드롭 영역의 rect 가져오기
+    const containerRect = rootDropAreaRef.current.getBoundingClientRect();
+    const mouseY = e.clientY;
+    
+    // 최상위 레벨 폴더들 요소 가져오기 (일반 폴더만)
+    const rootFolderElements = Array.from(
+      document.querySelectorAll('.folder-item[data-level="0"]:not([data-is-default="true"])')
+    );
+    
+    if (rootFolderElements.length === 0) {
+      return { position: 'inside', targetFolder: null };
+    }
+    
+    // 첫 번째 폴더보다 위에 드롭하는 경우
+    const firstFolderRect = rootFolderElements[0].getBoundingClientRect();
+    if (mouseY < firstFolderRect.top) {
+      const firstFolder = folderItems.find(
+        folder => folder.id.toString() === rootFolderElements[0].dataset.folderId
+      );
+      return { position: 'before', targetFolder: firstFolder };
+    }
+    
+    // 마지막 폴더보다 아래에 드롭하는 경우
+    const lastFolderRect = rootFolderElements[rootFolderElements.length - 1].getBoundingClientRect();
+    if (mouseY > lastFolderRect.bottom) {
+      const lastFolder = folderItems.find(
+        folder => folder.id.toString() === rootFolderElements[rootFolderElements.length - 1].dataset.folderId
+      );
+      return { position: 'after', targetFolder: lastFolder };
+    }
+    
+    // 폴더 사이에 드롭하는 경우
+    for (let i = 0; i < rootFolderElements.length - 1; i++) {
+      const currentRect = rootFolderElements[i].getBoundingClientRect();
+      const nextRect = rootFolderElements[i + 1].getBoundingClientRect();
+      const middleY = (currentRect.bottom + nextRect.top) / 2;
+      
+      if (mouseY < middleY) {
+        const currentFolder = folderItems.find(
+          folder => folder.id.toString() === rootFolderElements[i].dataset.folderId
+        );
+        return { position: 'after', targetFolder: currentFolder };
+      } else if (mouseY < nextRect.top) {
+        const nextFolder = folderItems.find(
+          folder => folder.id.toString() === rootFolderElements[i + 1].dataset.folderId
+        );
+        return { position: 'before', targetFolder: nextFolder };
+      }
+    }
+    
+    // 기본값 - 마지막 폴더 뒤에 추가
+    const lastFolder = folderItems.find(
+      folder => folder.id.toString() === rootFolderElements[rootFolderElements.length - 1].dataset.folderId
+    );
+    return { position: 'after', targetFolder: lastFolder };
+  }, []);
+  
   // 드래그 시각적 피드백 업데이트를 위한 RAF 함수
-  const updateRootDragVisual = useCallback((isDraggedOver) => {
+  const updateRootDragVisual = useCallback((isDraggedOver, dropInfo = null) => {
     if (rafIdRef.current) {
       cancelAnimationFrame(rafIdRef.current);
     }
@@ -746,45 +929,56 @@ const FolderTree = React.memo(() => {
     rafIdRef.current = requestAnimationFrame(() => {
       // Ref를 사용하여 상태 업데이트
       dragStateRef.current.isRootDragOver = isDraggedOver;
+      
+      if (dropInfo) {
+        dragStateRef.current.rootDropPosition = dropInfo.position;
+        dragStateRef.current.targetFolder = dropInfo.targetFolder;
+        
+        // 드롭 마커 표시
+        if (dropInfo.targetFolder) {
+          const folderElement = document.querySelector(
+            `.folder-item[data-folder-id="${dropInfo.targetFolder.id}"]`
+          );
+          
+          if (folderElement) {
+            showDropMarker(
+              folderElement, 
+              dropInfo.position === 'before' ? 'before' : 'after'
+            );
+          }
+        } else {
+          hideDropMarker();
+        }
+      } else {
+        dragStateRef.current.rootDropPosition = null;
+        dragStateRef.current.targetFolder = null;
+        hideDropMarker();
+      }
+      
       forceUpdate({}); // 필요한 경우에만 리렌더링 트리거
       rafIdRef.current = null;
     });
   }, []);
   
-  // 전역 onContextMenu 이벤트 핸들러 등록
-  useEffect(() => {
-    const handleGlobalContextMenu = (e) => {
-      // 폴더 트리 외부의 우클릭 이벤트일 경우에만 처리
-      if (!e.target.closest('.folder-item') && !e.target.closest('.contextMenu')) {
-        // 모든 컨텍스트 메뉴를 닫기 위해 이벤트를 발생시킴
-        const closeMenuEvent = new CustomEvent('closeContextMenu');
-        document.dispatchEvent(closeMenuEvent);
-      }
-    };
-    
-    // 글로벌 컨텍스트 메뉴 이벤트 리스너 등록
-    document.addEventListener('contextmenu', handleGlobalContextMenu);
-    
-    return () => {
-      // 컴포넌트 언마운트 시 이벤트 리스너 제거
-      document.removeEventListener('contextmenu', handleGlobalContextMenu);
-    };
-  }, []);
-  
   // 루트 영역 드래그 앤 드롭 이벤트 핸들러 최적화
   const handleRootDragOver = useCallback((e) => {
     e.preventDefault();
-    updateRootDragVisual(true);
-  }, [updateRootDragVisual]);
+    
+    // 드래그 위치 확인
+    const dropInfo = checkRootDragPosition(e, folders);
+    updateRootDragVisual(true, dropInfo);
+  }, [updateRootDragVisual, checkRootDragPosition, folders]);
   
   const handleRootDragLeave = useCallback(() => {
     updateRootDragVisual(false);
+    hideDropMarker();
   }, [updateRootDragVisual]);
   
   const handleRootDrop = async (e) => {
     e.preventDefault();
     
     // Ref를 사용하여 상태 업데이트
+    const dropInfo = dragStateRef.current;
     dragStateRef.current.isRootDragOver = false;
     forceUpdate({});
     
@@ -797,17 +991,28 @@ const FolderTree = React.memo(() => {
       const draggedFolder = findFolderById(folders, draggedFolderId);
       if (!draggedFolder) return;
       
-      // 폴더 이동 API 호출 (parent_id를 null로 설정하여 최상위로 이동)
-      await updateFolder(draggedFolderId, {
-        name: draggedFolder.name,
-        parent_id: null
-      });
+      // 드롭 위치에 따라 처리
+      if (dropInfo.rootDropPosition && dropInfo.targetFolder) {
+        // 특정 폴더 기준 위치로 이동
+        await reorderFolder(draggedFolderId, {
+          reference_folder_id: dropInfo.targetFolder.id,
+          target_position: dropInfo.rootDropPosition
+        });
+      } else {
+        // 기본: 최상위 레벨의 마지막 위치로 이동
+        await reorderFolder(draggedFolderId, {
+          reference_folder_id: 'root',
+          target_position: 'after'
+        });
+      }
       
       // 데이터 다시 로드
       await loadData();
     } catch (error) {
       console.error('폴더 이동 실패:', error);
       alert('폴더를 이동하는데 실패했습니다.');
+    } finally {
+      hideDropMarker();
     }
   };
   
@@ -827,12 +1032,39 @@ const FolderTree = React.memo(() => {
       .dragging-active .folder-item:not(:hover):not(.bg-blue-100) {
         will-change: transform, opacity;
       }
+      .folder-drop-marker {
+        pointer-events: none;
+        box-shadow: 0 0 0 1px #2563eb;
+      }
     `;
     document.head.appendChild(styleEl);
     
     return () => {
       document.head.removeChild(styleEl);
+      // 컴포넌트 언마운트 시 드롭 마커 제거
+      const marker = document.querySelector('.folder-drop-marker');
+      if (marker) marker.remove();
     };
+  }, []);
+  
+  useEffect(() => {
+    const migrateFolderPositions = async () => {
+      try {
+        const response = await fetch('/api/folders/migrate', {
+          method: 'POST'
+        });
+        
+        if (response.ok) {
+          console.log('폴더 위치가 성공적으로 마이그레이션되었습니다.');
+          loadData(); // 폴더 데이터 다시 불러오기
+        }
+      } catch (error) {
+        console.error('폴더 마이그레이션 오류:', error);
+      }
+    };
+    
+    // 앱 시작 시 폴더 마이그레이션 실행
+    migrateFolderPositions();
   }, []);
   
   if (isLoading && folders.length === 0) {
@@ -857,10 +1089,11 @@ const FolderTree = React.memo(() => {
             key={folder.id} 
             folder={folder} 
             isLast={index === folders.length - 1}
+            level={0}
           />
         ))}
       </ul>
-      {dragStateRef.current.isRootDragOver && (
+      {dragStateRef.current.isRootDragOver && !dragStateRef.current.targetFolder && (
         <div className="text-center py-2 text-blue-600 text-sm">
           여기에 드롭하여 최상위 폴더로 이동
         </div>

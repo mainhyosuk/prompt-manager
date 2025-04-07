@@ -81,3 +81,24 @@ export const deleteFolder = async (id) => {
     throw error;
   }
 };
+
+// 폴더 순서 변경
+export const reorderFolder = async (id, reorderData) => {
+  try {
+    const response = await fetch(`/api/folders/${id}/reorder`, {
+      ...API_FETCH_OPTIONS,
+      method: 'PUT',
+      body: JSON.stringify(reorderData),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || '폴더 순서 변경에 실패했습니다.');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('폴더 순서 변경 오류:', error);
+    throw error;
+  }
+};

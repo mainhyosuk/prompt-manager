@@ -36,13 +36,14 @@ def init_db():
     """
     )
 
-    # 폴더 테이블
+    # 폴더 테이블 - position 필드 추가됨
     cursor.execute(
         """
     CREATE TABLE IF NOT EXISTS folders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         parent_id INTEGER,
+        position INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (parent_id) REFERENCES folders(id)
     )
@@ -104,7 +105,113 @@ def init_db():
     # 기본 데이터 추가
     create_default_data(conn)
 
+    # 폴더 위치 속성 초기화
+    migrate_folder_positions(conn)
+
     conn.close()
+
+
+def migrate_folder_positions(conn=None):
+    """폴더의 position 속성을 초기화합니다."""
+    if conn is None:
+        conn = get_db_connection()
+        should_close = True
+    else:
+        should_close = False
+
+    cursor = conn.cursor()
+
+    try:
+        # position 칼럼이 존재하는지 확인
+        cursor.execute("PRAGMA table_info(folders)")
+        columns = [column["name"] for column in cursor.fetchall()]
+
+        # position 필드가 없다면 추가
+        if "position" not in columns:
+            try:
+                cursor.execute(
+                    "ALTER TABLE folders ADD COLUMN position INTEGER DEFAULT 0"
+                )
+                print("폴더 테이블에 position 필드가 추가되었습니다.")
+            except Exception as e:
+                print(f"position 필드 추가 실패: {str(e)}")
+
+        # 이미 position 값이 설정되어 있는지 확인
+        cursor.execute(
+            "SELECT COUNT(*) FROM folders WHERE position IS NULL OR position = 0"
+        )
+        count = cursor.fetchone()[0]
+
+        # position 값을 초기화 (부모 폴더별로 동일한 레벨의 형제 폴더들에게 고유한 position 값 부여)
+        if count > 0:
+            # 먼저 기본 폴더(모든 프롬프트, 즐겨찾기)의 position 값을 명시적으로 설정
+            cursor.execute(
+                """
+                UPDATE folders
+                SET position = CASE
+                    WHEN name = '모든 프롬프트' THEN 0
+                    WHEN name = '즐겨찾기' THEN 1
+                    ELSE position
+                END
+                WHERE name IN ('모든 프롬프트', '즐겨찾기')
+                """
+            )
+
+            # 다음으로 다른 최상위 폴더 정렬
+            cursor.execute(
+                """
+                SELECT id FROM folders 
+                WHERE parent_id IS NULL AND name NOT IN ('모든 프롬프트', '즐겨찾기')
+                ORDER BY name
+                """
+            )
+            root_folders = cursor.fetchall()
+
+            # 기본 폴더 다음 위치부터 시작 (position 2부터)
+            start_position = 2
+            for idx, folder in enumerate(root_folders):
+                cursor.execute(
+                    "UPDATE folders SET position = ? WHERE id = ?",
+                    (start_position + idx, folder["id"]),
+                )
+
+            # 그 다음 하위 폴더들 정렬
+            cursor.execute(
+                """
+                SELECT DISTINCT parent_id FROM folders 
+                WHERE parent_id IS NOT NULL
+                """
+            )
+            parent_ids = cursor.fetchall()
+
+            for parent in parent_ids:
+                parent_id = parent["parent_id"]
+
+                cursor.execute(
+                    """
+                    SELECT id FROM folders 
+                    WHERE parent_id = ? 
+                    ORDER BY name
+                    """,
+                    (parent_id,),
+                )
+                child_folders = cursor.fetchall()
+
+                for idx, folder in enumerate(child_folders):
+                    cursor.execute(
+                        "UPDATE folders SET position = ? WHERE id = ?",
+                        (idx, folder["id"]),
+                    )
+
+            conn.commit()
+            print("폴더의 position 값이 성공적으로 초기화되었습니다.")
+
+    except Exception as e:
+        conn.rollback()
+        print(f"폴더 position 마이그레이션 오류: {str(e)}")
+
+    if should_close:
+        conn.close()
 
 
 def create_default_data(conn=None):
@@ -121,13 +228,17 @@ def create_default_data(conn=None):
     cursor.execute("SELECT COUNT(*) FROM folders WHERE name = '모든 프롬프트'")
     if cursor.fetchone()[0] == 0:
         cursor.execute(
-            "INSERT INTO folders (name, parent_id) VALUES ('모든 프롬프트', NULL)"
+            "INSERT INTO folders (name, parent_id, position) VALUES ('모든 프롬프트', NULL, 0)"
         )
         cursor.execute(
-            "INSERT INTO folders (name, parent_id) VALUES ('즐겨찾기', NULL)"
+            "INSERT INTO folders (name, parent_id, position) VALUES ('즐겨찾기', NULL, 1)"
         )
-        cursor.execute("INSERT INTO folders (name, parent_id) VALUES ('업무', NULL)")
-        cursor.execute("INSERT INTO folders (name, parent_id) VALUES ('개인', NULL)")
+        cursor.execute(
+            "INSERT INTO folders (name, parent_id, position) VALUES ('업무', NULL, 2)"
+        )
+        cursor.execute(
+            "INSERT INTO folders (name, parent_id, position) VALUES ('개인', NULL, 3)"
+        )
 
         # 업무 폴더의 ID 가져오기
         cursor.execute("SELECT id FROM folders WHERE name = '업무'")
@@ -135,11 +246,11 @@ def create_default_data(conn=None):
 
         # 업무 폴더의 하위 폴더 생성
         cursor.execute(
-            "INSERT INTO folders (name, parent_id) VALUES ('마케팅', ?)",
+            "INSERT INTO folders (name, parent_id, position) VALUES ('마케팅', ?, 0)",
             (work_folder_id,),
         )
         cursor.execute(
-            "INSERT INTO folders (name, parent_id) VALUES ('개발', ?)",
+            "INSERT INTO folders (name, parent_id, position) VALUES ('개발', ?, 1)",
             (work_folder_id,),
         )
 
