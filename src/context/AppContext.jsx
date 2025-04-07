@@ -11,6 +11,7 @@ const initialState = {
   isDetailModalOpen: false,
   isLoading: false,
   error: null,
+  theme: 'light',
   
   // 데이터 상태
   prompts: [],
@@ -43,6 +44,9 @@ export const AppProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(initialState.isLoading);
   const [error, setError] = useState(initialState.error);
   
+  // 테마 상태 추가
+  const [theme, setTheme] = useState(initialState.theme);
+  
   const [prompts, setPrompts] = useState(initialState.prompts);
   const [folders, setFolders] = useState(initialState.folders);
   const [tags, setTags] = useState(initialState.tags);
@@ -58,6 +62,27 @@ export const AppProvider = ({ children }) => {
   const [sortBy, setSortBy] = useState(initialState.sortBy);
   const [sortDirection, setSortDirection] = useState(initialState.sortDirection);
   const [viewMode, setViewMode] = useState(initialState.viewMode);
+
+  // 테마 변경 함수
+  const changeTheme = useCallback((newTheme) => {
+    setTheme(newTheme);
+    // HTML 요소에 테마 클래스 적용
+    if (newTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    // 로컬 스토리지에 테마 저장
+    localStorage.setItem('theme', newTheme);
+  }, []);
+  
+  // 테마 초기화
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) {
+      changeTheme(savedTheme);
+    }
+  }, [changeTheme]);
 
   // 데이터 로드 함수
   const loadData = useCallback(async () => {
@@ -328,6 +353,7 @@ export const AppProvider = ({ children }) => {
     sortBy,
     sortDirection,
     viewMode,
+    theme,
     
     // 데이터 접근 함수
     getFilteredPrompts,
@@ -352,7 +378,8 @@ export const AppProvider = ({ children }) => {
     goToSettings,
     goToDashboard,
     getTagColorClasses,
-    loadData
+    loadData,
+    changeTheme
   };
 
   return (
