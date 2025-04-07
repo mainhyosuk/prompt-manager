@@ -1,6 +1,7 @@
-import React from 'react';
-import { Star, Clock, Edit, Trash2, User } from 'lucide-react';
+import React, { useState } from 'react';
+import { Star, Clock, Edit, Trash2, User, Copy } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import { copyToClipboard } from '../../utils/clipboard';
 
 const PromptCard = ({ prompt }) => {
   const { 
@@ -8,8 +9,41 @@ const PromptCard = ({ prompt }) => {
     handleViewPrompt,
     handleToggleFavorite,
     handleEditPrompt,
-    handleDeletePrompt
+    handleDeletePrompt,
+    handleRecordUsage
   } = useAppContext();
+  
+  const [copyStatus, setCopyStatus] = useState('idle'); // 'idle', 'copying', 'copied', 'error'
+  
+  // 변수가 없는 프롬프트인지 확인
+  const hasNoVariables = !prompt.variables || prompt.variables.length === 0;
+  
+  // 클립보드에 복사
+  const handleCopyToClipboard = async (e) => {
+    e.stopPropagation(); // 카드 클릭 이벤트 전파 방지
+    setCopyStatus('copying');
+    
+    try {
+      await copyToClipboard(prompt.content);
+      setCopyStatus('copied');
+      
+      // 프롬프트 사용 기록
+      await handleRecordUsage(prompt.id);
+      
+      // 3초 후 상태 초기화
+      setTimeout(() => {
+        setCopyStatus('idle');
+      }, 3000);
+    } catch (error) {
+      console.error('클립보드 복사 오류:', error);
+      setCopyStatus('error');
+      
+      // 3초 후 상태 초기화
+      setTimeout(() => {
+        setCopyStatus('idle');
+      }, 3000);
+    }
+  };
   
   // 마우스 오버 시 표시할 액션 버튼
   const renderActionButtons = () => (
@@ -64,8 +98,28 @@ const PromptCard = ({ prompt }) => {
       </div>
       
       {/* 프롬프트 내용 - 4줄 표시 및 스크롤 추가 */}
-      <div className="mb-3 h-24 overflow-y-auto pr-2 text-gray-600 text-sm bg-gray-50 rounded p-2">
+      <div className="mb-3 h-24 overflow-y-auto pr-2 text-gray-600 text-sm bg-gray-50 rounded p-2 relative">
         <p className="whitespace-pre-wrap">{prompt.content}</p>
+        
+        {/* 변수가 없는 프롬프트에만 복사 버튼 추가 */}
+        {hasNoVariables && (
+          <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={handleCopyToClipboard}
+              disabled={copyStatus === 'copying'}
+              className={`p-1.5 rounded-full shadow-sm flex items-center justify-center
+                ${copyStatus === 'copied' 
+                  ? 'bg-green-100 text-green-600' 
+                  : copyStatus === 'error'
+                  ? 'bg-red-100 text-red-600'
+                  : 'bg-white text-blue-600 hover:bg-blue-50'
+                }`}
+              title="클립보드에 복사"
+            >
+              <Copy size={14} />
+            </button>
+          </div>
+        )}
       </div>
       
       <div className="flex flex-wrap gap-1 mb-2">
