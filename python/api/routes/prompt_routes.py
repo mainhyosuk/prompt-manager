@@ -519,3 +519,109 @@ def fix_timestamps():
 
     finally:
         conn.close()
+
+
+# 프롬프트 복제
+@prompt_bp.route("/api/prompts/<int:id>/duplicate", methods=["POST"])
+def duplicate_prompt(id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # 원본 프롬프트 존재 여부 확인
+        cursor.execute(
+            """
+            SELECT id, title, content, folder_id, is_favorite
+            FROM prompts 
+            WHERE id = ?
+        """,
+            (id,),
+        )
+
+        original_prompt = cursor.fetchone()
+        if not original_prompt:
+            conn.close()
+            return jsonify({"error": "복제할 프롬프트를 찾을 수 없습니다."}), 404
+
+        # 복제된 프롬프트 제목 생성 (제목 복사본)
+        duplicated_title = f"{original_prompt['title']} 복사본"
+
+        # 동일한 제목이 이미 존재하는지 확인하고 번호 추가
+        cursor.execute(
+            "SELECT COUNT(*) as count FROM prompts WHERE title LIKE ?",
+            (f"{duplicated_title}%",),
+        )
+        count = cursor.fetchone()["count"]
+
+        if count > 0:
+            duplicated_title = f"{duplicated_title} ({count})"
+
+        conn.execute("BEGIN")
+
+        # 프롬프트 기본 정보 복제
+        cursor.execute(
+            """
+            INSERT INTO prompts (title, content, folder_id, is_favorite)
+            VALUES (?, ?, ?, ?)
+        """,
+            (
+                duplicated_title,
+                original_prompt["content"],
+                original_prompt["folder_id"],
+                original_prompt["is_favorite"],
+            ),
+        )
+
+        new_prompt_id = cursor.lastrowid
+
+        # 원본 프롬프트의 태그 복제
+        cursor.execute(
+            """
+            SELECT tag_id
+            FROM prompt_tags
+            WHERE prompt_id = ?
+        """,
+            (id,),
+        )
+
+        for row in cursor.fetchall():
+            tag_id = row["tag_id"]
+            cursor.execute(
+                """
+                INSERT INTO prompt_tags (prompt_id, tag_id)
+                VALUES (?, ?)
+            """,
+                (new_prompt_id, tag_id),
+            )
+
+        # 원본 프롬프트의 변수 복제
+        cursor.execute(
+            """
+            SELECT name, default_value
+            FROM variables
+            WHERE prompt_id = ?
+        """,
+            (id,),
+        )
+
+        for variable in cursor.fetchall():
+            cursor.execute(
+                """
+                INSERT INTO variables (prompt_id, name, default_value)
+                VALUES (?, ?, ?)
+            """,
+                (new_prompt_id, variable["name"], variable["default_value"]),
+            )
+
+        conn.commit()
+
+        # 복제된 프롬프트 정보 반환
+        return get_prompt(new_prompt_id)
+
+    except Exception as e:
+        conn.rollback()
+        print(f"프롬프트 복제 오류: {e}")
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        conn.close()

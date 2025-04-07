@@ -121,3 +121,23 @@ export const toggleFavorite = async (id) => {
     throw error;
   }
 };
+
+// 프롬프트 복제
+export const duplicatePrompt = async (id) => {
+  try {
+    const response = await fetch(`/api/prompts/${id}/duplicate`, {
+      ...API_FETCH_OPTIONS,
+      method: 'POST',
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || '프롬프트 복제에 실패했습니다.');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('프롬프트 복제 오류:', error);
+    throw error;
+  }
+};

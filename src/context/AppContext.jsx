@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { getPrompts, createPrompt, updatePrompt, deletePrompt, toggleFavorite, recordPromptUsage } from '../api/promptApi';
+import { getPrompts, createPrompt, updatePrompt, deletePrompt, toggleFavorite, recordPromptUsage, duplicatePrompt } from '../api/promptApi';
 import { getFolders } from '../api/folderApi';
 import { getTags } from '../api/tagApi';
 
@@ -322,6 +322,29 @@ export const AppProvider = ({ children }) => {
     }
   }, [selectedPrompt]);
 
+  // 프롬프트 복제 핸들러
+  const handleDuplicatePrompt = useCallback(async (promptId) => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const duplicatedPrompt = await duplicatePrompt(promptId);
+      
+      // 복제된 프롬프트를 목록에 추가
+      setPrompts(prev => [...prev, duplicatedPrompt]);
+      
+      // 복제 후 성공 메시지 표시
+      alert('프롬프트가 성공적으로 복제되었습니다.');
+      return duplicatedPrompt;
+    } catch (err) {
+      console.error('프롬프트 복제 오류:', err);
+      setError('프롬프트를 복제하는 중 오류가 발생했습니다.');
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   // 설정 페이지로 이동
   const goToSettings = useCallback(() => {
     setCurrentScreen('settings');
@@ -391,6 +414,7 @@ export const AppProvider = ({ children }) => {
     handleRecordUsage,
     handleSavePrompt,
     handleDeletePrompt,
+    handleDuplicatePrompt,
     goToSettings,
     goToDashboard,
     getTagColorClasses,

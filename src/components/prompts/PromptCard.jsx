@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Star, Clock, Edit, Trash2, User, Copy } from 'lucide-react';
+import { Star, Clock, Edit, Trash2, User, Copy, Layers } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { copyToClipboard } from '../../utils/clipboard';
 
@@ -10,7 +10,8 @@ const PromptCard = ({ prompt }) => {
     handleToggleFavorite,
     handleEditPrompt,
     handleDeletePrompt,
-    handleRecordUsage
+    handleRecordUsage,
+    handleDuplicatePrompt
   } = useAppContext();
   
   const [copyStatus, setCopyStatus] = useState('idle'); // 'idle', 'copying', 'copied', 'error'
@@ -57,6 +58,17 @@ const PromptCard = ({ prompt }) => {
         title={prompt.is_favorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
       >
         <Star className={prompt.is_favorite ? 'fill-yellow-400 text-yellow-400' : ''} size={16} />
+      </button>
+      
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          handleDuplicatePrompt(prompt.id);
+        }}
+        className="p-1 rounded-full bg-white bg-opacity-80 hover:bg-opacity-100 text-gray-600 hover:text-indigo-500"
+        title="복제"
+      >
+        <Layers size={16} />
       </button>
       
       <button
