@@ -1,3 +1,60 @@
+# v1.31: CORS 포트 오류 해결
+
+배포일: 2025-04-07 (월)
+
+## 주요 개선사항
+
+- **CORS 포트 오류 해결**
+  - Vite 프록시 설정 추가
+  - API 호출을 상대 경로로 변경
+  - Flask 서버 포트 통일
+  - CORS 설정 개선
+
+## 코드 변경 사항
+
+### Vite 설정
+- `vite.config.js`: API 프록시 설정 추가
+  - `/api` 경로를 `http://localhost:8000`로 프록시
+  - CORS와 보안 설정 개선
+
+### Python 백엔드
+- `python/api/app.py`: Flask 서버 설정 변경
+  - 포트를 5000에서 8000으로 변경
+  - CORS 설정 개선하여 인증 허용
+  - OPTIONS 요청에 대한 전역 처리 추가
+  - 응답 헤더에 CORS 헤더 자동 추가
+
+### API 호출 방식 변경
+- `src/api/config.js`: 
+  - API_FETCH_OPTIONS 추가 (credentials, mode 등)
+  - 공통 헤더 및 타임아웃 설정
+- `src/api/promptApi.js`: 상대 경로로 API 호출 변경
+- `src/api/folderApi.js`: 상대 경로로 API 호출 변경
+- `src/api/tagApi.js`: 상대 경로로 API 호출 변경
+- `src/api/settingsApi.js`: 상대 경로로 API 호출 변경
+
+## 사용자 경험 개선
+
+1. **프론트엔드-백엔드 통신 안정화**
+   - 브라우저의 CORS 정책으로 인한 API 통신 오류 해결
+   - API 요청이 안정적으로 처리되어 사용자 경험 향상
+
+2. **개발 환경 개선**
+   - 프록시 설정으로 개발 시 API 호출 간소화
+   - 상대 경로 사용으로 환경에 따른 설정 변경 불필요
+
+## 설치 방법
+
+1. 프로젝트 클론: `git clone https://github.com/mainhyosuk/prompt-manager.git`
+2. 종속성 설치: 
+   - 프론트엔드: `npm install`
+   - 백엔드: `pip install -r requirements.txt` (flask-cors 필요)
+3. 실행:
+   - 프론트엔드: `npm run dev`
+   - 백엔드: `python python/api/app.py`
+
+---
+
 # v1.3: 프롬프트 추가/편집 모달 개선
 
 배포일: 2025-04-07 (월)

@@ -1,14 +1,12 @@
 /**
  * 프롬프트 관련 API 요청 함수
  */
-import { API_BASE_URL, API_HEADERS } from './config';
+import { API_HEADERS, API_FETCH_OPTIONS } from './config';
 
 // 모든 프롬프트 가져오기
 export const getPrompts = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/prompts`, {
-      headers: API_HEADERS
-    });
+    const response = await fetch(`/api/prompts`, API_FETCH_OPTIONS);
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -25,9 +23,9 @@ export const getPrompts = async () => {
 // 프롬프트 생성
 export const createPrompt = async (promptData) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/prompts`, {
+    const response = await fetch(`/api/prompts`, {
+      ...API_FETCH_OPTIONS,
       method: 'POST',
-      headers: API_HEADERS,
       body: JSON.stringify(promptData),
     });
     
@@ -46,9 +44,9 @@ export const createPrompt = async (promptData) => {
 // 프롬프트 수정
 export const updatePrompt = async (id, promptData) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/prompts/${id}`, {
+    const response = await fetch(`/api/prompts/${id}`, {
+      ...API_FETCH_OPTIONS,
       method: 'PUT',
-      headers: API_HEADERS,
       body: JSON.stringify(promptData),
     });
     
@@ -67,9 +65,9 @@ export const updatePrompt = async (id, promptData) => {
 // 프롬프트 삭제
 export const deletePrompt = async (id) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/prompts/${id}`, {
+    const response = await fetch(`/api/prompts/${id}`, {
+      ...API_FETCH_OPTIONS,
       method: 'DELETE',
-      headers: API_HEADERS,
     });
     
     if (!response.ok) {
@@ -87,9 +85,9 @@ export const deletePrompt = async (id) => {
 // 프롬프트 사용 기록
 export const recordPromptUsage = async (id) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/prompts/${id}/use`, {
+    const response = await fetch(`/api/prompts/${id}/use`, {
+      ...API_FETCH_OPTIONS,
       method: 'POST',
-      headers: API_HEADERS,
     });
     
     if (!response.ok) {
@@ -107,9 +105,9 @@ export const recordPromptUsage = async (id) => {
 // 즐겨찾기 토글
 export const toggleFavorite = async (id) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/prompts/${id}/favorite`, {
+    const response = await fetch(`/api/prompts/${id}/favorite`, {
+      ...API_FETCH_OPTIONS,
       method: 'POST',
-      headers: API_HEADERS,
     });
     
     if (!response.ok) {

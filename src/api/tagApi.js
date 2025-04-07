@@ -1,14 +1,12 @@
 /**
  * 태그 관련 API 요청 함수
  */
-import { API_BASE_URL, API_HEADERS } from './config';
+import { API_FETCH_OPTIONS } from './config';
 
 // 모든 태그 가져오기
 export const getTags = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/tags`, {
-      headers: API_HEADERS
-    });
+    const response = await fetch(`/api/tags`, API_FETCH_OPTIONS);
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -25,9 +23,9 @@ export const getTags = async () => {
 // 태그 생성
 export const createTag = async (tagData) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/tags`, {
+    const response = await fetch(`/api/tags`, {
+      ...API_FETCH_OPTIONS,
       method: 'POST',
-      headers: API_HEADERS,
       body: JSON.stringify(tagData),
     });
     
@@ -46,9 +44,9 @@ export const createTag = async (tagData) => {
 // 태그 수정
 export const updateTag = async (id, tagData) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/tags/${id}`, {
+    const response = await fetch(`/api/tags/${id}`, {
+      ...API_FETCH_OPTIONS,
       method: 'PUT',
-      headers: API_HEADERS,
       body: JSON.stringify(tagData),
     });
     
@@ -67,9 +65,9 @@ export const updateTag = async (id, tagData) => {
 // 태그 삭제
 export const deleteTag = async (id) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/tags/${id}`, {
+    const response = await fetch(`/api/tags/${id}`, {
+      ...API_FETCH_OPTIONS,
       method: 'DELETE',
-      headers: API_HEADERS,
     });
     
     if (!response.ok) {

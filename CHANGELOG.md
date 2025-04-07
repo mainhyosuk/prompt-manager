@@ -2,6 +2,30 @@
 
 모든 주요 변경 사항이 이 파일에 기록됩니다.
 
+## [v1.31] - 2025-04-07
+
+### 주요 개선사항
+
+- CORS 포트 오류 해결
+  - Vite 프록시 설정 추가
+  - API 호출을 상대 경로로 변경
+  - CORS 설정 개선
+
+### 코드 변경 사항
+
+- **Vite 설정**:
+  - `vite.config.js`: API 프록시 설정 추가 (/api -> http://localhost:8000)
+  
+- **Python 백엔드**:
+  - `python/api/app.py`: 포트를 5000에서 8000으로, CORS 설정 개선
+
+- **API 호출 방식 변경**:
+  - `src/api/config.js`: API_FETCH_OPTIONS 추가
+  - `src/api/promptApi.js`: 상대 경로로 API 호출 변경
+  - `src/api/folderApi.js`: 상대 경로로 API 호출 변경
+  - `src/api/tagApi.js`: 상대 경로로 API 호출 변경
+  - `src/api/settingsApi.js`: 상대 경로로 API 호출 변경
+
 ## [v1.3] - 2025-04-07
 
 ### 주요 개선사항

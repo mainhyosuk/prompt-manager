@@ -1,14 +1,12 @@
 /**
  * 설정 관련 API 요청 함수
  */
-import { API_BASE_URL, API_HEADERS } from './config';
+import { API_FETCH_OPTIONS } from './config';
 
 // 설정 가져오기
 export const getSettings = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/settings`, {
-      headers: API_HEADERS
-    });
+    const response = await fetch(`/api/settings`, API_FETCH_OPTIONS);
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -25,9 +23,9 @@ export const getSettings = async () => {
 // 설정 업데이트
 export const updateSettings = async (settingsData) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/settings`, {
+    const response = await fetch(`/api/settings`, {
+      ...API_FETCH_OPTIONS,
       method: 'PUT',
-      headers: API_HEADERS,
       body: JSON.stringify(settingsData),
     });
     
@@ -46,9 +44,9 @@ export const updateSettings = async (settingsData) => {
 // 데이터베이스 백업
 export const backupDatabase = async (path) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/backup`, {
+    const response = await fetch(`/api/backup`, {
+      ...API_FETCH_OPTIONS,
       method: 'POST',
-      headers: API_HEADERS,
       body: JSON.stringify({ path }),
     });
     
@@ -67,9 +65,9 @@ export const backupDatabase = async (path) => {
 // 데이터베이스 복원
 export const restoreDatabase = async (file) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/restore`, {
+    const response = await fetch(`/api/restore`, {
+      ...API_FETCH_OPTIONS,
       method: 'POST',
-      headers: API_HEADERS,
       body: JSON.stringify({ file }),
     });
     
@@ -88,9 +86,7 @@ export const restoreDatabase = async (file) => {
 // 프롬프트 내보내기
 export const exportPrompts = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/export`, {
-      headers: API_HEADERS
-    });
+    const response = await fetch(`/api/export`, API_FETCH_OPTIONS);
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -107,9 +103,9 @@ export const exportPrompts = async () => {
 // 프롬프트 가져오기
 export const importPrompts = async (data) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/import`, {
+    const response = await fetch(`/api/import`, {
+      ...API_FETCH_OPTIONS,
       method: 'POST',
-      headers: API_HEADERS,
       body: JSON.stringify(data),
     });
     

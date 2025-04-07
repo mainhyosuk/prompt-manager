@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import os
 import sys
@@ -13,7 +13,27 @@ from routes.tag_routes import tag_bp
 from routes.settings_routes import settings_bp
 
 app = Flask(__name__)
-CORS(app)  # 프론트엔드와의 CORS 이슈 해결
+
+# 프론트엔드와의 CORS 이슈 해결
+CORS(app, supports_credentials=True, resources={r"/*": {"origins": "*"}})
+
+
+# OPTIONS 메서드에 대한 글로벌 라우트 추가
+@app.route("/", defaults={"path": ""}, methods=["OPTIONS"])
+@app.route("/<path:path>", methods=["OPTIONS"])
+def handle_options(path):
+    return "", 200
+
+
+# 모든 응답에 CORS 헤더 추가
+@app.after_request
+def add_cors_headers(response):
+    response.headers.add("Access-Control-Allow-Origin", "*")
+    response.headers.add("Access-Control-Allow-Headers", "*")
+    response.headers.add("Access-Control-Allow-Methods", "*")
+    response.headers.add("Access-Control-Allow-Credentials", "true")
+    return response
+
 
 # 데이터베이스 초기화
 setup_database()
@@ -24,14 +44,14 @@ app.register_blueprint(folder_bp)
 app.register_blueprint(tag_bp)
 app.register_blueprint(settings_bp)
 
-# 루트 경로
-@app.route('/')
-def index():
-    return jsonify({
-        "message": "프롬프트 관리 도구 API",
-        "version": "0.1.0",
-        "status": "running"
-    })
 
-if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+# 루트 경로
+@app.route("/")
+def index():
+    return jsonify(
+        {"message": "프롬프트 관리 도구 API", "version": "0.1.0", "status": "running"}
+    )
+
+
+if __name__ == "__main__":
+    app.run(debug=True, port=8000, host="0.0.0.0")
