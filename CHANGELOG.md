@@ -2,6 +2,31 @@
 
 모든 주요 변경 사항이 이 파일에 기록됩니다.
 
+## [v1.3] - 2025-04-07
+
+### 주요 개선사항
+
+- 4단계: 프롬프트 추가/편집 모달 개선
+  - 변수 자동 추출 및 관리 시스템
+  - 태그 선택 및 생성 인터페이스
+  - 폴더 구조 탐색 및 선택
+  - 데이터 유효성 검사
+  - 변수 값을 적용한 프롬프트 미리보기
+  - 클립보드 복사 및 사용 기록 추적
+
+### 코드 변경 사항
+
+- **React 프론트엔드**:
+  - `src/modals/PromptAddEditModal.jsx`: 프롬프트 추가/편집 모달 개선
+  - `src/modals/PromptDetailModal.jsx`: 프롬프트 상세 모달 개선
+  - `src/components/variables/`: 변수 관리 컴포넌트 추가
+    - `VariableList.jsx`: 변수 목록 및 편집 컴포넌트
+    - `VariableHighlighter.jsx`: 변수 하이라이팅 컴포넌트
+  - `src/components/tags/TagSelector.jsx`: 태그 선택 및 생성 컴포넌트
+  - `src/components/folders/FolderSelector.jsx`: 폴더 선택 및 생성 컴포넌트
+  - `src/utils/variableParser.js`: 변수 추출 및 적용 유틸리티
+  - `src/utils/clipboard.js`: 클립보드 관련 유틸리티
+
 ## [v1.2] - 2025-04-07
 
 ### 주요 개선사항

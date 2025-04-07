@@ -10,10 +10,11 @@
   },
   "dependencies": {
     "lucide-react": "^0.335.0",
+    "node-abi": "^4.2.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.16.0",
-    "sqlite3": "^5.1.6"
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "@types/react": "^18.2.25",
