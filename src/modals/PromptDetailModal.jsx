@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Edit, Star, Copy, ChevronRight, Clock, User, Tag, Folder } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { applyVariables } from '../utils/variableParser';
@@ -17,6 +17,7 @@ const PromptDetailModal = () => {
   const [variableValues, setVariableValues] = useState({});
   const [processedContent, setProcessedContent] = useState('');
   const [copyStatus, setCopyStatus] = useState('idle'); // 'idle', 'copying', 'copied', 'error'
+  const modalRef = useRef(null);
   
   // 변수 기본값 설정
   useEffect(() => {
@@ -36,6 +37,36 @@ const PromptDetailModal = () => {
       setProcessedContent(processed);
     }
   }, [selectedPrompt, variableValues]);
+  
+  // 외부 클릭 감지
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (modalRef.current && !modalRef.current.contains(event.target)) {
+        setIsDetailModalOpen(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleOutsideClick);
+    
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [setIsDetailModalOpen]);
+
+  // ESC 키 입력 감지
+  useEffect(() => {
+    const handleEscKey = (event) => {
+      if (event.key === 'Escape') {
+        setIsDetailModalOpen(false);
+      }
+    };
+    
+    document.addEventListener('keydown', handleEscKey);
+    
+    return () => {
+      document.removeEventListener('keydown', handleEscKey);
+    };
+  }, [setIsDetailModalOpen]);
   
   if (!selectedPrompt) return null;
   
@@ -74,7 +105,7 @@ const PromptDetailModal = () => {
   
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-3/4 max-w-4xl max-h-screen flex flex-col">
+      <div ref={modalRef} className="bg-white rounded-lg shadow-xl w-3/4 max-w-4xl max-h-screen flex flex-col">
         {/* 모달 헤더 */}
         <div className="flex justify-between items-center border-b px-6 py-4">
           <h2 className="text-xl font-semibold">{selectedPrompt.title}</h2>

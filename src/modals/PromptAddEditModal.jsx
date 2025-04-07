@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { X, AlertTriangle } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import VariableList from '../components/variables/VariableList';
@@ -25,6 +25,39 @@ const PromptAddEditModal = () => {
   
   // 검증 상태
   const [errors, setErrors] = useState({});
+  
+  // 모달 참조
+  const modalRef = useRef(null);
+  
+  // 외부 클릭 감지
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (modalRef.current && !modalRef.current.contains(event.target)) {
+        setIsAddEditModalOpen(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleOutsideClick);
+    
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [setIsAddEditModalOpen]);
+
+  // ESC 키 입력 감지
+  useEffect(() => {
+    const handleEscKey = (event) => {
+      if (event.key === 'Escape') {
+        setIsAddEditModalOpen(false);
+      }
+    };
+    
+    document.addEventListener('keydown', handleEscKey);
+    
+    return () => {
+      document.removeEventListener('keydown', handleEscKey);
+    };
+  }, [setIsAddEditModalOpen]);
   
   // 초기 데이터 로드
   useEffect(() => {
@@ -132,7 +165,7 @@ const PromptAddEditModal = () => {
   
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-3/4 max-w-4xl max-h-screen flex flex-col">
+      <div ref={modalRef} className="bg-white rounded-lg shadow-xl w-3/4 max-w-4xl max-h-screen flex flex-col">
         {/* 모달 헤더 */}
         <div className="flex justify-between items-center border-b px-6 py-4">
           <h2 className="text-xl font-semibold">
