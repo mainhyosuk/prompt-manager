@@ -1,5 +1,5 @@
 import React from 'react';
-import { Star, Clock, Edit, Trash2 } from 'lucide-react';
+import { Star, Clock, Edit, Trash2, User } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 
 const PromptCard = ({ prompt }) => {
@@ -10,11 +10,6 @@ const PromptCard = ({ prompt }) => {
     handleEditPrompt,
     handleDeletePrompt
   } = useAppContext();
-  
-  // 내용 미리보기 (100자로 제한)
-  const contentPreview = prompt.content.length > 100
-    ? prompt.content.substring(0, 100) + '...'
-    : prompt.content;
   
   // 마우스 오버 시 표시할 액션 버튼
   const renderActionButtons = () => (
@@ -68,7 +63,10 @@ const PromptCard = ({ prompt }) => {
         )}
       </div>
       
-      <p className="text-gray-600 text-sm mb-3 line-clamp-2">{contentPreview}</p>
+      {/* 프롬프트 내용 - 4줄 표시 및 스크롤 추가 */}
+      <div className="mb-3 h-24 overflow-y-auto pr-2 text-gray-600 text-sm bg-gray-50 rounded p-2">
+        <p className="whitespace-pre-wrap">{prompt.content}</p>
+      </div>
       
       <div className="flex flex-wrap gap-1 mb-2">
         {prompt.tags.map((tag) => (
@@ -82,10 +80,17 @@ const PromptCard = ({ prompt }) => {
       </div>
       
       <div className="flex justify-between text-xs text-gray-500">
-        <span className="flex items-center">
-          <Clock size={12} className="mr-1" />
-          {prompt.last_used}
-        </span>
+        <div className="flex items-center space-x-2">
+          <span className="flex items-center">
+            <Clock size={12} className="mr-1" />
+            {prompt.last_used}
+          </span>
+          
+          <span className="flex items-center">
+            <User size={12} className="mr-1" />
+            {prompt.use_count || 0}회
+          </span>
+        </div>
         <span>{prompt.folder}</span>
       </div>
     </div>

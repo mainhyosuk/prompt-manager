@@ -30,6 +30,23 @@
   }
 }
 
+/* 스크롤바 스타일 */
+.overflow-y-auto::-webkit-scrollbar {
+  width: 4px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track {
+  @apply bg-gray-100 rounded;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 rounded;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400;
+}
+
 /* 다크 모드 스타일 */
 .dark body {
   @apply text-gray-100 bg-gray-900;
@@ -61,6 +78,19 @@
 
 .dark .bg-blue-50 {
   @apply bg-blue-900 bg-opacity-30;
+}
+
+/* 다크 모드에서 스크롤바 스타일 */
+.dark .overflow-y-auto::-webkit-scrollbar-track {
+  @apply bg-gray-700;
+}
+
+.dark .overflow-y-auto::-webkit-scrollbar-thumb {
+  @apply bg-gray-600;
+}
+
+.dark .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-500;
 }
 
 /* 다크 모드 스타일 */
