@@ -12,7 +12,8 @@ const PromptAddEditModal = () => {
     selectedPrompt, 
     setIsAddEditModalOpen,
     handleSavePrompt,
-    isLoading
+    isLoading,
+    initialFolderInfo
   } = useAppContext();
   
   // 폼 상태
@@ -75,12 +76,13 @@ const PromptAddEditModal = () => {
       // 새 프롬프트 기본값
       setTitle('');
       setContent('');
-      setFolderInfo(null);
+      // initialFolderInfo가 있으면 해당 값을 사용하고, 없으면 null 설정
+      setFolderInfo(initialFolderInfo || null);
       setTags([]);
       setVariables([]);
       setIsFavorite(false);
     }
-  }, [editMode, selectedPrompt]);
+  }, [editMode, selectedPrompt, initialFolderInfo]);
   
   // 내용 변경 시 변수 자동 추출
   const handleContentChange = (newContent) => {

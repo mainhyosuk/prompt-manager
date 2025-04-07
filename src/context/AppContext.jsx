@@ -22,6 +22,7 @@ const initialState = {
   selectedPrompt: null,
   selectedFolder: '모든 프롬프트',
   editMode: false,
+  initialFolderInfo: null,
   
   // 폴더 확장/축소 상태
   expandedFolders: {},
@@ -54,6 +55,7 @@ export const AppProvider = ({ children }) => {
   const [selectedPrompt, setSelectedPrompt] = useState(initialState.selectedPrompt);
   const [selectedFolder, setSelectedFolder] = useState(initialState.selectedFolder);
   const [editMode, setEditMode] = useState(initialState.editMode);
+  const [initialFolderInfo, setInitialFolderInfo] = useState(initialState.initialFolderInfo);
   
   const [expandedFolders, setExpandedFolders] = useState(initialState.expandedFolders);
   
@@ -194,9 +196,21 @@ export const AppProvider = ({ children }) => {
   }, [prompts, selectedFolder, searchQuery, filterTags, sortBy, sortDirection]);
 
   // 프롬프트 추가 핸들러
-  const handleAddPrompt = useCallback(() => {
+  const handleAddPrompt = useCallback((folderId = null, folderName = null) => {
     setSelectedPrompt(null);
     setEditMode(false);
+    
+    // 폴더 정보 설정 (특정 폴더에 추가하는 경우)
+    if (folderId && folderName) {
+      // 임시 상태로 초기 폴더 정보 설정 (PromptAddEditModal에서 사용)
+      setInitialFolderInfo({
+        id: folderId,
+        name: folderName
+      });
+    } else {
+      setInitialFolderInfo(null);
+    }
+    
     setIsAddEditModalOpen(true);
   }, []);
 
@@ -354,6 +368,7 @@ export const AppProvider = ({ children }) => {
     sortDirection,
     viewMode,
     theme,
+    initialFolderInfo,
     
     // 데이터 접근 함수
     getFilteredPrompts,
@@ -367,6 +382,7 @@ export const AppProvider = ({ children }) => {
     setSortDirection,
     setViewMode,
     setSelectedFolder,
+    setInitialFolderInfo,
     toggleFolder,
     handleAddPrompt,
     handleEditPrompt,
