@@ -14,43 +14,59 @@ def get_folders():
     cursor = conn.cursor()
 
     try:
-        # position 필드가 존재하는지 확인
-        cursor.execute("PRAGMA table_info(folders)")
-        columns = [column["name"] for column in cursor.fetchall()]
+        # 특별 폴더 추가 (모든 프롬프트, 즐겨찾기)
+        all_prompts_folder = {
+            "id": -1,
+            "name": "모든 프롬프트",
+            "parent_id": None,
+            "position": -1,
+            "created_at": "",
+            "children": [],
+        }
 
-        # position 필드가 없다면 ALTER TABLE로 추가 시도
-        if "position" not in columns:
-            try:
-                # SQLite 제약으로 인해 ALTER TABLE로 DEFAULT 제약조건을 추가할 수 없어서 두 단계로 나눔
-                cursor.execute("ALTER TABLE folders ADD COLUMN position INTEGER")
-                cursor.execute("UPDATE folders SET position = 0")
-                conn.commit()
-                print("폴더 테이블에 position 필드를 추가했습니다.")
-            except Exception as e:
-                print(f"position 필드 추가 실패: {str(e)}")
-                conn.rollback()
+        favorites_folder = {
+            "id": -2,
+            "name": "즐겨찾기",
+            "parent_id": None,
+            "position": -2,
+            "created_at": "",
+            "children": [],
+        }
 
-        # 기본 폴더 정보 가져오기 (SQLite 호환 방식으로 NULL을 먼저 정렬)
+        # 모든 프롬프트 개수 계산
+        cursor.execute("SELECT COUNT(*) AS count FROM prompts")
+        all_prompts_folder["count"] = cursor.fetchone()["count"]
+        all_prompts_folder["total_count"] = all_prompts_folder[
+            "count"
+        ]  # 총 개수는 동일
+
+        # 즐겨찾기 프롬프트 개수 계산
+        cursor.execute("SELECT COUNT(*) AS count FROM prompts WHERE is_favorite = 1")
+        favorites_folder["count"] = cursor.fetchone()["count"]
+        favorites_folder["total_count"] = favorites_folder["count"]  # 총 개수는 동일
+
+        # 사용자 정의 폴더 가져오기
         cursor.execute(
             """
-            SELECT id, name, parent_id, created_at, 
-                   IFNULL(position, 0) as position 
-            FROM folders 
+            SELECT id, name, parent_id, position, created_at
+            FROM folders
             ORDER BY 
-                CASE WHEN parent_id IS NULL THEN 0 ELSE 1 END, 
                 CASE 
-                    WHEN name = '모든 프롬프트' THEN 0
-                    WHEN name = '즐겨찾기' THEN 1
-                    ELSE 2
+                    WHEN name IN ('모든 프롬프트', '즐겨찾기') THEN 0 
+                    ELSE 1 
                 END,
-                parent_id, 
-                IFNULL(position, 0) ASC
-            """
+                CASE 
+                    WHEN parent_id IS NULL THEN 0 
+                    ELSE 1 
+                END,
+                position
+        """
         )
-        folder_rows = cursor.fetchall()
 
-        # 프롬프트 개수 계산
+        folder_rows = cursor.fetchall()
         folder_dict = {}
+
+        # 폴더별 직접 프롬프트 개수 계산
         for row in folder_rows:
             folder = dict(row)
             cursor.execute(
@@ -75,23 +91,46 @@ def get_folders():
                         parent["children"] = []
                     parent["children"].append(folder)
 
-        # 각 레벨에서 폴더를 position 기준으로 정렬
-        def sort_folders(folders_list):
+        # 각 레벨에서 폴더를 position 기준으로 정렬하고 total_count 계산
+        def process_folders(folders_list):
             if not folders_list:
                 return []
 
             folders_list.sort(key=lambda x: x.get("position", 0))
 
             for folder in folders_list:
+                # 하위 폴더 처리
                 if "children" in folder and folder["children"]:
-                    folder["children"] = sort_folders(folder["children"])
+                    folder["children"] = process_folders(folder["children"])
+
+                    # total_count 계산: 자신의 count + 모든 하위 폴더의 total_count 합계
+                    children_count = sum(
+                        child.get("total_count", 0) for child in folder["children"]
+                    )
+                    folder["total_count"] = folder.get("count", 0) + children_count
+                else:
+                    # 하위 폴더가 없는 경우 total_count는 자신의 count와 동일
+                    folder["total_count"] = folder.get("count", 0)
 
             return folders_list
 
-        result = sort_folders(result)
+        # 폴더 계층 구조 처리 (한 번만 호출)
+        result = process_folders(result)
+
+        # 특별 폴더와 사용자 폴더 합치기
+        final_result = []
+
+        # 모든 프롬프트와 즐겨찾기는 맨 앞에 추가
+        final_result.append(all_prompts_folder)
+        final_result.append(favorites_folder)
+
+        # 사용자 정의 폴더 중 특별 폴더와 이름이 겹치지 않는 것만 추가
+        for folder in result:
+            if folder["name"] not in ["모든 프롬프트", "즐겨찾기"]:
+                final_result.append(folder)
 
         conn.close()
-        return jsonify(result)
+        return jsonify(final_result)
     except Exception as e:
         print(f"폴더 조회 오류: {str(e)}")
         conn.close()

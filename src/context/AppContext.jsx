@@ -123,6 +123,38 @@ export const AppProvider = ({ children }) => {
     }));
   }, []);
 
+  // 폴더가 특정 폴더의 하위 폴더인지 확인하는 함수
+  const isDescendantFolder = useCallback((childFolderName, parentFolderName) => {
+    // 폴더 이름으로 폴더 객체 찾기
+    const findFolderByName = (name) => {
+      return folders.find(f => f.name === name);
+    };
+    
+    const childFolder = findFolderByName(childFolderName);
+    const parentFolder = findFolderByName(parentFolderName);
+    
+    if (!childFolder || !parentFolder) return false;
+    
+    // 직접 자식인 경우
+    if (childFolder.parent_id === parentFolder.id) {
+      return true;
+    }
+    
+    // 깊은 계층 구조 확인
+    let currentId = childFolder.parent_id;
+    while (currentId) {
+      const parent = folders.find(f => f.id === currentId);
+      if (!parent) break;
+      
+      if (parent.id === parentFolder.id) {
+        return true;
+      }
+      currentId = parent.parent_id;
+    }
+    
+    return false;
+  }, [folders]);
+
   // 프롬프트 필터링 함수
   const getFilteredPrompts = useCallback(() => {
     let result = [...prompts];
@@ -132,7 +164,14 @@ export const AppProvider = ({ children }) => {
       if (selectedFolder === '즐겨찾기') {
         result = result.filter(p => p.is_favorite);
       } else {
-        result = result.filter(p => p.folder === selectedFolder);
+        // 선택된 폴더 또는 그 하위 폴더에 속한 프롬프트 필터링
+        result = result.filter(p => {
+          // 직접 해당 폴더에 속한 프롬프트
+          if (p.folder === selectedFolder) return true;
+          
+          // 하위 폴더에 속한 프롬프트
+          return isDescendantFolder(p.folder, selectedFolder);
+        });
       }
     }
     

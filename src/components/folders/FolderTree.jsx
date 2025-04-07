@@ -142,7 +142,7 @@ const ContextMenu = ({ x, y, folder, onClose, onRename, onDelete, onMove, onAddP
       </button>
       
       <button
-        className="flex items-center w-full px-4 py-2 text-sm text-left hover:bg-gray-100"
+        className="flex items-center w-full px-4 py-2 text-left hover:bg-gray-100"
         onClick={() => handleMenuItemClick('moveUp')}
       >
         <ArrowUp size={14} className="mr-2" />
@@ -150,7 +150,7 @@ const ContextMenu = ({ x, y, folder, onClose, onRename, onDelete, onMove, onAddP
       </button>
       
       <button
-        className="flex items-center w-full px-4 py-2 text-sm text-left hover:bg-gray-100"
+        className="flex items-center w-full px-4 py-2 text-left hover:bg-gray-100"
         onClick={() => handleMenuItemClick('moveDown')}
       >
         <ArrowDown size={14} className="mr-2" />
@@ -418,7 +418,7 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
   const { 
     selectedFolder, 
     setSelectedFolder, 
-    expandedFolders, 
+    expandedFolders,
     toggleFolder,
     loadData,
     folders,
@@ -429,8 +429,8 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
   const { contextMenu, closeContextMenu, folderItemRef } = useContextMenu(folder.name);
   
   // 이름 변경 모드 상태
-  const [isRenaming, setIsRenaming] = useState(false);
   const [newName, setNewName] = useState(folder.name);
+  const [isRenaming, setIsRenaming] = useState(false);
   const renameInputRef = useRef(null);
   
   // 폴더 이동 모드 상태
@@ -725,6 +725,18 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
     }
   };
   
+  const handleRename = () => {
+    if (newName.trim() && newName !== folder.name) {
+      updateFolder(folder.id, { name: newName.trim() })
+        .then(() => loadData())
+        .catch(error => {
+          console.error('폴더 이름 변경 실패:', error);
+          alert('폴더 이름을 변경하는데 실패했습니다.');
+        });
+    }
+    setIsRenaming(false);
+  };
+  
   return (
     <li className={`${isLast ? '' : 'mb-1'} relative`}>
       <div 
@@ -765,50 +777,44 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
           className={`mr-2 ${isSelected ? 'text-blue-600' : 'text-gray-500'}`} 
         />
         
-        {isRenaming ? (
+        {!isRenaming ? (
+          <span className={`flex-grow text-sm ${isSelected ? 'font-medium' : ''}`}>
+            {folder.name}
+          </span>
+        ) : (
           <input
-            ref={renameInputRef}
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            onBlur={() => {
-              if (newName.trim() && newName !== folder.name) {
-                updateFolder(folder.id, { name: newName.trim() })
-                  .then(() => loadData())
-                  .catch(error => {
-                    console.error('폴더 이름 변경 실패:', error);
-                    alert('폴더 이름을 변경하는데 실패했습니다.');
-                  });
-              }
-              setIsRenaming(false);
-            }}
+            className="flex-grow mr-2 px-1 py-0.5 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+            placeholder="폴더 이름"
+            autoFocus
+            ref={renameInputRef}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                if (newName.trim() && newName !== folder.name) {
-                  updateFolder(folder.id, { name: newName.trim() })
-                    .then(() => loadData())
-                    .catch(error => {
-                      console.error('폴더 이름 변경 실패:', error);
-                      alert('폴더 이름을 변경하는데 실패했습니다.');
-                    });
-                }
-                setIsRenaming(false);
+                handleRename();
               } else if (e.key === 'Escape') {
                 setIsRenaming(false);
               }
             }}
-            className="flex-grow text-sm px-1 py-0.5 border rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
             onClick={(e) => e.stopPropagation()}
           />
-        ) : (
-          <span className={`flex-grow text-sm ${isSelected ? 'font-medium' : ''}`}>
-            {folder.name}
-          </span>
         )}
         
-        {folder.count !== undefined && (
-          <span className="text-gray-500 text-xs bg-gray-100 px-1.5 py-0.5 rounded-full">
-            {folder.count}
+        {/* 폴더 내 프롬프트 개수 표시 - total_count와 count 함께 표시 */}
+        {folder.total_count !== undefined && (
+          <span className="text-gray-500 text-xs bg-gray-100 px-1.5 py-0.5 rounded-full flex items-center">
+            {folder.count !== folder.total_count ? (
+              <span title={`직접 포함된 프롬프트: ${folder.count} / 하위 폴더 포함 전체: ${folder.total_count}`}>
+                <span className="font-medium">{folder.count}</span>
+                <span className="mx-0.5 text-gray-400">/</span>
+                <span>{folder.total_count}</span>
+              </span>
+            ) : (
+              <span>
+                {folder.count}
+              </span>
+            )}
           </span>
         )}
       </div>
