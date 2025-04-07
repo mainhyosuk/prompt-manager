@@ -421,8 +421,8 @@ const TagSelector = ({ selectedTags, setSelectedTags }) => {
   // 마우스 진입 시 호버 상태 설정 및 마우스 추적 시작
   const handleMouseEnter = (tag, e) => {
     if (!editingTag) {
-      // 이벤트가 툴바 영역에서 발생한 것인지 확인
-      if (e.relatedTarget && e.relatedTarget.closest('.toolbar-portal')) {
+      // 이벤트가 툴바 영역에서 발생한 것인지 확인 (relatedTarget이 유효한지 확인)
+      if (e.relatedTarget && e.relatedTarget.nodeType === 1 && e.relatedTarget.closest && e.relatedTarget.closest('.toolbar-portal')) {
         // 툴바에서 태그로 돌아오는 경우는 무시
         return;
       }
@@ -447,8 +447,8 @@ const TagSelector = ({ selectedTags, setSelectedTags }) => {
   // 마우스 이탈 시 호버 상태 해제 로직 개선
   const handleMouseLeave = (e) => {
     if (!editingTag) {
-      // 태그에서 툴바로 이동하는 경우 체크
-      if (e.relatedTarget && 
+      // 태그에서 툴바로 이동하는 경우 체크 (relatedTarget이 유효한지 확인)
+      if (e.relatedTarget && e.relatedTarget.nodeType === 1 && e.relatedTarget.closest && 
          (e.relatedTarget.closest('.toolbar-portal') || 
           e.relatedTarget.closest(`[data-tag-id="${e.currentTarget.id}"]`))) {
         // 툴바로 이동하는 경우 호버 상태 유지

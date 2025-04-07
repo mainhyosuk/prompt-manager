@@ -528,53 +528,39 @@ def duplicate_prompt(id):
     cursor = conn.cursor()
 
     try:
-        # 원본 프롬프트 존재 여부 확인
+        # 원본 프롬프트 정보 가져오기
         cursor.execute(
             """
-            SELECT id, title, content, folder_id, is_favorite
-            FROM prompts 
+            SELECT title, content, folder_id, is_favorite
+            FROM prompts
             WHERE id = ?
         """,
             (id,),
         )
 
-        original_prompt = cursor.fetchone()
-        if not original_prompt:
+        prompt = cursor.fetchone()
+        if not prompt:
             conn.close()
             return jsonify({"error": "복제할 프롬프트를 찾을 수 없습니다."}), 404
 
-        # 복제된 프롬프트 제목 생성 (제목 복사본)
-        duplicated_title = f"{original_prompt['title']} 복사본"
+        # 제목에 '복사본' 추가
+        new_title = f"{prompt['title']} - 복사본"
 
-        # 동일한 제목이 이미 존재하는지 확인하고 번호 추가
-        cursor.execute(
-            "SELECT COUNT(*) as count FROM prompts WHERE title LIKE ?",
-            (f"{duplicated_title}%",),
-        )
-        count = cursor.fetchone()["count"]
-
-        if count > 0:
-            duplicated_title = f"{duplicated_title} ({count})"
-
+        # 트랜잭션 시작
         conn.execute("BEGIN")
 
-        # 프롬프트 기본 정보 복제
+        # 새 프롬프트 생성
         cursor.execute(
             """
             INSERT INTO prompts (title, content, folder_id, is_favorite)
             VALUES (?, ?, ?, ?)
         """,
-            (
-                duplicated_title,
-                original_prompt["content"],
-                original_prompt["folder_id"],
-                original_prompt["is_favorite"],
-            ),
+            (new_title, prompt["content"], prompt["folder_id"], prompt["is_favorite"]),
         )
 
         new_prompt_id = cursor.lastrowid
 
-        # 원본 프롬프트의 태그 복제
+        # 원본 프롬프트의 태그 정보 복사
         cursor.execute(
             """
             SELECT tag_id
@@ -584,17 +570,17 @@ def duplicate_prompt(id):
             (id,),
         )
 
-        for row in cursor.fetchall():
-            tag_id = row["tag_id"]
+        tags = cursor.fetchall()
+        for tag in tags:
             cursor.execute(
                 """
                 INSERT INTO prompt_tags (prompt_id, tag_id)
                 VALUES (?, ?)
             """,
-                (new_prompt_id, tag_id),
+                (new_prompt_id, tag["tag_id"]),
             )
 
-        # 원본 프롬프트의 변수 복제
+        # 원본 프롬프트의 변수 정보 복사
         cursor.execute(
             """
             SELECT name, default_value
@@ -604,7 +590,8 @@ def duplicate_prompt(id):
             (id,),
         )
 
-        for variable in cursor.fetchall():
+        variables = cursor.fetchall()
+        for variable in variables:
             cursor.execute(
                 """
                 INSERT INTO variables (prompt_id, name, default_value)
@@ -613,15 +600,101 @@ def duplicate_prompt(id):
                 (new_prompt_id, variable["name"], variable["default_value"]),
             )
 
+        # 변경사항 저장
         conn.commit()
 
-        # 복제된 프롬프트 정보 반환
+        # 새로 생성된 프롬프트 정보 반환
         return get_prompt(new_prompt_id)
 
     except Exception as e:
         conn.rollback()
         print(f"프롬프트 복제 오류: {e}")
-        return jsonify({"error": str(e)}), 500
+        return (
+            jsonify({"error": f"프롬프트 복제 중 오류가 발생했습니다: {str(e)}"}),
+            500,
+        )
+    finally:
+        conn.close()
 
+
+# 변수 기본값 업데이트
+@prompt_bp.route(
+    "/api/prompts/<int:id>/variables/<string:variable_name>", methods=["PUT"]
+)
+def update_variable_default_value(id, variable_name):
+    data = request.json
+
+    # 필수 필드 검증
+    if "default_value" not in data:
+        return jsonify({"error": "기본값은 필수입니다."}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # 프롬프트 존재 여부 확인
+        cursor.execute("SELECT id FROM prompts WHERE id = ?", (id,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({"error": "프롬프트를 찾을 수 없습니다."}), 404
+
+        # 변수 존재 여부 확인
+        cursor.execute(
+            """
+            SELECT id FROM variables 
+            WHERE prompt_id = ? AND name = ?
+            """,
+            (id, variable_name),
+        )
+        variable = cursor.fetchone()
+
+        # 트랜잭션 시작
+        conn.execute("BEGIN")
+
+        if variable:
+            # 기존 변수 업데이트 (updated_at 컬럼 참조 제거)
+            cursor.execute(
+                """
+                UPDATE variables 
+                SET default_value = ?
+                WHERE id = ?
+                """,
+                (data["default_value"], variable["id"]),
+            )
+        else:
+            # 변수가 없는 경우 새로 생성
+            cursor.execute(
+                """
+                INSERT INTO variables (prompt_id, name, default_value)
+                VALUES (?, ?, ?)
+                """,
+                (id, variable_name, data["default_value"]),
+            )
+
+        # 프롬프트의 업데이트 시간도 갱신
+        cursor.execute(
+            """
+            UPDATE prompts
+            SET updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (id,),
+        )
+
+        # 변경사항 저장
+        conn.commit()
+
+        # 업데이트된 프롬프트 정보 반환
+        return get_prompt(id)
+
+    except Exception as e:
+        conn.rollback()
+        print(f"변수 기본값 업데이트 오류: {e}")
+        return (
+            jsonify(
+                {"error": f"변수 기본값 업데이트 중 오류가 발생했습니다: {str(e)}"}
+            ),
+            500,
+        )
     finally:
         conn.close()

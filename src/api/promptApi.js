@@ -141,3 +141,24 @@ export const duplicatePrompt = async (id) => {
     throw error;
   }
 };
+
+// 변수 기본값 업데이트
+export const updateVariableDefaultValue = async (promptId, variableName, defaultValue) => {
+  try {
+    const response = await fetch(`/api/prompts/${promptId}/variables/${encodeURIComponent(variableName)}`, {
+      ...API_FETCH_OPTIONS,
+      method: 'PUT',
+      body: JSON.stringify({ default_value: defaultValue }),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || '변수 기본값 업데이트에 실패했습니다.');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('변수 기본값 업데이트 오류:', error);
+    throw error;
+  }
+};

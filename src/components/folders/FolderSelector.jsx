@@ -101,7 +101,7 @@ const FolderSelector = ({ selectedFolder, setSelectedFolder }) => {
         </button>
         
         {isDropdownOpen && (
-          <div className="absolute z-10 mt-1 w-full border rounded-lg shadow-lg bg-white max-h-60 overflow-auto">
+          <div className="absolute z-30 mt-1 w-full border rounded-lg shadow-lg bg-white max-h-60 overflow-auto">
             {/* 새 폴더 생성 버튼 */}
             <div className="sticky top-0 bg-white border-b">
               <button

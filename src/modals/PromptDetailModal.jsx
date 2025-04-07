@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Edit, Star, Copy, ChevronRight, Clock, User, Tag, Folder, FileText } from 'lucide-react';
+import { X, Edit, Star, Copy, ChevronRight, Clock, User, Tag, Folder, FileText, Save, Check } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { applyVariables, extractVariables, splitContentByVariables } from '../utils/variableParser';
 import { copyToClipboard } from '../utils/clipboard';
@@ -77,7 +77,8 @@ const PromptDetailModal = () => {
     handleEditPrompt,
     handleToggleFavorite,
     handleRecordUsage,
-    getTagColorClasses
+    getTagColorClasses,
+    handleUpdateVariableDefaultValue
   } = useAppContext();
   
   const [variableValues, setVariableValues] = useState({});
@@ -91,6 +92,9 @@ const PromptDetailModal = () => {
   const [textEditorValue, setTextEditorValue] = useState('');
   const textEditorRef = useRef(null);
   
+  // 변수 저장 상태 관리
+  const [savingStates, setSavingStates] = useState({});
+  
   // 변수 기본값 설정
   useEffect(() => {
     if (selectedPrompt?.variables) {
@@ -103,6 +107,13 @@ const PromptDetailModal = () => {
       // 초기 프롬프트 내용을 변수 적용 버전으로 설정
       const initialProcessed = applyVariables(selectedPrompt.content, initialValues);
       setProcessedContent(initialProcessed);
+      
+      // 저장 상태 초기화
+      const initialSavingStates = {};
+      selectedPrompt.variables.forEach(variable => {
+        initialSavingStates[variable.name] = 'idle'; // 'idle', 'saving', 'saved', 'error'
+      });
+      setSavingStates(initialSavingStates);
     }
   }, [selectedPrompt]);
   
@@ -186,6 +197,64 @@ const PromptDetailModal = () => {
       
       return newValues;
     });
+    
+    // 값이 변경되면 해당 변수의 저장 상태를 idle로 설정
+    setSavingStates(prev => ({
+      ...prev,
+      [name]: 'idle'
+    }));
+  };
+  
+  // 변수 기본값 저장
+  const handleSaveVariableDefaultValue = async (variableName) => {
+    if (!selectedPrompt) return;
+    
+    // 저장 상태를 'saving'으로 변경
+    setSavingStates(prev => ({
+      ...prev,
+      [variableName]: 'saving'
+    }));
+    
+    try {
+      const currentValue = variableValues[variableName] || '';
+      
+      // API 호출하여 변수 기본값 업데이트
+      await handleUpdateVariableDefaultValue(
+        selectedPrompt.id,
+        variableName,
+        currentValue
+      );
+      
+      // 저장 성공 시 상태를 'saved'로 변경
+      setSavingStates(prev => ({
+        ...prev,
+        [variableName]: 'saved'
+      }));
+      
+      // 3초 후에 'idle' 상태로 되돌림
+      setTimeout(() => {
+        setSavingStates(prev => ({
+          ...prev,
+          [variableName]: 'idle'
+        }));
+      }, 3000);
+    } catch (error) {
+      console.error('변수 기본값 저장 오류:', error);
+      
+      // 저장 실패 시 상태를 'error'로 변경
+      setSavingStates(prev => ({
+        ...prev,
+        [variableName]: 'error'
+      }));
+      
+      // 3초 후에 'idle' 상태로 되돌림
+      setTimeout(() => {
+        setSavingStates(prev => ({
+          ...prev,
+          [variableName]: 'idle'
+        }));
+      }, 3000);
+    }
   };
   
   // 텍스트 에디터 열기
@@ -208,6 +277,24 @@ const PromptDetailModal = () => {
       handleVariableChange(editingVariable.name, textEditorValue);
     }
     closeTextEditor();
+  };
+  
+  // 텍스트 에디터에서 기본값 저장 버튼
+  const saveTextEditorValueAsDefault = async () => {
+    if (!editingVariable || !selectedPrompt) return;
+    
+    try {
+      // 변수 값을 업데이트
+      handleVariableChange(editingVariable.name, textEditorValue);
+      
+      // 저장 프로세스 시작
+      await handleSaveVariableDefaultValue(editingVariable.name);
+      
+      // 에디터 닫기
+      closeTextEditor();
+    } catch (error) {
+      console.error('텍스트 에디터에서 변수 저장 오류:', error);
+    }
   };
   
   // 클립보드 복사
@@ -287,6 +374,25 @@ const PromptDetailModal = () => {
                         placeholder={variable.default_value || `${variable.name} 값 입력`}
                         className="flex-1 px-3 py-2 border rounded-l text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
                       />
+                      <button
+                        type="button"
+                        onClick={() => handleSaveVariableDefaultValue(variable.name)}
+                        className={`px-3 py-2 border border-l-0 rounded-none 
+                          ${savingStates[variable.name] === 'saved' ? 'bg-green-50 text-green-600' : 
+                            savingStates[variable.name] === 'error' ? 'bg-red-50 text-red-600' : 
+                            savingStates[variable.name] === 'saving' ? 'bg-blue-50 text-blue-400' : 
+                            'bg-gray-50 hover:bg-gray-100 text-gray-600'}`}
+                        title="변수값을 기본값으로 저장"
+                        disabled={savingStates[variable.name] === 'saving'}
+                      >
+                        {savingStates[variable.name] === 'saved' ? (
+                          <Check size={16} />
+                        ) : savingStates[variable.name] === 'saving' ? (
+                          <div className="w-4 h-4 border-2 border-t-blue-500 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Save size={16} />
+                        )}
+                      </button>
                       <button
                         type="button"
                         onClick={() => openTextEditor(variable)}
@@ -429,9 +535,16 @@ const PromptDetailModal = () => {
                 </button>
                 <button
                   onClick={saveTextEditorValue}
-                  className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+                  className="px-4 py-2 rounded bg-gray-600 text-white hover:bg-gray-700"
                 >
-                  저장하기
+                  적용
+                </button>
+                <button
+                  onClick={saveTextEditorValueAsDefault}
+                  className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 flex items-center"
+                >
+                  <Save size={16} className="mr-1" />
+                  기본값으로 저장
                 </button>
               </div>
             </div>

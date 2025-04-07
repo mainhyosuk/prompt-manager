@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { getPrompts, createPrompt, updatePrompt, deletePrompt, toggleFavorite, recordPromptUsage, duplicatePrompt } from '../api/promptApi';
+import { getPrompts, createPrompt, updatePrompt, deletePrompt, toggleFavorite, recordPromptUsage, duplicatePrompt, updateVariableDefaultValue } from '../api/promptApi';
 import { getFolders } from '../api/folderApi';
 import { getTags } from '../api/tagApi';
 
@@ -397,6 +397,51 @@ export const AppProvider = ({ children }) => {
     }
   }, []);
 
+  // 변수 기본값 업데이트 핸들러
+  const handleUpdateVariableDefaultValue = useCallback(async (promptId, variableName, defaultValue) => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // API 호출하여 변수 기본값 업데이트
+      const updatedPrompt = await updateVariableDefaultValue(promptId, variableName, defaultValue);
+      
+      // 프롬프트 목록 업데이트
+      setPrompts(prev => prev.map(p => 
+        p.id === promptId 
+          ? { 
+              ...p, 
+              variables: p.variables.map(v => 
+                v.name === variableName 
+                  ? { ...v, default_value: defaultValue }
+                  : v
+              )
+            } 
+          : p
+      ));
+      
+      // 현재 선택된 프롬프트가 있고, 그 프롬프트의 id가 변경된 프롬프트와 같으면 선택된 프롬프트도 업데이트
+      if (selectedPrompt && selectedPrompt.id === promptId) {
+        setSelectedPrompt(prev => ({
+          ...prev,
+          variables: prev.variables.map(v => 
+            v.name === variableName 
+              ? { ...v, default_value: defaultValue }
+              : v
+          )
+        }));
+      }
+      
+      return updatedPrompt;
+    } catch (err) {
+      console.error('변수 기본값 업데이트 오류:', err);
+      setError('변수 기본값을 업데이트하는 중 오류가 발생했습니다.');
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedPrompt]);
+
   // 설정 페이지로 이동
   const goToSettings = useCallback(() => {
     setCurrentScreen('settings');
@@ -468,6 +513,7 @@ export const AppProvider = ({ children }) => {
     handleSavePrompt,
     handleDeletePrompt,
     handleDuplicatePrompt,
+    handleUpdateVariableDefaultValue,
     goToSettings,
     goToDashboard,
     getTagColorClasses,
