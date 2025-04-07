@@ -410,6 +410,7 @@ export const AppProvider = ({ children }) => {
   // 태그 색상 매핑
   const getTagColorClasses = useCallback((color) => {
     const colorMap = {
+      gray: 'bg-gray-100 text-gray-700 border-gray-200',
       blue: 'bg-blue-50 text-blue-700 border-blue-200',
       sky: 'bg-sky-50 text-sky-700 border-sky-200',
       green: 'bg-green-50 text-green-700 border-green-200',
