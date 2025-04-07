@@ -1,3 +1,53 @@
+# v1.21: CORS 정책 오류 해결 및 통신 개선
+
+배포일: 2025-04-07 (월)
+
+## 주요 개선사항
+
+- **CORS 정책 오류 해결**
+  - Flask 백엔드와 React 프론트엔드 간 통신 문제 해결
+  - Flask 애플리케이션의 포트 충돌 문제 해결 (5000번에서 8000번으로 변경)
+  - OPTIONS 메서드에 대한 글로벌 라우트 추가
+  - CORS 헤더 설정 개선
+
+## 코드 변경 사항
+
+### Python 백엔드
+- `python/api/app.py`: 
+  - Flask 서버 포트 변경 (5000 → 8000)
+  - CORS 설정 간소화 및 모든 오리진 허용
+  - OPTIONS 메서드에 대한 글로벌 라우트 추가
+  - CORS 헤더 설정 개선
+
+### React 프론트엔드
+- `vite.config.js`: 프록시 설정 개선 및 대상 포트 변경
+- `src/api/config.js`: API 요청 설정 변경 및 credentials 옵션 수정
+- `src/api/*.js`: 모든 API 요청을 상대 경로로 통일하여 프록시 활용
+- API 요청 옵션 통일 및 일관성 확보
+
+## 문제 원인 및 해결 방법
+
+1. **포트 충돌**: macOS의 Control Center가 기본 Flask 포트인 5000번을 이미 사용 중이었음
+   - 해결: Flask 서버를 8000번 포트로 변경
+
+2. **CORS 설정 문제**: 프론트엔드와 백엔드 간의 CORS 설정이 올바르게 구성되지 않았음
+   - 해결: CORS 설정 간소화 및 모든 오리진 허용으로 개발 환경 최적화
+
+3. **API 요청 경로 문제**: 프론트엔드에서 절대 경로로 API 요청을 보내고 있었음
+   - 해결: 모든 API 요청을 상대 경로로 변경하여 Vite 프록시 활용
+
+## 설치 방법
+
+1. 프로젝트 클론: `git clone https://github.com/mainhyosuk/prompt-manager.git`
+2. 종속성 설치: 
+   - 프론트엔드: `npm install`
+   - 백엔드: `pip install -r requirements.txt`
+3. 실행:
+   - 프론트엔드: `npm run dev`
+   - 백엔드: `python python/api/app.py`
+
+---
+
 # v1.2: 데이터베이스 구현 및 대시보드 기능 개발
 
 배포일: 2025-04-07 (월)

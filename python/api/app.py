@@ -1,7 +1,12 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import os
 import sys
+import logging
+
+# 로깅 설정
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # 상위 디렉토리의 모듈을 임포트하기 위한 경로 추가
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -13,7 +18,45 @@ from routes.tag_routes import tag_bp
 from routes.settings_routes import settings_bp
 
 app = Flask(__name__)
-CORS(app)  # 프론트엔드와의 CORS 이슈 해결
+
+# CORS 설정 간소화 - 모든 오리진 허용으로 변경
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+
+
+# OPTIONS 메서드에 대한 글로벌 라우트 추가
+@app.route("/", defaults={"path": ""}, methods=["OPTIONS"])
+@app.route("/<path:path>", methods=["OPTIONS"])
+def handle_options(path):
+    logger.debug(f"OPTIONS 요청 처리: /{path}")
+    return "", 200
+
+
+# 모든 응답에 CORS 헤더 추가
+@app.after_request
+def add_cors_headers(response):
+    response.headers.add("Access-Control-Allow-Origin", "*")
+    response.headers.add("Access-Control-Allow-Headers", "*")
+    response.headers.add("Access-Control-Allow-Methods", "*")
+    response.headers.add("Access-Control-Allow-Credentials", "true")
+    return response
+
+
+# 디버그 로깅
+@app.before_request
+def log_request_info():
+    logger.debug("Headers: %s", request.headers)
+    logger.debug("Method: %s", request.method)
+    logger.debug("URL: %s", request.url)
+    if request.method != "OPTIONS" and request.data:
+        logger.debug("Data: %s", request.get_data())
+
+
+# 테스트 엔드포인트 추가
+@app.route("/api/test")
+def test_endpoint():
+    logger.debug("테스트 엔드포인트 접근")
+    return jsonify({"status": "success", "message": "테스트 엔드포인트 접근 성공"})
+
 
 # 데이터베이스 초기화
 setup_database()
@@ -24,14 +67,16 @@ app.register_blueprint(folder_bp)
 app.register_blueprint(tag_bp)
 app.register_blueprint(settings_bp)
 
-# 루트 경로
-@app.route('/')
-def index():
-    return jsonify({
-        "message": "프롬프트 관리 도구 API",
-        "version": "0.1.0",
-        "status": "running"
-    })
 
-if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+# 루트 경로
+@app.route("/")
+def index():
+    logger.debug("루트 경로 접근")
+    return jsonify(
+        {"message": "프롬프트 관리 도구 API", "version": "0.1.0", "status": "running"}
+    )
+
+
+if __name__ == "__main__":
+    logger.info("서버 시작 중...")
+    app.run(debug=True, port=8000, host="0.0.0.0")

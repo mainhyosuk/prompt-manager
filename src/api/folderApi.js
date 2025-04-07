@@ -1,14 +1,12 @@
 /**
  * 폴더 관련 API 요청 함수
  */
-import { API_BASE_URL, API_HEADERS } from './config';
+import { API_HEADERS, API_FETCH_OPTIONS } from './config';
 
 // 모든 폴더 가져오기
 export const getFolders = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/folders`, {
-      headers: API_HEADERS
-    });
+    const response = await fetch(`/api/folders`, API_FETCH_OPTIONS);
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -25,9 +23,9 @@ export const getFolders = async () => {
 // 폴더 생성
 export const createFolder = async (folderData) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/folders`, {
+    const response = await fetch(`/api/folders`, {
+      ...API_FETCH_OPTIONS,
       method: 'POST',
-      headers: API_HEADERS,
       body: JSON.stringify(folderData),
     });
     
@@ -46,9 +44,9 @@ export const createFolder = async (folderData) => {
 // 폴더 수정
 export const updateFolder = async (id, folderData) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/folders/${id}`, {
+    const response = await fetch(`/api/folders/${id}`, {
+      ...API_FETCH_OPTIONS,
       method: 'PUT',
-      headers: API_HEADERS,
       body: JSON.stringify(folderData),
     });
     
@@ -67,9 +65,9 @@ export const updateFolder = async (id, folderData) => {
 // 폴더 삭제
 export const deleteFolder = async (id) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/folders/${id}`, {
+    const response = await fetch(`/api/folders/${id}`, {
+      ...API_FETCH_OPTIONS,
       method: 'DELETE',
-      headers: API_HEADERS
     });
     
     if (!response.ok) {
