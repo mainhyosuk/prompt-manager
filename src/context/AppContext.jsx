@@ -136,13 +136,26 @@ export const AppProvider = ({ children }) => {
       }
     }
     
-    // 검색어 필터링
+    // 검색어 필터링 (개선)
     if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(p => 
-        p.title.toLowerCase().includes(query) || 
-        p.content.toLowerCase().includes(query)
-      );
+      const query = searchQuery.toLowerCase().trim();
+      result = result.filter(p => {
+        // 제목 검색
+        const titleMatch = p.title.toLowerCase().includes(query);
+        
+        // 폴더 검색
+        const folderMatch = p.folder && p.folder.toLowerCase().includes(query);
+        
+        // 태그 검색
+        const tagMatch = p.tags.some(tag => 
+          tag.name.toLowerCase().includes(query)
+        );
+        
+        // 내용 검색 제외 (사용자 요청에 따라)
+        // 기존 내용 검색: p.content.toLowerCase().includes(query)
+        
+        return titleMatch || folderMatch || tagMatch;
+      });
     }
     
     // 태그 필터링
