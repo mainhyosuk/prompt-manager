@@ -738,20 +738,76 @@ def reorder_folder(id):
 # 폴더 마이그레이션 엔드포인트
 @folder_bp.route("/api/folders/migrate", methods=["POST"])
 def migrate_folders():
-    """폴더 position 속성을 마이그레이션합니다. 기존 데이터에 position 값이 없는 경우에만 실행됩니다."""
+    """폴더 위치 속성 마이그레이션 API"""
+    conn = None
     try:
         conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # position 값이 있는지 확인
+        cursor.execute(
+            "SELECT COUNT(*) FROM folders WHERE position IS NULL OR position = 0"
+        )
+        count = cursor.fetchone()[0]
+
+        # position 값이 대부분 설정되어 있으면 마이그레이션 스킵
+        if count <= 2:  # 기본 폴더 1-2개만 0이면 이미 마이그레이션된 것으로 간주
+            return (
+                jsonify({"message": "이미 마이그레이션되었습니다", "migrated": False}),
+                200,
+            )
+
+        # 마이그레이션 실행
         migrate_folder_positions(conn)
-        conn.close()
+        conn.commit()
+
         return (
             jsonify(
                 {
-                    "success": True,
-                    "message": "폴더 위치가 성공적으로 마이그레이션되었습니다.",
+                    "message": "폴더 위치 속성이 성공적으로 마이그레이션되었습니다",
+                    "migrated": True,
                 }
             ),
             200,
         )
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@folder_bp.route("/api/folders/migration-needed", methods=["GET"])
+def check_migration_needed():
+    """폴더 위치 마이그레이션 필요 여부 확인 API"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # position 값이 없는 폴더 개수 확인
+        cursor.execute(
+            "SELECT COUNT(*) FROM folders WHERE position IS NULL OR position = 0"
+        )
+        count = cursor.fetchone()[0]
+
+        # position 값이 대부분 설정되어 있으면 마이그레이션 불필요
+        migration_needed = (
+            count > 2
+        )  # 기본 폴더 1-2개만 0이면 이미 마이그레이션된 것으로 간주
+
+        return (
+            jsonify({"migrationNeeded": migration_needed, "pendingCount": count}),
+            200,
+        )
+
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"error": str(e), "migrationNeeded": False}), 500
+    finally:
+        if conn:
+            conn.close()
