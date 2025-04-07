@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Edit, Star, Copy, ChevronRight, Clock, User, Tag, Folder } from 'lucide-react';
+import { X, Edit, Star, Copy, ChevronRight, Clock, User, Tag, Folder, FileText } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { applyVariables } from '../utils/variableParser';
+import { applyVariables, splitContentByVariables } from '../utils/variableParser';
 import { copyToClipboard } from '../utils/clipboard';
+import VariableHighlighter from '../components/variables/VariableHighlighter';
 
 const PromptDetailModal = () => {
   const { 
@@ -18,6 +19,12 @@ const PromptDetailModal = () => {
   const [processedContent, setProcessedContent] = useState('');
   const [copyStatus, setCopyStatus] = useState('idle'); // 'idle', 'copying', 'copied', 'error'
   const modalRef = useRef(null);
+  
+  // 텍스트 에디터 모달 상태
+  const [isTextEditorOpen, setIsTextEditorOpen] = useState(false);
+  const [editingVariable, setEditingVariable] = useState(null);
+  const [textEditorValue, setTextEditorValue] = useState('');
+  const textEditorRef = useRef(null);
   
   // 변수 기본값 설정
   useEffect(() => {
@@ -53,11 +60,32 @@ const PromptDetailModal = () => {
     };
   }, [setIsDetailModalOpen]);
 
+  // 텍스트 에디터 외부 클릭 감지
+  useEffect(() => {
+    const handleTextEditorOutsideClick = (event) => {
+      if (isTextEditorOpen && textEditorRef.current && !textEditorRef.current.contains(event.target)) {
+        closeTextEditor();
+      }
+    };
+    
+    if (isTextEditorOpen) {
+      document.addEventListener('mousedown', handleTextEditorOutsideClick);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleTextEditorOutsideClick);
+    };
+  }, [isTextEditorOpen]);
+
   // ESC 키 입력 감지
   useEffect(() => {
     const handleEscKey = (event) => {
       if (event.key === 'Escape') {
-        setIsDetailModalOpen(false);
+        if (isTextEditorOpen) {
+          closeTextEditor();
+        } else {
+          setIsDetailModalOpen(false);
+        }
       }
     };
     
@@ -66,7 +94,7 @@ const PromptDetailModal = () => {
     return () => {
       document.removeEventListener('keydown', handleEscKey);
     };
-  }, [setIsDetailModalOpen]);
+  }, [setIsDetailModalOpen, isTextEditorOpen]);
   
   if (!selectedPrompt) return null;
   
@@ -76,6 +104,28 @@ const PromptDetailModal = () => {
       ...prev,
       [name]: value
     }));
+  };
+  
+  // 텍스트 에디터 열기
+  const openTextEditor = (variable) => {
+    setEditingVariable(variable);
+    setTextEditorValue(variableValues[variable.name] || '');
+    setIsTextEditorOpen(true);
+  };
+  
+  // 텍스트 에디터 닫기
+  const closeTextEditor = () => {
+    setIsTextEditorOpen(false);
+    setEditingVariable(null);
+    setTextEditorValue('');
+  };
+  
+  // 텍스트 에디터 저장
+  const saveTextEditorValue = () => {
+    if (editingVariable) {
+      handleVariableChange(editingVariable.name, textEditorValue);
+    }
+    closeTextEditor();
   };
   
   // 클립보드 복사
@@ -135,87 +185,99 @@ const PromptDetailModal = () => {
         </div>
         
         {/* 모달 콘텐츠 */}
-        <div className="flex-1 p-6 overflow-y-auto">
-          <div className="flex flex-col md:flex-row gap-6">
-            {/* 왼쪽 컬럼: 원본 내용 및 메타데이터 */}
-            <div className="flex-1">
-              <h3 className="font-medium text-gray-800 mb-2">원본 프롬프트</h3>
-              <div className="bg-gray-50 p-4 rounded-lg border mb-4 whitespace-pre-wrap">
-                {selectedPrompt.content}
-              </div>
-              
-              {/* 메타데이터 */}
-              <div className="space-y-2 text-sm text-gray-600">
-                <div className="flex items-center">
-                  <Folder size={16} className="mr-2" />
-                  <span>폴더: {selectedPrompt.folder || '없음'}</span>
-                </div>
-                
-                <div className="flex items-center">
-                  <Tag size={16} className="mr-2" />
-                  <span>태그: </span>
-                  <div className="flex flex-wrap gap-1 ml-1">
-                    {selectedPrompt.tags.length > 0 ? (
-                      selectedPrompt.tags.map(tag => (
-                        <span 
-                          key={tag.id} 
-                          className={`px-2 py-0.5 rounded-full text-xs ${getTagColorClasses(tag.color)}`}
-                        >
-                          {tag.name}
-                        </span>
-                      ))
-                    ) : (
-                      <span>없음</span>
-                    )}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* 변수 입력 영역 - 상단에 고정 */}
+          {selectedPrompt.variables && selectedPrompt.variables.length > 0 && (
+            <div className="border-b p-6">
+              <h3 className="font-medium text-gray-800 mb-3">변수 입력</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-48 overflow-y-auto">
+                {selectedPrompt.variables.map(variable => (
+                  <div key={variable.id || variable.name} className="flex flex-col">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {variable.name}
+                    </label>
+                    <div className="flex w-full">
+                      <input
+                        type="text"
+                        value={variableValues[variable.name] || ''}
+                        onChange={(e) => handleVariableChange(variable.name, e.target.value)}
+                        placeholder={variable.default_value || `${variable.name} 값 입력`}
+                        className="flex-1 px-3 py-2 border rounded-l text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => openTextEditor(variable)}
+                        className="px-3 py-2 border border-l-0 rounded-r bg-gray-50 hover:bg-gray-100 text-gray-600"
+                        title="텍스트 에디터 열기"
+                      >
+                        <FileText size={16} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-                
-                <div className="flex items-center">
-                  <Clock size={16} className="mr-2" />
-                  <span>생성일: {new Date(selectedPrompt.created_at).toLocaleDateString()}</span>
-                </div>
-                
-                <div className="flex items-center">
-                  <User size={16} className="mr-2" />
-                  <span>사용 횟수: {selectedPrompt.use_count || 0}회</span>
-                </div>
-                
-                {selectedPrompt.last_used_at && (
-                  <div className="flex items-center">
-                    <Clock size={16} className="mr-2" />
-                    <span>마지막 사용: {selectedPrompt.last_used}</span>
-                  </div>
-                )}
+                ))}
               </div>
             </div>
-            
-            {/* 오른쪽 컬럼: 변수 처리 및 복사 기능 */}
-            <div className="flex-1">
-              {/* 변수 입력 */}
-              {selectedPrompt.variables && selectedPrompt.variables.length > 0 && (
-                <div className="mb-4">
-                  <h3 className="font-medium text-gray-800 mb-2">변수 입력</h3>
-                  <div className="space-y-2">
-                    {selectedPrompt.variables.map(variable => (
-                      <div key={variable.id || variable.name} className="flex items-center">
-                        <label className="block w-1/3 text-sm text-gray-600">
-                          {variable.name}:
-                        </label>
-                        <input
-                          type="text"
-                          value={variableValues[variable.name] || ''}
-                          onChange={(e) => handleVariableChange(variable.name, e.target.value)}
-                          placeholder={variable.default_value || `${variable.name} 값 입력`}
-                          className="flex-1 px-3 py-2 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-                        />
-                      </div>
-                    ))}
-                  </div>
+          )}
+          
+          {/* 프롬프트 내용 및 메타데이터 영역 - 가로 나란히 배치 */}
+          <div className="flex-1 p-6 overflow-y-auto">
+            <div className="flex flex-col md:flex-row gap-6">
+              {/* 왼쪽 컬럼: 원본 내용 */}
+              <div className="flex-1">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-medium text-gray-800">원본 프롬프트</h3>
                 </div>
-              )}
+                <div className="bg-gray-50 p-4 rounded-lg border mb-4 whitespace-pre-wrap h-64 overflow-y-auto">
+                  {selectedPrompt.content}
+                </div>
+                
+                {/* 메타데이터 */}
+                <div className="space-y-2 text-sm text-gray-600">
+                  <div className="flex items-center">
+                    <Folder size={16} className="mr-2" />
+                    <span>폴더: {selectedPrompt.folder || '없음'}</span>
+                  </div>
+                  
+                  <div className="flex items-center">
+                    <Tag size={16} className="mr-2" />
+                    <span>태그: </span>
+                    <div className="flex flex-wrap gap-1 ml-1">
+                      {selectedPrompt.tags.length > 0 ? (
+                        selectedPrompt.tags.map(tag => (
+                          <span 
+                            key={tag.id} 
+                            className={`px-2 py-0.5 rounded-full text-xs ${getTagColorClasses(tag.color)}`}
+                          >
+                            {tag.name}
+                          </span>
+                        ))
+                      ) : (
+                        <span>없음</span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center">
+                    <Clock size={16} className="mr-2" />
+                    <span>생성일: {new Date(selectedPrompt.created_at).toLocaleDateString()}</span>
+                  </div>
+                  
+                  <div className="flex items-center">
+                    <User size={16} className="mr-2" />
+                    <span>사용 횟수: {selectedPrompt.use_count || 0}회</span>
+                  </div>
+                  
+                  {selectedPrompt.last_used_at && (
+                    <div className="flex items-center">
+                      <Clock size={16} className="mr-2" />
+                      <span>마지막 사용: {selectedPrompt.last_used}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
               
-              {/* 변수 적용된 내용 */}
-              <div className="mb-4">
+              {/* 오른쪽 컬럼: 변수 적용된 내용 */}
+              <div className="flex-1">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="font-medium text-gray-800">변수가 적용된 프롬프트</h3>
                   <button
@@ -239,37 +301,109 @@ const PromptDetailModal = () => {
                       : '클립보드에 복사'}
                   </button>
                 </div>
-                <div className="bg-white p-4 rounded-lg border whitespace-pre-wrap">
-                  {processedContent}
+                <div className="h-64 overflow-y-auto">
+                  <HighlightedContent content={processedContent} />
                 </div>
               </div>
             </div>
           </div>
         </div>
         
-        {/* 모달 푸터 */}
-        <div className="flex justify-end border-t px-6 py-4 space-x-2">
-          <button
-            onClick={() => setIsDetailModalOpen(false)}
-            className="px-4 py-2 border rounded text-gray-700 hover:bg-gray-50"
-          >
-            닫기
-          </button>
-          <button
-            onClick={handleCopyToClipboard}
-            disabled={copyStatus === 'copying'}
-            className={`px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center
-              ${copyStatus === 'copying' ? 'opacity-70 cursor-not-allowed' : ''}`}
-          >
-            <Copy size={16} className="mr-2" />
-            {copyStatus === 'copying' 
-              ? '복사 중...' 
-              : copyStatus === 'copied' 
-              ? '복사됨!' 
-              : '클립보드에 복사'}
-          </button>
-        </div>
+        {/* 텍스트 에디터 모달 */}
+        {isTextEditorOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div ref={textEditorRef} className="bg-white rounded-lg shadow-xl w-2/3 max-w-2xl flex flex-col">
+              <div className="flex justify-between items-center border-b px-4 py-3">
+                <h3 className="font-medium">
+                  "{editingVariable?.name}" 변수 편집
+                </h3>
+                <button 
+                  onClick={closeTextEditor}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="p-4">
+                <textarea
+                  value={textEditorValue}
+                  onChange={(e) => setTextEditorValue(e.target.value)}
+                  className="w-full h-64 px-3 py-2 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  placeholder="내용을 입력하세요..."
+                />
+              </div>
+              
+              <div className="border-t p-4 flex justify-end space-x-2">
+                <button
+                  onClick={closeTextEditor}
+                  className="px-4 py-2 border rounded bg-white hover:bg-gray-50"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={saveTextEditorValue}
+                  className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  저장하기
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+    </div>
+  );
+};
+
+// 변수가 포함된 내용을 하이라이트하는 컴포넌트
+const HighlightedContent = ({ content }) => {
+  const regex = /{([^}]+)}/g;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+  
+  // 정규식을 사용하여 {변수명} 패턴 찾기
+  while ((match = regex.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      // 변수 앞의 일반 텍스트 추가
+      parts.push({
+        type: 'text',
+        content: content.substring(lastIndex, match.index)
+      });
+    }
+    
+    // 변수 추가
+    parts.push({
+      type: 'variable',
+      name: match[1],
+      content: match[0]
+    });
+    
+    lastIndex = match.index + match[0].length;
+  }
+  
+  // 마지막 변수 이후의 텍스트 추가
+  if (lastIndex < content.length) {
+    parts.push({
+      type: 'text',
+      content: content.substring(lastIndex)
+    });
+  }
+  
+  return (
+    <div className="bg-white p-4 rounded-lg border whitespace-pre-wrap">
+      {parts.map((part, index) => {
+        if (part.type === 'variable') {
+          return (
+            <span key={index} className="bg-yellow-100 text-yellow-800 px-1 rounded">
+              {part.content}
+            </span>
+          );
+        } else {
+          return <span key={index}>{part.content}</span>;
+        }
+      })}
     </div>
   );
 };
