@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronDown, ChevronRight, Star, Folder, FolderOpen, Package, Edit, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { updateFolder, deleteFolder } from '../../api/folderApi';
@@ -19,10 +19,40 @@ const isDescendant = (folder, targetId) => {
   return folder.children.some(child => isDescendant(child, targetId));
 };
 
+// 커스텀 훅: 컨텍스트 메뉴 위치 계산
+const useContextMenuPosition = (x, y) => {
+  const menuRef = useRef(null);
+  const [position, setPosition] = useState({ x, y });
+  
+  useEffect(() => {
+    if (menuRef.current) {
+      const menuRect = menuRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      
+      let adjustedX = x;
+      let adjustedY = y;
+      
+      // 화면 경계 확인 및 조정
+      if (x + menuRect.width > viewportWidth) {
+        adjustedX = Math.max(0, x - menuRect.width);
+      }
+      
+      if (y + menuRect.height > viewportHeight) {
+        adjustedY = Math.max(0, y - menuRect.height);
+      }
+      
+      setPosition({ x: adjustedX, y: adjustedY });
+    }
+  }, [x, y]);
+  
+  return { menuRef, position };
+};
+
 // 컨텍스트 메뉴 컴포넌트
 const ContextMenu = ({ x, y, folder, onClose, onRename, onDelete, onMove }) => {
-  // 기본 폴더 여부 확인
   const isDefaultFolder = ['모든 프롬프트', '즐겨찾기'].includes(folder.name);
+  const { menuRef, position } = useContextMenuPosition(x, y);
   
   // 메뉴 아이템 클릭 처리
   const handleMenuItemClick = (action) => {
@@ -33,41 +63,7 @@ const ContextMenu = ({ x, y, folder, onClose, onRename, onDelete, onMove }) => {
     onClose();
   };
   
-  // 외부 클릭 감지를 위한 ref
-  const menuRef = useRef(null);
-  
-  // 메뉴 위치 조정을 위한 상태
-  const [adjustedPosition, setAdjustedPosition] = useState({ x, y });
-  
-  useEffect(() => {
-    // 메뉴가 화면 밖으로 나가지 않도록 위치 조정
-    if (menuRef.current) {
-      const menuRect = menuRef.current.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      
-      let adjustedX = x;
-      let adjustedY = y;
-      
-      // X 좌표 조정 (화면 오른쪽 경계 확인)
-      if (x + menuRect.width > viewportWidth) {
-        adjustedX = Math.max(0, x - menuRect.width);
-      }
-      
-      // Y 좌표 조정 (화면 하단 경계 확인)
-      if (y + menuRect.height > viewportHeight) {
-        adjustedY = Math.max(0, y - menuRect.height);
-      }
-      
-      // 위치 업데이트
-      setAdjustedPosition({ x: adjustedX, y: adjustedY });
-      
-      // 디버깅을 위한 로그 추가
-      console.log('메뉴 크기:', menuRect.width, menuRect.height);
-      console.log('조정된 위치:', adjustedX, adjustedY);
-    }
-  }, [x, y]);
-  
+  // 외부 클릭 감지
   useEffect(() => {
     const handleOutsideClick = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target) && !e.target.closest('.folder-item')) {
@@ -75,14 +71,11 @@ const ContextMenu = ({ x, y, folder, onClose, onRename, onDelete, onMove }) => {
       }
     };
     
-    // 리스너 등록
-    document.addEventListener('mousedown', handleOutsideClick);
-    document.addEventListener('contextmenu', handleOutsideClick);
+    const events = ['mousedown', 'contextmenu'];
+    events.forEach(event => document.addEventListener(event, handleOutsideClick));
     
     return () => {
-      // 리스너 제거
-      document.removeEventListener('mousedown', handleOutsideClick);
-      document.removeEventListener('contextmenu', handleOutsideClick);
+      events.forEach(event => document.removeEventListener(event, handleOutsideClick));
     };
   }, [onClose]);
   
@@ -91,8 +84,8 @@ const ContextMenu = ({ x, y, folder, onClose, onRename, onDelete, onMove }) => {
       ref={menuRef}
       className="fixed bg-white shadow-lg border rounded-lg py-1 z-[9999] contextMenu"
       style={{ 
-        left: `${adjustedPosition.x}px`, 
-        top: `${adjustedPosition.y}px`,
+        left: `${position.x}px`, 
+        top: `${position.y}px`,
         minWidth: '180px',
         maxWidth: '250px'
       }}
@@ -141,6 +134,77 @@ const ContextMenu = ({ x, y, folder, onClose, onRename, onDelete, onMove }) => {
   );
 };
 
+// 커스텀 훅: 컨텍스트 메뉴 상태 관리
+const useContextMenu = (folderName) => {
+  const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0 });
+  const folderItemRef = useRef(null);
+  
+  // 컨텍스트 메뉴 닫기
+  const closeContextMenu = useCallback(() => {
+    setContextMenu({ visible: false, x: 0, y: 0 });
+  }, []);
+  
+  // 네이티브 컨텍스트 메뉴 이벤트 핸들러 등록
+  useEffect(() => {
+    const folderElement = folderItemRef.current;
+    if (!folderElement) return;
+    
+    const handleNativeContextMenu = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // 다른 열린 컨텍스트 메뉴 닫기
+      document.dispatchEvent(new CustomEvent('closeContextMenu'));
+      
+      // 폴더 요소 위치 기반으로 메뉴 표시
+      const rect = folderElement.getBoundingClientRect();
+      setContextMenu({
+        visible: true,
+        x: rect.right,
+        y: rect.top
+      });
+      
+      return false;
+    };
+    
+    folderElement.addEventListener('contextmenu', handleNativeContextMenu);
+    return () => folderElement.removeEventListener('contextmenu', handleNativeContextMenu);
+  }, [folderName]);
+  
+  // 외부 클릭 감지 및 컨텍스트 메뉴 닫기 이벤트 핸들러
+  useEffect(() => {
+    const handleCloseContextMenu = () => closeContextMenu();
+    document.addEventListener('closeContextMenu', handleCloseContextMenu);
+    
+    return () => document.removeEventListener('closeContextMenu', handleCloseContextMenu);
+  }, [closeContextMenu]);
+  
+  // 외부 클릭 감지
+  useEffect(() => {
+    if (!contextMenu.visible) return;
+    
+    const timeoutId = setTimeout(() => {
+      const handleOutsideClick = (event) => {
+        if (event.target.closest('.contextMenu') || event.target.closest('.folder-item')) {
+          return;
+        }
+        closeContextMenu();
+      };
+      
+      const events = ['click', 'contextmenu'];
+      events.forEach(event => document.addEventListener(event, handleOutsideClick));
+      
+      return () => {
+        events.forEach(event => document.removeEventListener(event, handleOutsideClick));
+      };
+    }, 100);
+    
+    return () => clearTimeout(timeoutId);
+  }, [contextMenu.visible, closeContextMenu]);
+  
+  return { contextMenu, setContextMenu, closeContextMenu, folderItemRef };
+};
+
 const FolderItem = ({ folder, level = 0, isLast = false }) => {
   const { 
     selectedFolder, 
@@ -151,112 +215,8 @@ const FolderItem = ({ folder, level = 0, isLast = false }) => {
     folders
   } = useAppContext();
   
-  // 컨텍스트 메뉴 상태
-  const [contextMenu, setContextMenu] = useState({
-    visible: false,
-    x: 0,
-    y: 0
-  });
-  
-  // 폴더 아이템 ref 추가
-  const folderItemRef = useRef(null);
-  
-  // 상태 변경 테스트용 로그
-  useEffect(() => {
-    console.log('컨텍스트 메뉴 상태 변경:', contextMenu);
-  }, [contextMenu]);
-  
-  // 직접 DOM 이벤트 리스너 추가
-  useEffect(() => {
-    const folderElement = folderItemRef.current;
-    if (folderElement) {
-      const handleNativeContextMenu = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        console.log('네이티브 우클릭 이벤트 발생:', folder.name);
-        
-        // 다른 열린 컨텍스트 메뉴 닫기 이벤트 발생
-        const closeMenuEvent = new CustomEvent('closeContextMenu');
-        document.dispatchEvent(closeMenuEvent);
-        
-        // 폴더 요소의 위치와 크기 정보 가져오기
-        const rect = folderElement.getBoundingClientRect();
-        
-        // 컨텍스트 메뉴를 폴더 영역의 오른쪽에 표시
-        const menuX = rect.right;
-        const menuY = rect.top;
-        
-        console.log('폴더 영역:', rect);
-        console.log('메뉴 위치:', menuX, menuY);
-        
-        // 폴더 항목 오른쪽에 컨텍스트 메뉴 표시
-        setContextMenu({
-          visible: true,
-          x: menuX,
-          y: menuY
-        });
-        
-        return false;
-      };
-      
-      folderElement.addEventListener('contextmenu', handleNativeContextMenu);
-      
-      return () => {
-        folderElement.removeEventListener('contextmenu', handleNativeContextMenu);
-      };
-    }
-  }, [folder.name]);
-  
-  // 컨텍스트 메뉴 닫기
-  const closeContextMenu = () => {
-    setContextMenu({ visible: false, x: 0, y: 0 });
-  };
-  
-  // 다른 컨텍스트 메뉴 닫기 이벤트 리스너
-  useEffect(() => {
-    const handleCloseContextMenu = () => {
-      closeContextMenu();
-    };
-    
-    document.addEventListener('closeContextMenu', handleCloseContextMenu);
-    return () => {
-      document.removeEventListener('closeContextMenu', handleCloseContextMenu);
-    };
-  }, []);
-  
-  // 외부 클릭 감지 처리
-  useEffect(() => {
-    if (!contextMenu.visible) return;
-    
-    // 약간의 지연을 두어 컨텍스트 메뉴가 표시된 직후에 이벤트가 발생하지 않도록 함
-    const timeoutId = setTimeout(() => {
-      const handleOutsideClick = (event) => {
-        // 컨텍스트 메뉴 자체를 클릭한 경우는 무시
-        if (event.target.closest('.contextMenu')) {
-          return;
-        }
-        
-        // 폴더 아이템을 클릭한 경우도 무시 (이미 handleContextMenu에서 처리됨)
-        if (event.target.closest('.folder-item')) {
-          return;
-        }
-        
-        // 그 외의 경우 컨텍스트 메뉴 닫기
-        closeContextMenu();
-      };
-      
-      document.addEventListener('click', handleOutsideClick);
-      document.addEventListener('contextmenu', handleOutsideClick);
-      
-      return () => {
-        document.removeEventListener('click', handleOutsideClick);
-        document.removeEventListener('contextmenu', handleOutsideClick);
-      };
-    }, 100); // 100ms 지연
-    
-    return () => clearTimeout(timeoutId);
-  }, [contextMenu.visible]);
+  // 컨텍스트 메뉴 관리
+  const { contextMenu, closeContextMenu, folderItemRef } = useContextMenu(folder.name);
   
   // 이름 변경 모드 상태
   const [isRenaming, setIsRenaming] = useState(false);
@@ -265,7 +225,6 @@ const FolderItem = ({ folder, level = 0, isLast = false }) => {
   
   // 폴더 이동 모드 상태
   const [isMoveMode, setIsMoveMode] = useState(false);
-  const [moveTarget, setMoveTarget] = useState(null);
   const [moveDirection, setMoveDirection] = useState(null);
   
   const isSelected = selectedFolder === folder.name;
@@ -282,7 +241,7 @@ const FolderItem = ({ folder, level = 0, isLast = false }) => {
     FolderIcon = FolderOpen;
   }
   
-  // 클릭 핸들러
+  // 폴더 클릭 처리
   const handleClick = () => {
     if (!isRenaming) {
       setSelectedFolder(folder.name);
@@ -292,11 +251,10 @@ const FolderItem = ({ folder, level = 0, isLast = false }) => {
     }
   };
   
-  // 이름 변경 모드 시작
+  // 이름 변경 시작
   const startRenaming = () => {
     setIsRenaming(true);
     setNewName(folder.name);
-    // 이름 변경 입력란에 포커스를 주기 위해 setTimeout 사용
     setTimeout(() => {
       if (renameInputRef.current) {
         renameInputRef.current.focus();
@@ -310,9 +268,7 @@ const FolderItem = ({ folder, level = 0, isLast = false }) => {
     if (newName.trim() && newName !== folder.name) {
       try {
         await updateFolder(folder.id, { name: newName.trim() });
-        // 데이터 다시 로드
         await loadData();
-        // 이름이 변경된 폴더가 현재 선택된 폴더라면 선택된 폴더 이름도 업데이트
         if (selectedFolder === folder.name) {
           setSelectedFolder(newName.trim());
         }
@@ -326,13 +282,11 @@ const FolderItem = ({ folder, level = 0, isLast = false }) => {
   
   // 폴더 삭제
   const handleDelete = async () => {
-    // 기본 폴더는 삭제 불가
     if (['모든 프롬프트', '즐겨찾기'].includes(folder.name)) {
       alert('기본 폴더는 삭제할 수 없습니다.');
       return;
     }
 
-    // 확인 대화상자
     if (!window.confirm(`"${folder.name}" 폴더를 삭제하시겠습니까? 폴더 내 프롬프트가 있으면 삭제할 수 없습니다.`)) {
       return;
     }
@@ -340,7 +294,6 @@ const FolderItem = ({ folder, level = 0, isLast = false }) => {
     try {
       await deleteFolder(folder.id);
       await loadData();
-      // 삭제된 폴더가 현재 선택된 폴더라면 '모든 프롬프트'로 변경
       if (selectedFolder === folder.name) {
         setSelectedFolder('모든 프롬프트');
       }
@@ -350,18 +303,16 @@ const FolderItem = ({ folder, level = 0, isLast = false }) => {
     }
   };
   
-  // 폴더 이동 시작
+  // 폴더 이동 관련 함수
   const startMove = (direction) => {
     setIsMoveMode(true);
     setMoveDirection(direction);
   };
   
-  // 폴더 이동
   const handleMove = async (direction) => {
     startMove(direction);
   };
   
-  // 폴더 이동 완료
   const finishMove = async (targetFolderId) => {
     if (!targetFolderId) {
       setIsMoveMode(false);
@@ -369,13 +320,9 @@ const FolderItem = ({ folder, level = 0, isLast = false }) => {
     }
     
     try {
-      const updatedData = {
-        // 상위 폴더로 이동하는 경우 parent_id를 targetFolderId로 설정
-        // 최상위 폴더로 이동하는 경우 null로 설정
+      await updateFolder(folder.id, {
         parent_id: targetFolderId === 'root' ? null : targetFolderId
-      };
-      
-      await updateFolder(folder.id, updatedData);
+      });
       await loadData();
       setIsMoveMode(false);
     } catch (error) {
@@ -385,18 +332,12 @@ const FolderItem = ({ folder, level = 0, isLast = false }) => {
     }
   };
   
-  // 이름 변경 취소
-  const cancelRename = () => {
-    setIsRenaming(false);
-  };
+  // 이름 변경 관련 함수
+  const cancelRename = () => setIsRenaming(false);
   
-  // 엔터 키 처리
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      applyRename();
-    } else if (e.key === 'Escape') {
-      cancelRename();
-    }
+    if (e.key === 'Enter') applyRename();
+    else if (e.key === 'Escape') cancelRename();
   };
   
   return (
@@ -482,7 +423,7 @@ const FolderItem = ({ folder, level = 0, isLast = false }) => {
         </ul>
       )}
       
-      {/* 폴더 이동 모드에서의 상위/하위 폴더 선택 UI */}
+      {/* 폴더 이동 모드 UI */}
       {isMoveMode && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-4 max-w-md w-full">
@@ -495,7 +436,6 @@ const FolderItem = ({ folder, level = 0, isLast = false }) => {
             </p>
             
             <div className="max-h-60 overflow-y-auto border rounded mb-4">
-              {/* 최상위 폴더 옵션 */}
               {moveDirection === 'up' && (
                 <button
                   className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 border-b"
@@ -505,44 +445,19 @@ const FolderItem = ({ folder, level = 0, isLast = false }) => {
                 </button>
               )}
               
-              {/* 폴더 목록 */}
-              {moveDirection === 'up' ? (
-                // 상위 폴더로 이동 가능한 폴더 목록
-                // 자기 자신과 자신의 하위 폴더는 제외
-                folders
-                  .filter(f => 
-                    f.id !== folder.id && 
-                    !isDescendant(f, folder.id)
-                  )
-                  .map(f => (
-                    <button
-                      key={f.id}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 border-b"
-                      onClick={() => finishMove(f.id)}
-                    >
-                      {f.name}
-                    </button>
-                  ))
-              ) : (
-                // 하위 폴더로 이동시 표시할 폴더 목록 
-                // 현재 폴더의 형제 폴더들
-                folders
-                  .filter(f => 
-                    f.id !== folder.id && 
-                    f.parent_id === folder.parent_id
-                  )
-                  .map(f => (
-                    <button
-                      key={f.id}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 border-b"
-                      onClick={() => finishMove(f.id)}
-                    >
-                      {f.name}
-                    </button>
-                  ))
-              )}
+              {(moveDirection === 'up' ? 
+                folders.filter(f => f.id !== folder.id && !isDescendant(f, folder.id)) : 
+                folders.filter(f => f.id !== folder.id && f.parent_id === folder.parent_id)
+              ).map(f => (
+                <button
+                  key={f.id}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 border-b"
+                  onClick={() => finishMove(f.id)}
+                >
+                  {f.name}
+                </button>
+              ))}
               
-              {/* 이동 가능한 폴더가 없는 경우 */}
               {(moveDirection === 'up' ? 
                 folders.filter(f => f.id !== folder.id && !isDescendant(f, folder.id)) : 
                 folders.filter(f => f.id !== folder.id && f.parent_id === folder.parent_id)
@@ -613,3 +528,4 @@ const FolderTree = () => {
 };
 
 export default FolderTree;
+
