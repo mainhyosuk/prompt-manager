@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.344] - 2025-04-07
+
+### Added
+- 사이드바에 폴더 생성 기능 구현
+  - 폴더 생성 버튼 클릭 시 모달 창 표시
+  - 폴더 이름 및 상위 폴더 선택 기능
+  - 폴더 생성 API 연동
+
+### Improved
+- 폴더 생성 모달 사용성 개선
+  - Enter 키로 폴더 생성 가능
+  - 모달창 바깥 클릭 시 종료 기능
+  - ESC 키 입력 시 종료 기능
+  - 모달 열림 시 자동 포커스 기능
+
 ## [v1.343] - 2025-04-07
 
 ### Fixed
