@@ -1,7 +1,7 @@
 // API 기본 설정
 
 // API 서버 베이스 URL
-export const API_BASE_URL = 'http://localhost:5000';
+export const API_BASE_URL = 'http://localhost:8000';
 
 // API 요청에 사용할 공통 헤더
 export const API_HEADERS = {
