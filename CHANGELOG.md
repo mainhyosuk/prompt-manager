@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+
+## [v1.348] - 2025-04-07
+
+### Added
+- 변수 입력창에 텍스트 에디터 기능 추가
+  - 긴 텍스트를 위한 확장된 편집 공간 제공
+  - 변수 기본값 입력 시 텍스트 에디터 아이콘으로 모달 열기 지원
+  - 텍스트 에디터 모달에서 편집 및 저장 기능 구현
+
+### Improved
+- 사용자 경험 향상
+  - 긴 텍스트 입력 시 가독성 향상
+  - 모달 외부 클릭 및 ESC 키로 닫기 기능
+  - 직관적인 텍스트 에디터 아이콘 UI
+
 ## [v1.347] - 2025-04-07
 
 ### Fixed
@@ -301,4 +316,5 @@ All notable changes to this project will be documented in this file.
 - **Python 백엔드**:
   - `python/main.py`: 메인 애플리케이션 진입점
   - `python/db/database.py`: 기본 데이터베이스 구조 설정
+
 
