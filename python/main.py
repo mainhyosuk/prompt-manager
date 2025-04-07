@@ -3,7 +3,7 @@ import os
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QUrl
 from PyQt6.QtWebEngineWidgets import QWebEngineView
-from db.database import setup_database
+from db.database import setup_database, DB_PATH
 
 
 class PromptManagerApp:
@@ -12,6 +12,7 @@ class PromptManagerApp:
         # 이 함수는 테이블이 없는 경우에만 테이블을 생성하고,
         # 기본 데이터가 없는 경우에만 기본 데이터를 삽입합니다.
         # 사용자가 추가한 데이터는 유지됩니다.
+        print(f"데이터베이스 경로: {DB_PATH}")
         setup_database()
 
         # PyQt 애플리케이션 생성

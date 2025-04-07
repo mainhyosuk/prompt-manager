@@ -6,7 +6,7 @@ import sys
 # 상위 디렉토리의 모듈을 임포트하기 위한 경로 추가
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from db.database import setup_database
+from db.database import setup_database, DB_PATH
 from routes.prompt_routes import prompt_bp
 from routes.folder_routes import folder_bp
 from routes.tag_routes import tag_bp
@@ -39,7 +39,9 @@ def add_cors_headers(response):
 # 이 함수는 테이블이 없는 경우에만 테이블을 생성하고,
 # 기본 데이터가 없는 경우에만 기본 데이터를 삽입합니다.
 # 사용자가 추가한 데이터는 유지됩니다.
-setup_database()
+# 메인 앱에서 이미 초기화된 경우 중복 실행을 방지하기 위해 조건부 초기화
+if not os.path.exists(DB_PATH):
+    setup_database()
 
 # 블루프린트 등록
 app.register_blueprint(prompt_bp)

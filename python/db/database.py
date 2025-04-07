@@ -1,7 +1,10 @@
 import sqlite3
 import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "../../data/prompt_manager.db")
+# 상대 경로에서 절대 경로로 변경
+DB_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "../../data/prompt_manager.db")
+)
 
 
 def get_db_connection():
@@ -15,6 +18,9 @@ def get_db_connection():
 
 def init_db():
     """데이터베이스 및 테이블 초기화"""
+    # DB 파일이 이미 존재하는지 확인
+    db_exists = os.path.exists(DB_PATH)
+
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -102,11 +108,13 @@ def init_db():
 
     conn.commit()
 
-    # 기본 데이터 추가
-    create_default_data(conn)
-
-    # 폴더 위치 속성 초기화
-    migrate_folder_positions(conn)
+    # 기존 DB가 없는 경우에만 기본 데이터 추가
+    if not db_exists:
+        create_default_data(conn)
+        migrate_folder_positions(conn)
+    else:
+        # 기졸 DB에는 폴더 위치 속성만 마이그레이션
+        migrate_folder_positions(conn)
 
     conn.close()
 
@@ -402,8 +410,15 @@ def add_sample_prompts():
 # 데이터베이스 초기화 함수 - 애플리케이션 시작 시 호출
 def setup_database():
     """데이터베이스 초기화 및 필요한 경우 샘플 데이터 추가"""
+    # 데이터베이스 존재 여부 확인
+    db_exists = os.path.exists(DB_PATH)
+
     # 데이터베이스 및 테이블 생성
     init_db()
 
-    # 샘플 프롬프트 추가 (필요한 경우에만)
-    add_sample_prompts()
+    # 데이터베이스가 새로 생성된 경우에만 샘플 프롬프트 추가
+    if not db_exists:
+        add_sample_prompts()
+        print(f"새 데이터베이스 생성됨: {DB_PATH}")
+    else:
+        print(f"기존 데이터베이스 사용 중: {DB_PATH}")
