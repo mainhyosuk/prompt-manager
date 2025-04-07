@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.343] - 2025-04-07
+
+### Fixed
+- 폴더 이동 기능 API 호출 오류 수정
+  - 폴더 이름이 누락되어 발생하는 400 오류 해결
+  - 폴더 이동 시 필수 필드인 name 정보 전송 구현
+
+### Improved
+- 폴더 드래그 앤 드롭 성능 최적화
+  - 쓰로틀링 기법 적용으로 과도한 이벤트 처리 방지
+  - RequestAnimationFrame(RAF) 활용으로 UI 업데이트 최적화
+  - 참조(Ref) 사용으로 불필요한 리렌더링 최소화
+  - 가상 드래그 요소 캐싱 시스템 구현
+  - CSS transition 및 will-change 속성 활용으로 애니메이션 부드럽게 개선
+
+### Changed
+- 폴더 구조 탐색 알고리즘 개선
+  - 계층 구조에서 효율적으로 폴더를 찾는 findFolderById 함수 추가
+  - 드래그 앤 드롭 이벤트 핸들러 최적화
+  - React.memo 활용으로 컴포넌트 최적화
+
 ## [v1.342] - 2025-04-07
 
 ### Added
