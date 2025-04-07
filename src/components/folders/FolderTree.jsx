@@ -49,18 +49,22 @@ const ContextMenu = ({ x, y, folder, onClose, onRename, onDelete, onMove }) => {
       let adjustedX = x;
       let adjustedY = y;
       
-      // 오른쪽 경계 확인 - 오른쪽으로 벗어나면 왼쪽에 표시
+      // X 좌표 조정 (화면 오른쪽 경계 확인)
       if (x + menuRect.width > viewportWidth) {
-        adjustedX = Math.max(10, x - menuRect.width - 10); // 왼쪽 여백 유지
+        adjustedX = Math.max(0, x - menuRect.width);
       }
       
-      // 하단 경계 확인
+      // Y 좌표 조정 (화면 하단 경계 확인)
       if (y + menuRect.height > viewportHeight) {
-        adjustedY = Math.max(10, viewportHeight - menuRect.height - 10); // 화면 하단에서 10px 여백
+        adjustedY = Math.max(0, y - menuRect.height);
       }
       
       // 위치 업데이트
       setAdjustedPosition({ x: adjustedX, y: adjustedY });
+      
+      // 디버깅을 위한 로그 추가
+      console.log('메뉴 크기:', menuRect.width, menuRect.height);
+      console.log('조정된 위치:', adjustedX, adjustedY);
     }
   }, [x, y]);
   
@@ -85,11 +89,12 @@ const ContextMenu = ({ x, y, folder, onClose, onRename, onDelete, onMove }) => {
   return (
     <div 
       ref={menuRef}
-      className="absolute bg-white shadow-lg border rounded-lg py-1 z-[9999] contextMenu"
+      className="fixed bg-white shadow-lg border rounded-lg py-1 z-[9999] contextMenu"
       style={{ 
         left: `${adjustedPosition.x}px`, 
         top: `${adjustedPosition.y}px`,
-        minWidth: '180px'
+        minWidth: '180px',
+        maxWidth: '250px'
       }}
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => {
@@ -153,10 +158,105 @@ const FolderItem = ({ folder, level = 0, isLast = false }) => {
     y: 0
   });
   
+  // 폴더 아이템 ref 추가
+  const folderItemRef = useRef(null);
+  
   // 상태 변경 테스트용 로그
   useEffect(() => {
     console.log('컨텍스트 메뉴 상태 변경:', contextMenu);
   }, [contextMenu]);
+  
+  // 직접 DOM 이벤트 리스너 추가
+  useEffect(() => {
+    const folderElement = folderItemRef.current;
+    if (folderElement) {
+      const handleNativeContextMenu = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        console.log('네이티브 우클릭 이벤트 발생:', folder.name);
+        
+        // 다른 열린 컨텍스트 메뉴 닫기 이벤트 발생
+        const closeMenuEvent = new CustomEvent('closeContextMenu');
+        document.dispatchEvent(closeMenuEvent);
+        
+        // 폴더 요소의 위치와 크기 정보 가져오기
+        const rect = folderElement.getBoundingClientRect();
+        
+        // 컨텍스트 메뉴를 폴더 영역의 오른쪽에 표시
+        const menuX = rect.right;
+        const menuY = rect.top;
+        
+        console.log('폴더 영역:', rect);
+        console.log('메뉴 위치:', menuX, menuY);
+        
+        // 폴더 항목 오른쪽에 컨텍스트 메뉴 표시
+        setContextMenu({
+          visible: true,
+          x: menuX,
+          y: menuY
+        });
+        
+        return false;
+      };
+      
+      folderElement.addEventListener('contextmenu', handleNativeContextMenu);
+      
+      return () => {
+        folderElement.removeEventListener('contextmenu', handleNativeContextMenu);
+      };
+    }
+  }, [folder.name]);
+  
+  // 컨텍스트 메뉴 닫기
+  const closeContextMenu = () => {
+    setContextMenu({ visible: false, x: 0, y: 0 });
+  };
+  
+  // 다른 컨텍스트 메뉴 닫기 이벤트 리스너
+  useEffect(() => {
+    const handleCloseContextMenu = () => {
+      closeContextMenu();
+    };
+    
+    document.addEventListener('closeContextMenu', handleCloseContextMenu);
+    return () => {
+      document.removeEventListener('closeContextMenu', handleCloseContextMenu);
+    };
+  }, []);
+  
+  // 외부 클릭 감지 처리
+  useEffect(() => {
+    if (!contextMenu.visible) return;
+    
+    // 약간의 지연을 두어 컨텍스트 메뉴가 표시된 직후에 이벤트가 발생하지 않도록 함
+    const timeoutId = setTimeout(() => {
+      const handleOutsideClick = (event) => {
+        // 컨텍스트 메뉴 자체를 클릭한 경우는 무시
+        if (event.target.closest('.contextMenu')) {
+          return;
+        }
+        
+        // 폴더 아이템을 클릭한 경우도 무시 (이미 handleContextMenu에서 처리됨)
+        if (event.target.closest('.folder-item')) {
+          return;
+        }
+        
+        // 그 외의 경우 컨텍스트 메뉴 닫기
+        closeContextMenu();
+      };
+      
+      document.addEventListener('click', handleOutsideClick);
+      document.addEventListener('contextmenu', handleOutsideClick);
+      
+      return () => {
+        document.removeEventListener('click', handleOutsideClick);
+        document.removeEventListener('contextmenu', handleOutsideClick);
+      };
+    }, 100); // 100ms 지연
+    
+    return () => clearTimeout(timeoutId);
+  }, [contextMenu.visible]);
   
   // 이름 변경 모드 상태
   const [isRenaming, setIsRenaming] = useState(false);
@@ -182,68 +282,15 @@ const FolderItem = ({ folder, level = 0, isLast = false }) => {
     FolderIcon = FolderOpen;
   }
   
-  // 우클릭 이벤트 처리
-  const handleContextMenu = (e) => {
-    // 브라우저 기본 컨텍스트 메뉴 방지
-    e.preventDefault();
-    e.stopPropagation();
-    
-    console.log('우클릭 이벤트 발생:', folder.name);
-    
-    // 다른 열린 컨텍스트 메뉴 닫기 이벤트 발생
-    const closeMenuEvent = new CustomEvent('closeContextMenu');
-    document.dispatchEvent(closeMenuEvent);
-    
-    // 현재 폴더 요소의 위치와 크기 정보 가져오기
-    const rect = e.currentTarget.getBoundingClientRect();
-    
-    console.log('위치 정보:', rect.right + 5, rect.top);
-    
-    // 폴더 항목 오른쪽에 컨텍스트 메뉴 표시
-    setContextMenu({
-      visible: true,
-      x: rect.right + 5,
-      y: rect.top
-    });
-    
-    console.log('컨텍스트 메뉴 상태:', { visible: true, x: rect.right + 5, y: rect.top });
-  };
-  
-  // 컨텍스트 메뉴 닫기
-  const closeContextMenu = () => {
-    setContextMenu({ visible: false, x: 0, y: 0 });
-  };
-  
-  // 다른 컨텍스트 메뉴 닫기 이벤트 리스너
-  useEffect(() => {
-    const handleCloseContextMenu = () => {
-      closeContextMenu();
-    };
-    
-    document.addEventListener('closeContextMenu', handleCloseContextMenu);
-    return () => {
-      document.removeEventListener('closeContextMenu', handleCloseContextMenu);
-    };
-  }, []);
-  
-  // 외부 클릭 감지 처리
-  useEffect(() => {
-    if (!contextMenu.visible) return;
-    
-    const handleOutsideClick = (event) => {
-      if (!event.target.closest('.folder-item') && !event.target.closest('.contextMenu')) {
-        closeContextMenu();
+  // 클릭 핸들러
+  const handleClick = () => {
+    if (!isRenaming) {
+      setSelectedFolder(folder.name);
+      if (hasChildren) {
+        toggleFolder(folder.name);
       }
-    };
-    
-    document.addEventListener('click', handleOutsideClick);
-    document.addEventListener('contextmenu', handleOutsideClick);
-    
-    return () => {
-      document.removeEventListener('click', handleOutsideClick);
-      document.removeEventListener('contextmenu', handleOutsideClick);
-    };
-  }, [contextMenu.visible]);
+    }
+  };
   
   // 이름 변경 모드 시작
   const startRenaming = () => {
@@ -338,16 +385,6 @@ const FolderItem = ({ folder, level = 0, isLast = false }) => {
     }
   };
   
-  // 클릭 핸들러
-  const handleClick = () => {
-    if (!isRenaming) {
-      setSelectedFolder(folder.name);
-      if (hasChildren) {
-        toggleFolder(folder.name);
-      }
-    }
-  };
-  
   // 이름 변경 취소
   const cancelRename = () => {
     setIsRenaming(false);
@@ -368,13 +405,8 @@ const FolderItem = ({ folder, level = 0, isLast = false }) => {
         className={`flex items-center py-1 px-2 hover:bg-blue-50 rounded cursor-pointer folder-item
                    ${isSelected ? 'bg-blue-100' : ''}`}
         onClick={handleClick}
-        onContextMenu={handleContextMenu}
-        onMouseDown={(e) => {
-          if (e.button === 2) { // 우클릭인 경우
-            console.log('onMouseDown 우클릭 감지:', folder.name);
-          }
-        }}
-        style={{ userSelect: 'none', position: 'relative' }}
+        ref={folderItemRef}
+        style={{ userSelect: 'none', position: 'relative', pointerEvents: 'auto' }}
         data-folder-id={folder.id}
         data-folder-name={folder.name}
       >
