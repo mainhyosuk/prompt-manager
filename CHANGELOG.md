@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.362] - 2025-04-08
+
+### Fixed
+- 프롬프트 메모 관련 기능 오류 수정
+  - 메모 데이터 영구 저장 기능 구현
+  - 서버 재시작 후에도 메모 내용이 유지되도록 개선
+  - 메모 저장 API 엔드포인트 추가
+  - 데이터베이스 스키마에 memo 필드 추가
+  - AppContext에 프롬프트 항목 업데이트 함수 추가
+
 ## [v1.361] - 2025-04-08
 
 ### Added

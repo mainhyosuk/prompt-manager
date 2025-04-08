@@ -162,3 +162,24 @@ export const updateVariableDefaultValue = async (promptId, variableName, default
     throw error;
   }
 };
+
+// 프롬프트 메모 업데이트
+export const updatePromptMemo = async (id, memo) => {
+  try {
+    const response = await fetch(`/api/prompts/${id}/memo`, {
+      ...API_FETCH_OPTIONS,
+      method: 'PUT',
+      body: JSON.stringify({ memo }),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || '메모 업데이트에 실패했습니다.');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('메모 업데이트 오류:', error);
+    throw error;
+  }
+};

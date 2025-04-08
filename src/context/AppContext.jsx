@@ -452,6 +452,23 @@ export const AppProvider = ({ children }) => {
     setCurrentScreen('main');
   }, []);
 
+  // 개별 프롬프트 항목 업데이트 함수
+  const updatePromptItem = useCallback((promptId, updatedData) => {
+    setPrompts(prev => prev.map(p => 
+      p.id === promptId 
+        ? { ...p, ...updatedData } 
+        : p
+    ));
+    
+    // 현재 선택된 프롬프트가 있고, 그 프롬프트의 id가 변경된 프롬프트와 같으면 선택된 프롬프트도 업데이트
+    if (selectedPrompt && selectedPrompt.id === promptId) {
+      setSelectedPrompt(prev => ({
+        ...prev,
+        ...updatedData
+      }));
+    }
+  }, [selectedPrompt]);
+
   // 태그 색상 매핑
   const getTagColorClasses = useCallback((color) => {
     const colorMap = {
@@ -518,7 +535,8 @@ export const AppProvider = ({ children }) => {
     goToDashboard,
     getTagColorClasses,
     loadData,
-    changeTheme
+    changeTheme,
+    updatePromptItem
   };
 
   return (

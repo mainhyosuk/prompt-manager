@@ -16,7 +16,7 @@ def get_prompts():
         """
         SELECT p.id, p.title, p.content, p.folder_id, f.name as folder,
                p.created_at, p.updated_at, p.is_favorite, 
-               p.use_count, p.last_used_at
+               p.use_count, p.last_used_at, p.memo
         FROM prompts p
         LEFT JOIN folders f ON p.folder_id = f.id
     """
@@ -125,7 +125,7 @@ def get_prompt(id):
         """
         SELECT p.id, p.title, p.content, p.folder_id, f.name as folder,
                p.created_at, p.updated_at, p.is_favorite, 
-               p.use_count, p.last_used_at
+               p.use_count, p.last_used_at, p.memo
         FROM prompts p
         LEFT JOIN folders f ON p.folder_id = f.id
         WHERE p.id = ?
@@ -698,3 +698,61 @@ def update_variable_default_value(id, variable_name):
         )
     finally:
         conn.close()
+
+
+# 프롬프트 메모 업데이트
+@prompt_bp.route("/api/prompts/<int:id>/memo", methods=["PUT"])
+def update_prompt_memo(id):
+    data = request.json
+    memo = data.get("memo", "")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # memo 컬럼이 존재하는지 확인
+        cursor.execute("PRAGMA table_info(prompts)")
+        columns = [column[1] for column in cursor.fetchall()]
+
+        if "memo" not in columns:
+            # memo 컬럼이 없으면 추가
+            cursor.execute("ALTER TABLE prompts ADD COLUMN memo TEXT")
+
+        # 프롬프트 메모 업데이트
+        cursor.execute(
+            """
+            UPDATE prompts SET memo = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (memo, id),
+        )
+
+        if cursor.rowcount == 0:
+            conn.close()
+            return jsonify({"error": "프롬프트를 찾을 수 없습니다."}), 404
+
+        conn.commit()
+
+        # 업데이트된 프롬프트 정보 반환
+        cursor.execute(
+            """
+            SELECT id, title, content, folder_id, is_favorite, memo, updated_at
+            FROM prompts
+            WHERE id = ?
+            """,
+            (id,),
+        )
+
+        updated_prompt = dict(cursor.fetchone())
+        conn.close()
+
+        return jsonify(updated_prompt)
+
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        print(f"메모 업데이트 오류: {e}")
+        return (
+            jsonify({"error": f"메모 업데이트 중 오류가 발생했습니다: {str(e)}"}),
+            500,
+        )

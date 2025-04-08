@@ -37,6 +37,7 @@ def init_db():
         is_favorite BOOLEAN DEFAULT 0,
         use_count INTEGER DEFAULT 0,
         last_used_at TIMESTAMP,
+        memo TEXT,
         FOREIGN KEY (folder_id) REFERENCES folders(id)
     )
     """
@@ -410,15 +411,52 @@ def add_sample_prompts():
 # 데이터베이스 초기화 함수 - 애플리케이션 시작 시 호출
 def setup_database():
     """데이터베이스 초기화 및 필요한 경우 샘플 데이터 추가"""
-    # 데이터베이스 존재 여부 확인
-    db_exists = os.path.exists(DB_PATH)
+    try:
+        # 데이터베이스 존재 여부 확인
+        db_exists = os.path.exists(DB_PATH)
 
-    # 데이터베이스 및 테이블 생성
-    init_db()
+        # 데이터 디렉토리가 없으면 생성
+        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
-    # 데이터베이스가 새로 생성된 경우에만 샘플 프롬프트 추가
-    if not db_exists:
-        add_sample_prompts()
-        print(f"새 데이터베이스 생성됨: {DB_PATH}")
-    else:
-        print(f"기존 데이터베이스 사용 중: {DB_PATH}")
+        # 데이터베이스 및 테이블 생성
+        init_db()
+
+        # memo 필드 마이그레이션
+        migrate_memo_field()
+
+        # 데이터베이스가 새로 생성된 경우에만 샘플 프롬프트 추가
+        if not db_exists:
+            add_sample_prompts()
+            print(f"새 데이터베이스 생성됨: {DB_PATH}")
+        else:
+            print(f"기존 데이터베이스 사용 중: {DB_PATH}")
+
+        return True
+    except Exception as e:
+        print(f"데이터베이스 설정 오류: {str(e)}")
+        return False
+
+
+def migrate_memo_field():
+    """prompts 테이블에 memo 필드가 없으면 추가합니다."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # memo 칼럼이 존재하는지 확인
+        cursor.execute("PRAGMA table_info(prompts)")
+        columns = [column[1] for column in cursor.fetchall()]
+
+        # memo 필드가 없다면 추가
+        if "memo" not in columns:
+            try:
+                cursor.execute("ALTER TABLE prompts ADD COLUMN memo TEXT")
+                conn.commit()
+                print("프롬프트 테이블에 memo 필드가 추가되었습니다.")
+            except Exception as e:
+                print(f"memo 필드 추가 실패: {str(e)}")
+
+    except Exception as e:
+        print(f"memo 필드 마이그레이션 오류: {str(e)}")
+    finally:
+        conn.close()
