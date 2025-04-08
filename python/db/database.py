@@ -107,6 +107,33 @@ def init_db():
     """
     )
 
+    # 컬렉션 테이블 추가
+    cursor.execute(
+        """
+    CREATE TABLE IF NOT EXISTS collections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """
+    )
+
+    # 컬렉션-프롬프트 관계 테이블 추가
+    cursor.execute(
+        """
+    CREATE TABLE IF NOT EXISTS collection_prompts (
+        collection_id INTEGER,
+        prompt_id INTEGER,
+        position INTEGER DEFAULT 0,
+        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (collection_id, prompt_id),
+        FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+        FOREIGN KEY (prompt_id) REFERENCES prompts(id) ON DELETE CASCADE
+    )
+    """
+    )
+
     conn.commit()
 
     # 기존 DB가 없는 경우에만 기본 데이터 추가
@@ -284,6 +311,22 @@ def create_default_data(conn=None):
             """
         INSERT INTO settings (theme, backup_path, auto_backup, backup_interval)
         VALUES ('light', NULL, 0, 7)
+        """
+        )
+
+    # 기본 컬렉션 생성 (아직 없는 경우에만)
+    cursor.execute("SELECT COUNT(*) FROM collections")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute(
+            """
+        INSERT INTO collections (name)
+        VALUES ('자주 사용하는 프롬프트')
+        """
+        )
+        cursor.execute(
+            """
+        INSERT INTO collections (name)
+        VALUES ('유용한 템플릿')
         """
         )
 
