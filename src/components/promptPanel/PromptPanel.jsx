@@ -32,7 +32,14 @@ const PromptPanel = ({
   const [isAddPromptModalOpen, setIsAddPromptModalOpen] = useState(false);
   
   // 컨텍스트 가져오기
-  const { handleToggleFavorite, handleEditPrompt, handleRecordUsage, collections: contextCollections, selectedPrompt } = useAppContext();
+  const { 
+    handleToggleFavorite, 
+    handleEditPrompt, 
+    handleRecordUsage, 
+    collections: contextCollections, 
+    selectedPrompt,
+    openOverlayModal: openOverlayModalContext
+  } = useAppContext();
   
   // 컬렉션 이름 가져오기
   const getSelectedCollectionName = () => {
@@ -290,27 +297,67 @@ const PromptPanel = ({
     </div>
   );
   
+  // 오버레이 모달 열기 함수
+  const openOverlayModal = (prompt) => {
+    // 이벤트 버블링 중지가 필요한 경우가 있어 래핑 함수를 통해 호출
+    if (!prompt) return;
+    
+    // onPromptSelect 프롭이 제공된 경우 사용 (커스텀 처리를 위해)
+    if (onPromptSelect && typeof onPromptSelect === 'function') {
+      onPromptSelect(prompt);
+    } else {
+      // 기본 동작: 컨텍스트의 오버레이 모달 열기 함수 호출
+      // 약간의 지연을 두어 이벤트 충돌 방지
+      setTimeout(() => {
+        handleOpenOverlayModal(prompt);
+      }, 50);
+    }
+  };
+
+  // 오버레이 모달 열기 핸들러 (컨텍스트 함수 호출)
+  const handleOpenOverlayModal = (prompt) => {
+    if (openOverlayModalContext && prompt) {
+      openOverlayModalContext(prompt);
+    }
+  };
+  
+  // 탭 컨텐츠를 렌더링하는 함수
   const renderTabContent = () => {
     switch (activeTab) {
       case 'similar':
         return (
           <SimilarPromptsList 
             selectedPromptId={selectedPromptId}
-            onPromptSelect={onPromptSelect}
+            onPromptSelect={(prompt) => {
+              // 이벤트 버블링을 방지하고 오버레이 모달을 열도록 수정
+              if (prompt) {
+                openOverlayModal(prompt);
+              }
+            }}
           />
         );
       case 'collections':
         return (
           <CollectionsList 
             selectedPromptId={selectedPromptId}
-            onPromptSelect={onPromptSelect}
+            onPromptSelect={(prompt) => {
+              // 이벤트 버블링을 방지하고 오버레이 모달을 열도록 수정
+              if (prompt) {
+                openOverlayModal(prompt);
+              }
+            }}
           />
         );
       case 'recent':
         return (
           <RecentPromptsList 
             selectedPromptId={selectedPromptId}
-            onPromptSelect={onPromptSelect}
+            onPromptSelect={(prompt) => {
+              // 이벤트 버블링을 방지하고 오버레이 모달을 열도록 수정
+              if (prompt) {
+                openOverlayModal(prompt);
+              }
+            }}
           />
         );
       default:
@@ -318,53 +365,76 @@ const PromptPanel = ({
     }
   };
 
+  const handleEscKey = async (event) => {
+    if (event.key === 'Escape' && isAddPromptModalOpen) {
+      event.stopPropagation(); // 이벤트 버블링 방지
+      setIsAddPromptModalOpen(false);
+    }
+  };
+
+  // 캡처링 단계에서 이벤트 처리
+  document.addEventListener('keydown', handleEscKey, true);
+
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* 탭 영역 */}
-      <div className="flex border-b flex-shrink-0">
+    <div className="bg-white rounded-lg shadow-md h-full max-h-full flex flex-col overflow-hidden">
+      {/* 헤더 */}
+      <div className="p-3 border-b flex justify-between items-center">
+        <h2 className="text-lg font-semibold">프롬프트 패널</h2>
+        <button 
+          onClick={onClose}
+          className="text-gray-400 hover:text-gray-600"
+        >
+          ✕
+        </button>
+      </div>
+      
+      {/* 탭 선택기 */}
+      <div className="flex border-b">
         <button
-          className={`flex-1 py-3 text-center font-medium text-sm transition-colors
-            ${activeTab === 'similar' 
-              ? 'text-blue-600 border-b-2 border-blue-600' 
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+          className={`px-4 py-2 text-sm font-medium ${
+            activeTab === 'similar' 
+              ? 'border-b-2 border-blue-500 text-blue-600' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
           onClick={() => setActiveTab('similar')}
         >
-          유사
+          유사한 프롬프트
         </button>
         <button
-          className={`flex-1 py-3 text-center font-medium text-sm transition-colors
-            ${activeTab === 'collections' 
-              ? 'text-blue-600 border-b-2 border-blue-600' 
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+          className={`px-4 py-2 text-sm font-medium ${
+            activeTab === 'collections' 
+              ? 'border-b-2 border-blue-500 text-blue-600' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
           onClick={() => setActiveTab('collections')}
         >
           컬렉션
         </button>
         <button
-          className={`flex-1 py-3 text-center font-medium text-sm transition-colors
-            ${activeTab === 'recent' 
-              ? 'text-blue-600 border-b-2 border-blue-600' 
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+          className={`px-4 py-2 text-sm font-medium ${
+            activeTab === 'recent' 
+              ? 'border-b-2 border-blue-500 text-blue-600' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
           onClick={() => setActiveTab('recent')}
         >
-          최근
+          최근 사용
         </button>
       </div>
       
-      {/* 탭 콘텐츠 영역 */}
+      {/* 탭 컨텐츠 */}
       <div className="flex-1 overflow-hidden">
         {renderTabContent()}
       </div>
       
-      {/* 프롬프트 추가 모달 */}
-      <AddPromptToCollectionModal
-        isOpen={isAddPromptModalOpen}
-        onClose={() => setIsAddPromptModalOpen(false)}
-        collectionId={selectedCollectionId}
-        collectionName={getSelectedCollectionName()}
-        existingPrompts={prompts}
-        onPromptAdded={handlePromptAdded}
-      />
+      {/* 콜렉션 추가 프롬프트 모달 */}
+      {isAddPromptModalOpen && selectedPromptId && (
+        <AddPromptToCollectionModal
+          promptId={selectedPromptId}
+          onClose={() => setIsAddPromptModalOpen(false)}
+          onPromptAdded={handlePromptAdded}
+        />
+      )}
     </div>
   );
 };

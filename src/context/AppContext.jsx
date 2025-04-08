@@ -9,6 +9,7 @@ const initialState = {
   currentScreen: 'main',
   isAddEditModalOpen: false,
   isDetailModalOpen: false,
+  isOverlayModalOpen: false,
   isLoading: false,
   error: null,
   theme: 'light',
@@ -20,6 +21,7 @@ const initialState = {
   
   // 선택 상태
   selectedPrompt: null,
+  overlayPrompt: null,
   selectedFolder: '모든 프롬프트',
   editMode: false,
   initialFolderInfo: null,
@@ -42,6 +44,7 @@ export const AppProvider = ({ children }) => {
   const [currentScreen, setCurrentScreen] = useState(initialState.currentScreen);
   const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(initialState.isAddEditModalOpen);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(initialState.isDetailModalOpen);
+  const [isOverlayModalOpen, setIsOverlayModalOpen] = useState(initialState.isOverlayModalOpen);
   const [isLoading, setIsLoading] = useState(initialState.isLoading);
   const [error, setError] = useState(initialState.error);
   
@@ -53,6 +56,7 @@ export const AppProvider = ({ children }) => {
   const [tags, setTags] = useState(initialState.tags);
   
   const [selectedPrompt, setSelectedPrompt] = useState(initialState.selectedPrompt);
+  const [overlayPrompt, setOverlayPrompt] = useState(initialState.overlayPrompt);
   const [selectedFolder, setSelectedFolder] = useState(initialState.selectedFolder);
   const [editMode, setEditMode] = useState(initialState.editMode);
   const [initialFolderInfo, setInitialFolderInfo] = useState(initialState.initialFolderInfo);
@@ -268,11 +272,26 @@ export const AppProvider = ({ children }) => {
 
   // 프롬프트 편집 핸들러
   const handleEditPrompt = useCallback((prompt) => {
-    setSelectedPrompt(prompt);
+    // 중요: 변수(variables) 속성 등 모든 프롬프트 속성이 있는지 확인
+    if (prompt) {
+      // 현재 프롬프트 목록에서 최신 데이터 가져오기
+      const latestPrompt = prompts.find(p => p.id === prompt.id);
+      
+      if (latestPrompt) {
+        // 최신 데이터와 전달받은 데이터 병합 (최신 데이터 우선)
+        setSelectedPrompt(latestPrompt);
+      } else {
+        // 최신 데이터가 없으면 전달받은 데이터 사용
+        setSelectedPrompt(prompt);
+      }
+    } else {
+      setSelectedPrompt(null);
+    }
+    
     setEditMode(true);
     setIsAddEditModalOpen(true);
     setIsDetailModalOpen(false);
-  }, []);
+  }, [prompts]);
 
   // 프롬프트 상세보기 핸들러
   const handleViewPrompt = useCallback((prompt) => {
@@ -485,6 +504,41 @@ export const AppProvider = ({ children }) => {
     return colorMap[color] || 'bg-gray-100 text-gray-700 border-gray-200';
   }, []);
 
+  // 오버레이 모달 열기
+  const openOverlayModal = useCallback((prompt) => {
+    if (!prompt) return; // prompt가 없으면 실행하지 않음
+    
+    // 해당 프롬프트 ID로 최신 상태의 프롬프트 데이터 찾기
+    const latestPrompt = prompts.find(p => p.id === prompt.id);
+    
+    if (!latestPrompt) {
+      console.error('프롬프트를 찾을 수 없습니다:', prompt.id);
+      return;
+    }
+    
+    // 오버레이 모달 상태 설정 (최신 프롬프트 데이터 사용)
+    setOverlayPrompt(latestPrompt);
+    
+    // 약간의 딜레이 후 모달 표시 (이벤트 버블링 방지에 도움)
+    setTimeout(() => {
+      setIsOverlayModalOpen(true);
+    }, 10);
+  }, [prompts]);
+
+  // 오버레이 모달 닫기
+  const closeOverlayModal = useCallback(() => {
+    // 현재 로직에서는 모달을 닫을 때 
+    // AddEditModal과 DetailModal이 같이 닫히는 문제가 없도록 처리
+
+    // 우선 모달 상태부터 변경
+    setIsOverlayModalOpen(false);
+    
+    // 모달이 닫힌 후 데이터 초기화 (애니메이션 완료 후)
+    setTimeout(() => {
+      setOverlayPrompt(null);
+    }, 300);
+  }, []);
+
   // 제공할 컨텍스트 값
   const value = {
     // 상태
@@ -493,20 +547,22 @@ export const AppProvider = ({ children }) => {
     isDetailModalOpen,
     isLoading,
     error,
+    theme,
     prompts,
     folders,
     tags,
     selectedPrompt,
     selectedFolder,
     editMode,
+    initialFolderInfo,
     expandedFolders,
     searchQuery,
     filterTags,
     sortBy,
     sortDirection,
     viewMode,
-    theme,
-    initialFolderInfo,
+    isOverlayModalOpen,
+    overlayPrompt,
     
     // 데이터 접근 함수
     getFilteredPrompts,
@@ -514,6 +570,9 @@ export const AppProvider = ({ children }) => {
     // 액션
     setIsAddEditModalOpen,
     setIsDetailModalOpen,
+    setIsLoading,
+    setError,
+    setCurrentScreen,
     setSearchQuery,
     setFilterTags,
     setSortBy,
@@ -521,6 +580,7 @@ export const AppProvider = ({ children }) => {
     setViewMode,
     setSelectedFolder,
     setInitialFolderInfo,
+    setExpandedFolders,
     toggleFolder,
     handleAddPrompt,
     handleEditPrompt,
@@ -536,7 +596,11 @@ export const AppProvider = ({ children }) => {
     getTagColorClasses,
     loadData,
     changeTheme,
-    updatePromptItem
+    updatePromptItem,
+    openOverlayModal,
+    closeOverlayModal,
+    setIsOverlayModalOpen,
+    setOverlayPrompt
   };
 
   return (

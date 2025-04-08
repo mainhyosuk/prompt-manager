@@ -37,7 +37,9 @@ const PromptItemCard = ({
   // 편집 핸들러
   const handleEdit = (e) => {
     e.stopPropagation();
-    handleEditPrompt(prompt);
+    // 최신 프롬프트 데이터를 편집 모달로 전달
+    const latestPromptData = { ...prompt };
+    handleEditPrompt(latestPromptData);
   };
   
   // 컬렉션에서 제거 핸들러
@@ -46,11 +48,16 @@ const PromptItemCard = ({
     onRemoveFromCollection?.(prompt.id);
   };
   
+  if (!prompt) return null;
+  
   return (
     <div 
       className="border rounded-md p-3 bg-white hover:shadow-md transition cursor-pointer mb-2 w-full flex flex-col"
       style={{ minHeight: '120px', maxHeight: '135px' }}
-      onClick={() => onClick?.(prompt)}
+      onClick={(e) => {
+        e.stopPropagation(); // 이벤트 버블링 방지
+        onClick?.(prompt);
+      }}
     >
       <div className="flex justify-between items-start mb-2 flex-none">
         <h3 className="font-medium text-gray-800 flex-1 mr-2 truncate">{truncateText(prompt.title, 30)}</h3>

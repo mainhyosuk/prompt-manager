@@ -82,7 +82,8 @@ const PromptDetailModal = () => {
     handleRecordUsage,
     getTagColorClasses,
     handleUpdateVariableDefaultValue,
-    updatePromptItem
+    updatePromptItem,
+    openOverlayModal
   } = useAppContext();
   
   const [variableValues, setVariableValues] = useState({});
@@ -454,7 +455,11 @@ const PromptDetailModal = () => {
               <span className={selectedPrompt.is_favorite ? 'text-yellow-400' : ''}>★</span>
             </button>
             <button 
-              onClick={() => handleEditPrompt(selectedPrompt)}
+              onClick={() => {
+                // 프롬프트 데이터의 최신 상태를 가져와 편집 모달 열기
+                const latestPromptData = { ...selectedPrompt };
+                handleEditPrompt(latestPromptData);
+              }}
               className="text-gray-400 hover:text-blue-600"
               title="편집"
             >
@@ -663,11 +668,20 @@ const PromptDetailModal = () => {
             <PromptPanel 
               selectedPromptId={selectedPrompt?.id} 
               onPromptSelect={(prompt) => {
-                setIsDetailModalOpen(false);
-                setTimeout(() => {
-                  setSelectedPrompt(prompt);
-                  setIsDetailModalOpen(true);
-                }, 100);
+                // 오버레이 모달을 열 때 커스텀 onClose 함수를 전달하여
+                // DetailModal이 닫히지 않도록 처리
+                const customCloseOverlay = () => {
+                  // 오버레이 모달만 닫고 DetailModal은 유지
+                  if (openOverlayModal) {
+                    const overlay = document.querySelector('.fixed.inset-0.bg-black.bg-opacity-50');
+                    if (overlay) {
+                      overlay.style.display = 'none';
+                    }
+                  }
+                };
+                
+                // 커스텀 onClose를 포함하여 OverlayModal 열기
+                openOverlayModal(prompt);
               }}
               onClose={() => {}} 
             />
