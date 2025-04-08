@@ -1,446 +1,434 @@
 import React, { useState, useEffect } from 'react';
-import { getCollections, getCollectionPrompts, addPromptToCollection, removePromptFromCollection, createCollection } from '../../api/collectionApi';
-import { getSimilarPrompts, getRecentPrompts } from '../../api/collectionApi';
-import { BookOpen, Search, Clock, PlusCircle, ChevronDown, X } from 'lucide-react';
+import { useAppContext } from '../../context/AppContext';
 import PromptItemCard from './PromptItemCard';
+import { getCollections, createCollection, deleteCollection, addPromptToCollection, removePromptFromCollection, renameCollection, reorderCollections } from '../../api/collectionApi';
+import { getCollectionPrompts, getSimilarPrompts, getRecentPrompts } from '../../api/collectionApi';
 
-const PromptPanel = ({ selectedPrompt, onSelectPrompt }) => {
-  // 현재 선택된 탭 (0: 맞춤 컬렉션, 1: 유사 프롬프트, 2: 최근 사용 프롬프트)
-  const [activeTab, setActiveTab] = useState(0);
-  
-  // 데이터 상태
+const PromptPanel = ({ 
+  selectedPromptId = null, 
+  onPromptSelect, 
+  onClose
+}) => {
+  // 탭과 데이터 상태
+  const [activeTab, setActiveTab] = useState('collections');
   const [collections, setCollections] = useState([]);
-  const [selectedCollection, setSelectedCollection] = useState(null);
-  const [collectionPrompts, setCollectionPrompts] = useState([]);
-  const [similarPrompts, setSimilarPrompts] = useState([]);
-  const [recentPrompts, setRecentPrompts] = useState([]);
+  const [selectedCollectionId, setSelectedCollectionId] = useState(null);
+  const [prompts, setPrompts] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   
-  // 로딩 상태
-  const [loading, setLoading] = useState({
-    collections: false,
-    collectionPrompts: false,
-    similarPrompts: false,
-    recentPrompts: false,
-    createCollection: false
-  });
-  
-  // 오류 상태
-  const [error, setError] = useState({
-    collections: null,
-    collectionPrompts: null,
-    similarPrompts: null,
-    recentPrompts: null,
-    createCollection: null
-  });
-  
-  // 새 컬렉션 모달 상태
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  // 컬렉션 관리 상태
+  const [collectionNameInput, setCollectionNameInput] = useState('');
+  const [isCreatingCollection, setIsCreatingCollection] = useState(false);
+  const [isRenaming, setIsRenaming] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState('');
   
-  // 컬렉션 목록 불러오기
+  // 컨텍스트 가져오기
+  const { handleToggleFavorite, handleEditPrompt, handleRecordUsage } = useAppContext();
+  
+  // 컬렉션 이름 가져오기
+  const getSelectedCollectionName = () => {
+    const collection = collections.find(c => c.id === selectedCollectionId);
+    return collection ? collection.name : '';
+  };
+  
+  // 컬렉션 로드
   const loadCollections = async () => {
-    setLoading(prev => ({ ...prev, collections: true }));
-    setError(prev => ({ ...prev, collections: null }));
+    setIsLoading(true);
+    setError(null);
     
     try {
-      const data = await getCollections();
-      setCollections(data);
+      const response = await getCollections();
+      setCollections(response);
       
-      // 첫 번째 컬렉션 자동 선택
-      if (data.length > 0 && !selectedCollection) {
-        setSelectedCollection(data[0].id);
-        loadCollectionPrompts(data[0].id);
+      // 컬렉션이 있으면 첫 번째 컬렉션 선택
+      if (response.length > 0 && !selectedCollectionId) {
+        setSelectedCollectionId(response[0].id);
+      } else if (response.length === 0) {
+        setSelectedCollectionId(null);
       }
     } catch (err) {
-      setError(prev => ({ ...prev, collections: err.message }));
+      console.error('컬렉션 로드 오류:', err);
+      setError('컬렉션을 불러오는데 실패했습니다.');
     } finally {
-      setLoading(prev => ({ ...prev, collections: false }));
+      setIsLoading(false);
     }
   };
   
-  // 컬렉션 프롬프트 불러오기
+  // 컬렉션 프롬프트 로드
   const loadCollectionPrompts = async (collectionId) => {
     if (!collectionId) return;
     
-    setLoading(prev => ({ ...prev, collectionPrompts: true }));
-    setError(prev => ({ ...prev, collectionPrompts: null }));
+    setIsLoading(true);
+    setError(null);
     
     try {
-      const data = await getCollectionPrompts(collectionId);
-      setCollectionPrompts(data);
+      const response = await getCollectionPrompts(collectionId);
+      setPrompts(response);
     } catch (err) {
-      setError(prev => ({ ...prev, collectionPrompts: err.message }));
+      console.error('컬렉션 프롬프트 로드 오류:', err);
+      setError('프롬프트를 불러오는데 실패했습니다.');
     } finally {
-      setLoading(prev => ({ ...prev, collectionPrompts: false }));
+      setIsLoading(false);
     }
   };
   
-  // 유사 프롬프트 불러오기
+  // 유사 프롬프트 로드
   const loadSimilarPrompts = async () => {
-    if (!selectedPrompt) return;
+    if (!selectedPromptId) return;
     
-    setLoading(prev => ({ ...prev, similarPrompts: true }));
-    setError(prev => ({ ...prev, similarPrompts: null }));
+    setIsLoading(true);
+    setError(null);
     
     try {
-      const data = await getSimilarPrompts(selectedPrompt.id);
-      setSimilarPrompts(data);
+      const response = await getSimilarPrompts(selectedPromptId);
+      setPrompts(response);
     } catch (err) {
-      setError(prev => ({ ...prev, similarPrompts: err.message }));
+      console.error('유사 프롬프트 로드 오류:', err);
+      setError('유사한 프롬프트를 불러오는데 실패했습니다.');
     } finally {
-      setLoading(prev => ({ ...prev, similarPrompts: false }));
+      setIsLoading(false);
     }
   };
   
-  // 최근 프롬프트 불러오기
+  // 최근 프롬프트 로드
   const loadRecentPrompts = async () => {
-    setLoading(prev => ({ ...prev, recentPrompts: true }));
-    setError(prev => ({ ...prev, recentPrompts: null }));
+    setIsLoading(true);
+    setError(null);
     
     try {
-      const excludedId = selectedPrompt ? selectedPrompt.id : 0;
-      const data = await getRecentPrompts(excludedId, 10);
-      setRecentPrompts(data);
+      const response = await getRecentPrompts();
+      setPrompts(response);
     } catch (err) {
-      setError(prev => ({ ...prev, recentPrompts: err.message }));
+      console.error('최근 프롬프트 로드 오류:', err);
+      setError('최근 프롬프트를 불러오는데 실패했습니다.');
     } finally {
-      setLoading(prev => ({ ...prev, recentPrompts: false }));
+      setIsLoading(false);
     }
   };
   
-  // 새 컬렉션 생성하기
+  // 새 컬렉션 생성
   const handleCreateCollection = async () => {
-    if (!newCollectionName.trim()) return;
+    if (!collectionNameInput.trim()) return;
     
-    setLoading(prev => ({ ...prev, createCollection: true }));
-    setError(prev => ({ ...prev, createCollection: null }));
+    setIsCreatingCollection(true);
     
     try {
-      await createCollection(newCollectionName.trim());
-      // 컬렉션 목록 새로고침
-      await loadCollections();
-      // 모달 닫기
-      setIsCreateModalOpen(false);
+      const newCollection = await createCollection(collectionNameInput.trim());
+      setCollections(prev => [...prev, newCollection]);
+      setSelectedCollectionId(newCollection.id);
+      setCollectionNameInput('');
+    } catch (err) {
+      alert('컬렉션 생성에 실패했습니다.');
+    } finally {
+      setIsCreatingCollection(false);
+    }
+  };
+  
+  // 컬렉션 삭제
+  const handleDeleteCollection = async (collectionId) => {
+    if (!collectionId) return;
+    
+    if (!confirm('정말로 이 컬렉션을 삭제하시겠습니까?')) {
+      return;
+    }
+    
+    try {
+      await deleteCollection(collectionId);
+      
+      // 상태 업데이트
+      setCollections(prev => prev.filter(c => c.id !== collectionId));
+      
+      // 삭제된 컬렉션이 선택된 경우, 다른 컬렉션 선택
+      if (selectedCollectionId === collectionId) {
+        const remaining = collections.filter(c => c.id !== collectionId);
+        if (remaining.length > 0) {
+          setSelectedCollectionId(remaining[0].id);
+        } else {
+          setSelectedCollectionId(null);
+          setPrompts([]);  // 컬렉션이 없으면 프롬프트도 비우기
+        }
+      }
+    } catch (err) {
+      alert('컬렉션 삭제에 실패했습니다.');
+    }
+  };
+  
+  // 컬렉션 이름 변경 시작
+  const handleStartRenaming = () => {
+    setNewCollectionName(getSelectedCollectionName());
+    setIsRenaming(true);
+  };
+  
+  // 컬렉션 이름 변경 취소
+  const handleCancelRenaming = () => {
+    setIsRenaming(false);
+    setNewCollectionName('');
+  };
+  
+  // 컬렉션 이름 변경 적용
+  const handleRenameCollection = async () => {
+    if (!selectedCollectionId || !newCollectionName.trim()) return;
+    
+    try {
+      await renameCollection(selectedCollectionId, newCollectionName.trim());
+      
+      // 상태 업데이트
+      setCollections(prev => 
+        prev.map(c => 
+          c.id === selectedCollectionId 
+            ? { ...c, name: newCollectionName.trim() } 
+            : c
+        )
+      );
+      setIsRenaming(false);
       setNewCollectionName('');
     } catch (err) {
-      setError(prev => ({ ...prev, createCollection: err.message }));
-    } finally {
-      setLoading(prev => ({ ...prev, createCollection: false }));
-    }
-  };
-  
-  // 프롬프트를 컬렉션에 추가
-  const handleAddToCollection = async (promptId) => {
-    if (!selectedCollection || !promptId) return;
-    
-    try {
-      await addPromptToCollection(selectedCollection, promptId);
-      loadCollectionPrompts(selectedCollection);
-    } catch (err) {
-      console.error('컬렉션에 프롬프트 추가 오류:', err);
+      alert('컬렉션 이름 변경에 실패했습니다.');
     }
   };
   
   // 프롬프트를 컬렉션에서 제거
-  const handleRemoveFromCollection = async (promptId) => {
-    if (!selectedCollection || !promptId) return;
+  const handleRemovePromptFromCollection = async (promptId) => {
+    if (!selectedCollectionId || !promptId) return;
     
     try {
-      await removePromptFromCollection(selectedCollection, promptId);
-      loadCollectionPrompts(selectedCollection);
+      await removePromptFromCollection(selectedCollectionId, promptId);
+      
+      // 컬렉션 탭에서만 목록 업데이트
+      if (activeTab === 'collections') {
+        setPrompts(prev => prev.filter(p => p.id !== promptId));
+      }
     } catch (err) {
-      console.error('컬렉션에서 프롬프트 제거 오류:', err);
+      alert('프롬프트를 컬렉션에서 제거하는데 실패했습니다.');
     }
   };
   
-  // 컴포넌트 마운트 시 데이터 로드
+  // 초기 데이터 로드
   useEffect(() => {
     loadCollections();
   }, []);
   
-  // 현재 프롬프트 변경 시 유사 프롬프트 로드
+  // 탭 변경 시 데이터 로드
   useEffect(() => {
-    if (selectedPrompt) {
-      loadSimilarPrompts();
-      loadRecentPrompts();
+    switch (activeTab) {
+      case 'collections':
+        if (selectedCollectionId) {
+          loadCollectionPrompts(selectedCollectionId);
+        } else {
+          setPrompts([]);
+        }
+        break;
+      case 'similar':
+        loadSimilarPrompts();
+        break;
+      case 'recent':
+        loadRecentPrompts();
+        break;
     }
-  }, [selectedPrompt]);
+  }, [activeTab, selectedCollectionId]);
   
-  // 선택된 컬렉션 변경 시 해당 컬렉션의 프롬프트 로드
-  useEffect(() => {
-    if (selectedCollection) {
-      loadCollectionPrompts(selectedCollection);
-    }
-  }, [selectedCollection]);
-  
-  // 탭 변경 시 필요한 데이터 로드
-  useEffect(() => {
-    if (activeTab === 0 && collections.length > 0) {
-      // 맞춤 컬렉션 탭
-      if (!selectedCollection && collections.length > 0) {
-        setSelectedCollection(collections[0].id);
-        loadCollectionPrompts(collections[0].id);
-      }
-    } else if (activeTab === 1 && selectedPrompt) {
-      // 유사 프롬프트 탭
-      loadSimilarPrompts();
-    } else if (activeTab === 2) {
-      // 최근 사용 프롬프트 탭
-      loadRecentPrompts();
-    }
-  }, [activeTab]);
-  
-  // 전체 로딩 상태 표시 함수
+  // 로딩 상태 표시
   const renderLoading = () => (
-    <div className="flex justify-center items-center h-40">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+    <div className="flex items-center justify-center h-32">
+      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
     </div>
   );
   
-  // 오류 표시 함수
-  const renderError = (message) => (
-    <div className="text-center text-red-500 p-4">
-      <p className="mb-2">오류가 발생했습니다</p>
-      <p className="text-sm">{message}</p>
+  // 오류 메시지 표시
+  const renderError = () => (
+    <div className="text-red-500 p-4 text-center">
+      <p>{error}</p>
     </div>
   );
   
-  // 빈 데이터 표시 함수
+  // 빈 상태 표시
   const renderEmpty = (message) => (
-    <div className="text-center text-gray-500 p-4">
-      <p>{message}</p>
+    <div className="text-center py-6">
+      <p className="text-gray-500">{message}</p>
     </div>
   );
-  
-  // 현재 탭 내용 렌더링
-  const renderTabContent = () => {
-    if (activeTab === 0) {
-      // 맞춤 컬렉션 탭
-      return (
-        <div>
-          {loading.collections && collections.length === 0 ? (
-            renderLoading()
-          ) : error.collections ? (
-            renderError(error.collections)
-          ) : collections.length === 0 ? (
-            renderEmpty('저장된 컬렉션이 없습니다')
-          ) : (
-            <>
-              <div className="mb-3">
-                <div className="flex items-center mb-2">
-                  <label className="text-sm font-medium text-gray-700">컬렉션 선택</label>
-                  <button 
-                    onClick={() => setIsCreateModalOpen(true)}
-                    className="ml-auto text-xs text-blue-600 hover:text-blue-800 flex items-center"
-                  >
-                    <PlusCircle size={14} className="mr-1" />
-                    새 컬렉션
-                  </button>
-                </div>
-                <div className="relative">
-                  <select
-                    value={selectedCollection || ''}
-                    onChange={(e) => setSelectedCollection(Number(e.target.value))}
-                    className="block w-full p-2 pl-3 pr-10 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none"
-                  >
-                    {collections.map(collection => (
-                      <option key={collection.id} value={collection.id}>
-                        {collection.name} ({collection.prompt_count})
-                      </option>
-                    ))}
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                    <ChevronDown size={16} />
-                  </div>
-                </div>
-              </div>
-              
-              {loading.collectionPrompts ? (
-                renderLoading()
-              ) : error.collectionPrompts ? (
-                renderError(error.collectionPrompts)
-              ) : collectionPrompts.length === 0 ? (
-                renderEmpty('컬렉션에 저장된 프롬프트가 없습니다')
-              ) : (
-                <div className="space-y-2 mt-2">
-                  {collectionPrompts.map(prompt => (
-                    <PromptItemCard
-                      key={prompt.id}
-                      prompt={prompt}
-                      collectionId={selectedCollection}
-                      onRemoveFromCollection={handleRemoveFromCollection}
-                      onClick={onSelectPrompt}
-                    />
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      );
-    } else if (activeTab === 1) {
-      // 유사 프롬프트 탭
-      return (
-        <div>
-          {loading.similarPrompts ? (
-            renderLoading()
-          ) : error.similarPrompts ? (
-            renderError(error.similarPrompts)
-          ) : similarPrompts.length === 0 ? (
-            renderEmpty('유사한 프롬프트가 없습니다')
-          ) : (
-            <div className="space-y-2 mt-2">
-              {similarPrompts.map(prompt => (
-                <PromptItemCard
-                  key={prompt.id}
-                  prompt={prompt}
-                  onAddToCollection={handleAddToCollection}
-                  onClick={onSelectPrompt}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    } else {
-      // 최근 사용 프롬프트 탭
-      return (
-        <div>
-          {loading.recentPrompts ? (
-            renderLoading()
-          ) : error.recentPrompts ? (
-            renderError(error.recentPrompts)
-          ) : recentPrompts.length === 0 ? (
-            renderEmpty('최근 사용한 프롬프트가 없습니다')
-          ) : (
-            <div className="space-y-2 mt-2">
-              {recentPrompts.map(prompt => (
-                <PromptItemCard
-                  key={prompt.id}
-                  prompt={prompt}
-                  onAddToCollection={handleAddToCollection}
-                  onClick={onSelectPrompt}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    }
-  };
   
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* 탭 헤더 */}
+    <div className="h-full flex flex-col">
+      {/* 탭 네비게이션 */}
       <div className="flex border-b">
         <button
-          className={`flex items-center px-3 py-2 text-sm font-medium border-b-2 ${
-            activeTab === 0
-              ? 'text-blue-600 border-blue-600'
-              : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300'
+          className={`px-4 py-2 text-sm ${
+            activeTab === 'collections'
+              ? 'border-b-2 border-blue-500 text-blue-600'
+              : 'text-gray-500'
           }`}
-          onClick={() => setActiveTab(0)}
+          onClick={() => setActiveTab('collections')}
         >
-          <BookOpen size={16} className="mr-1" />
-          컬렉션
+          내 컬렉션
         </button>
+        
         <button
-          className={`flex items-center px-3 py-2 text-sm font-medium border-b-2 ${
-            activeTab === 1
-              ? 'text-blue-600 border-blue-600'
-              : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300'
+          className={`px-4 py-2 text-sm ${
+            activeTab === 'similar'
+              ? 'border-b-2 border-blue-500 text-blue-600'
+              : 'text-gray-500'
           }`}
-          onClick={() => setActiveTab(1)}
+          onClick={() => setActiveTab('similar')}
+          disabled={!selectedPromptId}
         >
-          <Search size={16} className="mr-1" />
-          유사 항목
+          유사 프롬프트
         </button>
+        
         <button
-          className={`flex items-center px-3 py-2 text-sm font-medium border-b-2 ${
-            activeTab === 2
-              ? 'text-blue-600 border-blue-600'
-              : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300'
+          className={`px-4 py-2 text-sm ${
+            activeTab === 'recent'
+              ? 'border-b-2 border-blue-500 text-blue-600'
+              : 'text-gray-500'
           }`}
-          onClick={() => setActiveTab(2)}
+          onClick={() => setActiveTab('recent')}
         >
-          <Clock size={16} className="mr-1" />
           최근 사용
         </button>
       </div>
       
-      {/* 탭 내용 영역 */}
-      <div className="flex-1 overflow-y-auto p-3">
-        {renderTabContent()}
-      </div>
-      
-      {/* 새 컬렉션 생성 모달 */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-96">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium">새 컬렉션 만들기</h3>
-              <button 
-                onClick={() => {
-                  setIsCreateModalOpen(false);
-                  setNewCollectionName('');
-                  setError(prev => ({ ...prev, createCollection: null }));
-                }}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            
+      {/* 패널 내용 */}
+      <div className="p-4 overflow-y-auto flex-1">
+        {isLoading ? (
+          renderLoading()
+        ) : error ? (
+          renderError()
+        ) : activeTab === 'collections' ? (
+          <>
+            {/* 컬렉션 선택기 */}
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                컬렉션 이름
-              </label>
-              <input
-                type="text"
-                value={newCollectionName}
-                onChange={(e) => setNewCollectionName(e.target.value)}
-                className="w-full px-3 py-2 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="컬렉션 이름을 입력하세요"
-                autoFocus
-              />
-              {error.createCollection && (
-                <p className="mt-1 text-sm text-red-600">{error.createCollection}</p>
+              {collections.length > 0 ? (
+                <select
+                  className="w-full p-2 border rounded mb-2"
+                  value={selectedCollectionId || ''}
+                  onChange={(e) => setSelectedCollectionId(e.target.value)}
+                >
+                  <option value="" disabled>컬렉션 선택</option>
+                  {collections.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              ) : null}
+              
+              <div className="flex mb-2">
+                <input 
+                  type="text"
+                  className="flex-1 p-2 border rounded-l"
+                  placeholder="새 컬렉션"
+                  value={collectionNameInput}
+                  onChange={(e) => setCollectionNameInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleCreateCollection()}
+                />
+                <button
+                  className="bg-blue-500 text-white px-3 rounded-r"
+                  onClick={handleCreateCollection}
+                  disabled={isCreatingCollection || !collectionNameInput.trim()}
+                >
+                  +
+                </button>
+              </div>
+              
+              {selectedCollectionId && (
+                <div className="flex justify-between w-full">
+                  {isRenaming ? (
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="text"
+                        className="flex-1 p-1 border rounded text-sm"
+                        value={newCollectionName}
+                        onChange={(e) => setNewCollectionName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleRenameCollection()}
+                      />
+                      <button
+                        onClick={handleRenameCollection}
+                        className="text-sm text-green-600 hover:text-green-800"
+                      >
+                        저장
+                      </button>
+                      <button
+                        onClick={handleCancelRenaming}
+                        className="text-sm text-gray-600 hover:text-gray-800"
+                      >
+                        취소
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleStartRenaming}
+                      className="text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      이름 변경
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleDeleteCollection(selectedCollectionId)}
+                    className="text-sm text-red-600 hover:text-red-800"
+                  >
+                    컬렉션 삭제
+                  </button>
+                </div>
               )}
             </div>
             
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => {
-                  setIsCreateModalOpen(false);
-                  setNewCollectionName('');
-                  setError(prev => ({ ...prev, createCollection: null }));
-                }}
-                className="px-4 py-2 border rounded bg-white hover:bg-gray-50 text-sm"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleCreateCollection}
-                disabled={!newCollectionName.trim() || loading.createCollection}
-                className={`px-4 py-2 rounded text-white text-sm ${
-                  !newCollectionName.trim() || loading.createCollection
-                    ? 'bg-blue-400 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700'
-                }`}
-              >
-                {loading.createCollection ? (
-                  <span className="flex items-center">
-                    <span className="w-4 h-4 mr-2 border-2 border-t-white border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"></span>
-                    생성 중...
-                  </span>
-                ) : (
-                  '생성'
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            {/* 컬렉션 프롬프트 */}
+            {collections.length === 0 ? (
+              renderEmpty('컬렉션이 없습니다. 새 컬렉션을 추가해 보세요.')
+            ) : !selectedCollectionId ? (
+              renderEmpty('컬렉션을 선택하세요')
+            ) : prompts.length === 0 ? (
+              renderEmpty('이 컬렉션에 프롬프트가 없습니다')
+            ) : (
+              <div className="space-y-2">
+                {prompts.map(prompt => (
+                  <PromptItemCard
+                    key={prompt.id}
+                    prompt={prompt}
+                    onRemoveFromCollection={handleRemovePromptFromCollection}
+                    onClick={onPromptSelect}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        ) : activeTab === 'similar' ? (
+          <>
+            <h3 className="font-medium mb-3">유사 프롬프트</h3>
+            {!selectedPromptId ? (
+              renderEmpty('선택된 프롬프트가 없습니다')
+            ) : prompts.length === 0 ? (
+              renderEmpty('유사한 프롬프트가 없습니다')
+            ) : (
+              <div className="space-y-2">
+                {prompts.map(prompt => (
+                  <PromptItemCard
+                    key={prompt.id}
+                    prompt={prompt}
+                    onClick={onPromptSelect}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <h3 className="font-medium mb-3">최근 사용</h3>
+            {prompts.length === 0 ? (
+              renderEmpty('최근 사용한 프롬프트가 없습니다')
+            ) : (
+              <div className="space-y-2">
+                {prompts.map(prompt => (
+                  <PromptItemCard
+                    key={prompt.id}
+                    prompt={prompt}
+                    onClick={onPromptSelect}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 };

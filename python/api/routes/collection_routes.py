@@ -426,3 +426,53 @@ def get_recent_prompts():
 
     conn.close()
     return jsonify(recent_prompts)
+
+
+# 컬렉션 이름 변경
+@collection_bp.route("/api/collections/<int:id>", methods=["PATCH"])
+def rename_collection(id):
+    data = request.json
+    new_name = data.get("name")
+
+    if not new_name:
+        return jsonify({"error": "새 컬렉션 이름은 필수입니다."}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # 컬렉션 존재 여부 확인
+        cursor.execute("SELECT id FROM collections WHERE id = ?", (id,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({"error": "컬렉션을 찾을 수 없습니다."}), 404
+
+        # 컬렉션 이름 업데이트
+        cursor.execute(
+            """
+            UPDATE collections 
+            SET name = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """,
+            (new_name, id),
+        )
+
+        # 업데이트된 컬렉션 정보 조회
+        cursor.execute(
+            """
+            SELECT id, name, created_at, updated_at
+            FROM collections
+            WHERE id = ?
+        """,
+            (id,),
+        )
+
+        collection = dict(cursor.fetchone())
+        conn.commit()
+        conn.close()
+
+        return jsonify(collection)
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({"error": f"컬렉션 이름 변경 오류: {str(e)}"}), 500
