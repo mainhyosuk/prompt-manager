@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import PromptItemCard from './PromptItemCard';
+import { Plus } from 'lucide-react';
 import { getCollections, createCollection, deleteCollection, addPromptToCollection, removePromptFromCollection, renameCollection, reorderCollections } from '../../api/collectionApi';
 import { getCollectionPrompts, getSimilarPrompts, getRecentPrompts } from '../../api/collectionApi';
+import AddPromptToCollectionModal from '../../modals/AddPromptToCollectionModal';
 
 const PromptPanel = ({ 
   selectedPromptId = null, 
@@ -22,6 +24,9 @@ const PromptPanel = ({
   const [isCreatingCollection, setIsCreatingCollection] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState('');
+  
+  // 프롬프트 추가 모달 상태
+  const [isAddPromptModalOpen, setIsAddPromptModalOpen] = useState(false);
   
   // 컨텍스트 가져오기
   const { handleToggleFavorite, handleEditPrompt, handleRecordUsage } = useAppContext();
@@ -185,6 +190,20 @@ const PromptPanel = ({
       setNewCollectionName('');
     } catch (err) {
       alert('컬렉션 이름 변경에 실패했습니다.');
+    }
+  };
+  
+  // 프롬프트 추가 모달 열기
+  const handleOpenAddPromptModal = () => {
+    if (!selectedCollectionId) return;
+    setIsAddPromptModalOpen(true);
+  };
+  
+  // 프롬프트 추가 완료 후 콜백
+  const handlePromptAdded = () => {
+    // 컬렉션 프롬프트 다시 로드
+    if (selectedCollectionId) {
+      loadCollectionPrompts(selectedCollectionId);
     }
   };
   
@@ -371,6 +390,19 @@ const PromptPanel = ({
               )}
             </div>
             
+            {/* 프롬프트 추가 버튼 */}
+            {selectedCollectionId && (
+              <div className="mb-4">
+                <button
+                  onClick={handleOpenAddPromptModal}
+                  className="w-full p-2 rounded-lg border border-dashed border-blue-300 text-blue-500 hover:bg-blue-50 flex items-center justify-center"
+                >
+                  <Plus size={18} className="mr-1" />
+                  <span>프롬프트 추가</span>
+                </button>
+              </div>
+            )}
+            
             {/* 컬렉션 프롬프트 */}
             {collections.length === 0 ? (
               renderEmpty('컬렉션이 없습니다. 새 컬렉션을 추가해 보세요.')
@@ -429,6 +461,16 @@ const PromptPanel = ({
           </>
         )}
       </div>
+      
+      {/* 프롬프트 추가 모달 */}
+      <AddPromptToCollectionModal
+        isOpen={isAddPromptModalOpen}
+        onClose={() => setIsAddPromptModalOpen(false)}
+        collectionId={selectedCollectionId}
+        collectionName={getSelectedCollectionName()}
+        existingPrompts={prompts}
+        onPromptAdded={handlePromptAdded}
+      />
     </div>
   );
 };
