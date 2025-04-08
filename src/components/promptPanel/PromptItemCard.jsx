@@ -1,12 +1,9 @@
 import React from 'react';
-import { Star, Edit, Copy, Plus, X, ArrowRight } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { copyToClipboard } from '../../utils/clipboard';
 
 const PromptItemCard = ({ 
   prompt, 
-  collectionId = null, 
-  onAddToCollection, 
   onRemoveFromCollection,
   onClick 
 }) => {
@@ -43,30 +40,27 @@ const PromptItemCard = ({
     handleEditPrompt(prompt);
   };
   
-  // 컬렉션에 추가/제거 핸들러
-  const handleCollectionAction = (e) => {
+  // 컬렉션에서 제거 핸들러
+  const handleRemove = (e) => {
     e.stopPropagation();
-    if (collectionId) {
-      onRemoveFromCollection?.(prompt.id);
-    } else {
-      onAddToCollection?.(prompt.id);
-    }
+    onRemoveFromCollection?.(prompt.id);
   };
   
   return (
     <div 
-      className="border rounded-md p-3 bg-white hover:shadow-md transition cursor-pointer mb-2"
+      className="border rounded-md p-3 bg-white hover:shadow-md transition cursor-pointer mb-2 w-full"
+      style={{ minHeight: '120px' }}
       onClick={() => onClick?.(prompt)}
     >
       <div className="flex justify-between items-start mb-1">
         <h3 className="font-medium text-gray-800 flex-1 mr-2">{truncateText(prompt.title, 30)}</h3>
-        <div className="flex space-x-1">
+        <div className="flex space-x-1 min-w-[100px] justify-end">
           <button 
             onClick={handleFavoriteToggle}
             className="text-gray-400 hover:text-yellow-500 p-1"
             title={prompt.is_favorite ? '즐겨찾기 해제' : '즐겨찾기에 추가'}
           >
-            <Star size={16} className={prompt.is_favorite ? 'fill-yellow-400 text-yellow-400' : ''} />
+            <span className={prompt.is_favorite ? 'text-yellow-400' : ''}>★</span>
           </button>
           
           <button
@@ -74,7 +68,7 @@ const PromptItemCard = ({
             className="text-gray-400 hover:text-blue-500 p-1"
             title="편집"
           >
-            <Edit size={16} />
+            <span>✎</span>
           </button>
           
           <button
@@ -82,24 +76,24 @@ const PromptItemCard = ({
             className="text-gray-400 hover:text-green-500 p-1"
             title="클립보드에 복사"
           >
-            <Copy size={16} />
+            <span>📋</span>
           </button>
           
-          {(onAddToCollection || onRemoveFromCollection) && (
+          {onRemoveFromCollection ? (
             <button
-              onClick={handleCollectionAction}
-              className={`p-1 ${collectionId 
-                ? 'text-red-400 hover:text-red-600' 
-                : 'text-gray-400 hover:text-blue-500'}`}
-              title={collectionId ? '컬렉션에서 제거' : '컬렉션에 추가'}
+              onClick={handleRemove}
+              className="text-red-400 hover:text-red-600 p-1"
+              title="컬렉션에서 제거"
             >
-              {collectionId ? <X size={16} /> : <Plus size={16} />}
+              <span>✕</span>
             </button>
+          ) : (
+            <div className="w-[24px]"></div>
           )}
         </div>
       </div>
       
-      <div className="text-sm text-gray-600 mb-2 line-clamp-2 h-10">
+      <div className="text-sm text-gray-600 mb-2 h-10 overflow-hidden">
         {truncateText(prompt.content, 80)}
       </div>
       
