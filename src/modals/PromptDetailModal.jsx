@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Edit, Star, Copy, ChevronRight, Clock, User, Tag, Folder, FileText, Save, Check } from 'lucide-react';
+import { X, Edit, Star, Copy, ChevronRight, Clock, User, Tag, Folder, FileText, Save, Check, Pencil } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { applyVariables, extractVariables, splitContentByVariables } from '../utils/variableParser';
 import { copyToClipboard } from '../utils/clipboard';
+import { updatePromptMemo } from '../api/promptApi';
 
 // 변수가 적용된 내용을 하이라이트하는 컴포넌트
 const HighlightedContent = ({ content, variableValues }) => {
@@ -18,7 +19,7 @@ const HighlightedContent = ({ content, variableValues }) => {
   const parts = splitContentByVariables(content);
   
   return (
-    <div className="bg-white p-4 rounded-lg border whitespace-pre-wrap">
+    <div className="">
       {parts.map((part, index) => {
         if (part.type === 'variable') {
           // 매칭되는 사용자 변수 찾기 (변수 파서와 동일한 로직)
@@ -73,12 +74,15 @@ const findMatchingVariable = (templateVarName, userVarNames) => {
 const PromptDetailModal = () => {
   const { 
     selectedPrompt, 
+    setSelectedPrompt,
+    isDetailModalOpen, 
     setIsDetailModalOpen,
     handleEditPrompt,
     handleToggleFavorite,
     handleRecordUsage,
     getTagColorClasses,
-    handleUpdateVariableDefaultValue
+    handleUpdateVariableDefaultValue,
+    updatePromptItem
   } = useAppContext();
   
   const [variableValues, setVariableValues] = useState({});
@@ -94,6 +98,12 @@ const PromptDetailModal = () => {
   
   // 변수 저장 상태 관리
   const [savingStates, setSavingStates] = useState({});
+  
+  // 메모 관련 상태
+  const [memo, setMemo] = useState('');
+  const [savingMemo, setSavingMemo] = useState(false);
+  const memoTimerRef = useRef(null);
+  const autoSaveDelay = 1000; // 1초 후 자동 저장
   
   // 변수 기본값 설정
   useEffect(() => {
@@ -132,8 +142,25 @@ const PromptDetailModal = () => {
   
   // 외부 클릭 감지
   useEffect(() => {
-    const handleOutsideClick = (event) => {
+    const handleOutsideClick = async (event) => {
       if (modalRef.current && !modalRef.current.contains(event.target)) {
+        // 모달을 닫기 전에 메모가 저장되도록 함
+        if (memoTimerRef.current) {
+          clearTimeout(memoTimerRef.current);
+          memoTimerRef.current = null;
+        }
+        
+        // 메모에 변경 사항이 있으면 저장
+        if (selectedPrompt && memo !== selectedPrompt.memo) {
+          try {
+            await updatePromptMemo(selectedPrompt.id, memo);
+            updatePromptItem(selectedPrompt.id, { ...selectedPrompt, memo });
+          } catch (error) {
+            console.error('모달 닫기 전 메모 저장 오류:', error);
+          }
+        }
+        
+        // 모달 닫기
         setIsDetailModalOpen(false);
       }
     };
@@ -143,7 +170,7 @@ const PromptDetailModal = () => {
     return () => {
       document.removeEventListener('mousedown', handleOutsideClick);
     };
-  }, [setIsDetailModalOpen]);
+  }, [setIsDetailModalOpen, memo, selectedPrompt, updatePromptItem]);
 
   // 텍스트 에디터 외부 클릭 감지
   useEffect(() => {
@@ -164,11 +191,28 @@ const PromptDetailModal = () => {
 
   // ESC 키 입력 감지
   useEffect(() => {
-    const handleEscKey = (event) => {
+    const handleEscKey = async (event) => {
       if (event.key === 'Escape') {
         if (isTextEditorOpen) {
           closeTextEditor();
         } else {
+          // 모달을 닫기 전에 메모가 저장되도록 함
+          if (memoTimerRef.current) {
+            clearTimeout(memoTimerRef.current);
+            memoTimerRef.current = null;
+          }
+          
+          // 메모에 변경 사항이 있으면 저장
+          if (selectedPrompt && memo !== selectedPrompt.memo) {
+            try {
+              await updatePromptMemo(selectedPrompt.id, memo);
+              updatePromptItem(selectedPrompt.id, { ...selectedPrompt, memo });
+            } catch (error) {
+              console.error('모달 닫기 전 메모 저장 오류:', error);
+            }
+          }
+          
+          // 모달 닫기
           setIsDetailModalOpen(false);
         }
       }
@@ -179,7 +223,36 @@ const PromptDetailModal = () => {
     return () => {
       document.removeEventListener('keydown', handleEscKey);
     };
-  }, [setIsDetailModalOpen, isTextEditorOpen]);
+  }, [setIsDetailModalOpen, isTextEditorOpen, memo, selectedPrompt, updatePromptItem]);
+  
+  // 선택된 프롬프트가 변경될 때 메모 값 초기화
+  useEffect(() => {
+    if (selectedPrompt) {
+      setMemo(selectedPrompt.memo || '');
+    }
+  }, [selectedPrompt]);
+  
+  // 모달 닫기 전 메모 저장 처리
+  const handleCloseModal = async () => {
+    // 메모 자동 저장 타이머가 있으면 취소
+    if (memoTimerRef.current) {
+      clearTimeout(memoTimerRef.current);
+      memoTimerRef.current = null;
+    }
+    
+    // 메모에 변경 사항이 있으면 저장
+    if (selectedPrompt && memo !== selectedPrompt.memo) {
+      try {
+        await updatePromptMemo(selectedPrompt.id, memo);
+        updatePromptItem(selectedPrompt.id, { ...selectedPrompt, memo });
+      } catch (error) {
+        console.error('모달 닫기 전 메모 저장 오류:', error);
+      }
+    }
+    
+    // 모달 닫기
+    setIsDetailModalOpen(false);
+  };
   
   if (!selectedPrompt) return null;
   
@@ -322,9 +395,53 @@ const PromptDetailModal = () => {
     }
   };
   
+  // 메모 업데이트 처리
+  const handleMemoChange = (e) => {
+    const newMemo = e.target.value;
+    setMemo(newMemo);
+    
+    // 이전 타이머가 있으면 취소
+    if (memoTimerRef.current) {
+      clearTimeout(memoTimerRef.current);
+    }
+    
+    // 새 타이머 설정 - 입력 완료 1초 후 자동 저장
+    memoTimerRef.current = setTimeout(() => {
+      autoSaveMemo(newMemo);
+    }, autoSaveDelay);
+  };
+  
+  // 자동 저장 함수
+  const autoSaveMemo = async (memoToSave) => {
+    if (!selectedPrompt) return;
+    if (memoToSave === selectedPrompt.memo) return; // 변경사항이 없으면 저장하지 않음
+    
+    setSavingMemo(true);
+    try {
+      await updatePromptMemo(selectedPrompt.id, memoToSave);
+      
+      // 프롬프트 객체 업데이트 (로컬 상태)
+      updatePromptItem(selectedPrompt.id, { ...selectedPrompt, memo: memoToSave });
+      
+    } catch (error) {
+      console.error('메모 자동 저장 오류:', error);
+    } finally {
+      setSavingMemo(false);
+    }
+  };
+  
+  // 컴포넌트 언마운트 시 타이머 정리
+  useEffect(() => {
+    return () => {
+      if (memoTimerRef.current) {
+        clearTimeout(memoTimerRef.current);
+      }
+    };
+  }, []);
+  
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div ref={modalRef} className="bg-white rounded-lg shadow-xl w-3/4 max-w-4xl max-h-screen flex flex-col">
+      <div ref={modalRef} className="bg-white rounded-lg shadow-xl w-3/4 max-w-4xl max-h-[90vh] flex flex-col">
         {/* 모달 헤더 */}
         <div className="flex justify-between items-center border-b px-6 py-4">
           <h2 className="text-xl font-semibold">{selectedPrompt.title}</h2>
@@ -344,7 +461,7 @@ const PromptDetailModal = () => {
               <Edit size={20} />
             </button>
             <button 
-              onClick={() => setIsDetailModalOpen(false)}
+              onClick={() => handleCloseModal()}
               className="text-gray-400 hover:text-gray-600"
               title="닫기"
             >
@@ -408,66 +525,23 @@ const PromptDetailModal = () => {
             </div>
           )}
           
-          {/* 프롬프트 내용 및 메타데이터 영역 - 가로 나란히 배치 */}
+          {/* 프롬프트 내용 및 메타데이터 영역 */}
           <div className="flex-1 p-6 overflow-y-auto">
-            <div className="flex flex-col md:flex-row gap-6">
+            {/* 프롬프트 내용 영역 - 가로 배치 */}
+            <div className="flex flex-col md:flex-row gap-6 mb-6">
               {/* 왼쪽 컬럼: 원본 내용 */}
               <div className="flex-1">
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-2 h-8">
                   <h3 className="font-medium text-gray-800">원본 프롬프트</h3>
                 </div>
-                <div className="bg-gray-50 p-4 rounded-lg border mb-4 whitespace-pre-wrap h-64 overflow-y-auto">
+                <div className="bg-gray-50 p-4 rounded-lg border text-base whitespace-pre-wrap h-64 overflow-y-auto">
                   {selectedPrompt.content}
-                </div>
-                
-                {/* 메타데이터 */}
-                <div className="space-y-2 text-sm text-gray-600">
-                  <div className="flex items-center">
-                    <Folder size={16} className="mr-2" />
-                    <span>폴더: {selectedPrompt.folder || '없음'}</span>
-                  </div>
-                  
-                  <div className="flex items-center">
-                    <Tag size={16} className="mr-2" />
-                    <span>태그: </span>
-                    <div className="flex flex-wrap gap-1 ml-1">
-                      {selectedPrompt.tags.length > 0 ? (
-                        selectedPrompt.tags.map(tag => (
-                          <span 
-                            key={tag.id} 
-                            className={`px-2 py-0.5 rounded-full text-xs ${getTagColorClasses(tag.color)}`}
-                          >
-                            {tag.name}
-                          </span>
-                        ))
-                      ) : (
-                        <span>없음</span>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center">
-                    <Clock size={16} className="mr-2" />
-                    <span>생성일: {new Date(selectedPrompt.created_at).toLocaleDateString()}</span>
-                  </div>
-                  
-                  <div className="flex items-center">
-                    <User size={16} className="mr-2" />
-                    <span>사용 횟수: {selectedPrompt.use_count || 0}회</span>
-                  </div>
-                  
-                  {selectedPrompt.last_used_at && (
-                    <div className="flex items-center">
-                      <Clock size={16} className="mr-2" />
-                      <span>마지막 사용: {selectedPrompt.last_used}</span>
-                    </div>
-                  )}
                 </div>
               </div>
               
               {/* 오른쪽 컬럼: 변수 적용된 내용 */}
               <div className="flex-1">
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-2 h-8">
                   <h3 className="font-medium text-gray-800">변수가 적용된 프롬프트</h3>
                   <button
                     onClick={handleCopyToClipboard}
@@ -490,11 +564,88 @@ const PromptDetailModal = () => {
                       : '클립보드에 복사'}
                   </button>
                 </div>
-                <div className="h-64 overflow-y-auto">
-                  <HighlightedContent 
-                    content={selectedPrompt.content}
-                    variableValues={variableValues}
-                  />
+                <div className="bg-white border rounded-lg h-64 overflow-y-auto">
+                  <div className="p-4 text-base whitespace-pre-wrap">
+                    <HighlightedContent 
+                      content={selectedPrompt.content}
+                      variableValues={variableValues}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* 메모장 컴포넌트 - 전체 너비 사용 */}
+            <div className="w-full mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-medium text-gray-800 flex items-center">
+                  <FileText size={16} className="mr-2" />
+                  메모
+                </h3>
+                {savingMemo && (
+                  <span className="text-xs text-blue-500">저장 중...</span>
+                )}
+              </div>
+              
+              <textarea
+                value={memo}
+                onChange={handleMemoChange}
+                onBlur={() => {
+                  // 포커스가 벗어났을 때 즉시 저장
+                  if (memoTimerRef.current) {
+                    clearTimeout(memoTimerRef.current);
+                    memoTimerRef.current = null;
+                  }
+                  autoSaveMemo(memo);
+                }}
+                className="w-full h-48 p-2 border rounded-lg bg-gray-50 hover:bg-white focus:bg-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-300"
+                placeholder="메모를 입력하세요..."
+                disabled={savingMemo}
+              />
+            </div>
+            
+            {/* 메타데이터 */}
+            <div className="text-sm text-gray-600">
+              <div className="flex flex-wrap gap-x-6 gap-y-2">
+                <div className="flex items-center">
+                  <Folder size={16} className="mr-2" />
+                  <span>폴더: {selectedPrompt.folder || '없음'}</span>
+                </div>
+                
+                <div className="flex items-center">
+                  <Clock size={16} className="mr-2" />
+                  <span>생성일: {new Date(selectedPrompt.created_at).toLocaleDateString()}</span>
+                </div>
+                
+                <div className="flex items-center">
+                  <User size={16} className="mr-2" />
+                  <span>사용 횟수: {selectedPrompt.use_count || 0}회</span>
+                </div>
+                
+                {selectedPrompt.last_used_at && (
+                  <div className="flex items-center">
+                    <Clock size={16} className="mr-2" />
+                    <span>마지막 사용: {selectedPrompt.last_used}</span>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex items-center mt-2">
+                <Tag size={16} className="mr-2" />
+                <span>태그: </span>
+                <div className="flex flex-wrap gap-1 ml-1">
+                  {selectedPrompt.tags.length > 0 ? (
+                    selectedPrompt.tags.map(tag => (
+                      <span 
+                        key={tag.id} 
+                        className={`px-2 py-0.5 rounded-full text-xs ${getTagColorClasses(tag.color)}`}
+                      >
+                        {tag.name}
+                      </span>
+                    ))
+                  ) : (
+                    <span>없음</span>
+                  )}
                 </div>
               </div>
             </div>
