@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { getCollections, getCollectionPrompts, addPromptToCollection, removePromptFromCollection } from '../../api/collectionApi';
+import { getCollections, getCollectionPrompts, addPromptToCollection, removePromptFromCollection, createCollection } from '../../api/collectionApi';
 import { getSimilarPrompts, getRecentPrompts } from '../../api/collectionApi';
-import { BookOpen, Search, Clock, PlusCircle, ChevronDown } from 'lucide-react';
+import { BookOpen, Search, Clock, PlusCircle, ChevronDown, X } from 'lucide-react';
 import PromptItemCard from './PromptItemCard';
 
 const PromptPanel = ({ selectedPrompt, onSelectPrompt }) => {
@@ -20,7 +20,8 @@ const PromptPanel = ({ selectedPrompt, onSelectPrompt }) => {
     collections: false,
     collectionPrompts: false,
     similarPrompts: false,
-    recentPrompts: false
+    recentPrompts: false,
+    createCollection: false
   });
   
   // 오류 상태
@@ -28,8 +29,13 @@ const PromptPanel = ({ selectedPrompt, onSelectPrompt }) => {
     collections: null,
     collectionPrompts: null,
     similarPrompts: null,
-    recentPrompts: null
+    recentPrompts: null,
+    createCollection: null
   });
+  
+  // 새 컬렉션 모달 상태
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState('');
   
   // 컬렉션 목록 불러오기
   const loadCollections = async () => {
@@ -99,6 +105,27 @@ const PromptPanel = ({ selectedPrompt, onSelectPrompt }) => {
       setError(prev => ({ ...prev, recentPrompts: err.message }));
     } finally {
       setLoading(prev => ({ ...prev, recentPrompts: false }));
+    }
+  };
+  
+  // 새 컬렉션 생성하기
+  const handleCreateCollection = async () => {
+    if (!newCollectionName.trim()) return;
+    
+    setLoading(prev => ({ ...prev, createCollection: true }));
+    setError(prev => ({ ...prev, createCollection: null }));
+    
+    try {
+      await createCollection(newCollectionName.trim());
+      // 컬렉션 목록 새로고침
+      await loadCollections();
+      // 모달 닫기
+      setIsCreateModalOpen(false);
+      setNewCollectionName('');
+    } catch (err) {
+      setError(prev => ({ ...prev, createCollection: err.message }));
+    } finally {
+      setLoading(prev => ({ ...prev, createCollection: false }));
     }
   };
   
@@ -202,8 +229,11 @@ const PromptPanel = ({ selectedPrompt, onSelectPrompt }) => {
               <div className="mb-3">
                 <div className="flex items-center mb-2">
                   <label className="text-sm font-medium text-gray-700">컬렉션 선택</label>
-                  <button className="ml-auto text-xs text-blue-600 hover:text-blue-800">
-                    <PlusCircle size={14} className="inline mr-1" />
+                  <button 
+                    onClick={() => setIsCreateModalOpen(true)}
+                    className="ml-auto text-xs text-blue-600 hover:text-blue-800 flex items-center"
+                  >
+                    <PlusCircle size={14} className="mr-1" />
                     새 컬렉션
                   </button>
                 </div>
@@ -342,6 +372,75 @@ const PromptPanel = ({ selectedPrompt, onSelectPrompt }) => {
       <div className="flex-1 overflow-y-auto p-3">
         {renderTabContent()}
       </div>
+      
+      {/* 새 컬렉션 생성 모달 */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-96">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium">새 컬렉션 만들기</h3>
+              <button 
+                onClick={() => {
+                  setIsCreateModalOpen(false);
+                  setNewCollectionName('');
+                  setError(prev => ({ ...prev, createCollection: null }));
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                컬렉션 이름
+              </label>
+              <input
+                type="text"
+                value={newCollectionName}
+                onChange={(e) => setNewCollectionName(e.target.value)}
+                className="w-full px-3 py-2 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="컬렉션 이름을 입력하세요"
+                autoFocus
+              />
+              {error.createCollection && (
+                <p className="mt-1 text-sm text-red-600">{error.createCollection}</p>
+              )}
+            </div>
+            
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => {
+                  setIsCreateModalOpen(false);
+                  setNewCollectionName('');
+                  setError(prev => ({ ...prev, createCollection: null }));
+                }}
+                className="px-4 py-2 border rounded bg-white hover:bg-gray-50 text-sm"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleCreateCollection}
+                disabled={!newCollectionName.trim() || loading.createCollection}
+                className={`px-4 py-2 rounded text-white text-sm ${
+                  !newCollectionName.trim() || loading.createCollection
+                    ? 'bg-blue-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                {loading.createCollection ? (
+                  <span className="flex items-center">
+                    <span className="w-4 h-4 mr-2 border-2 border-t-white border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"></span>
+                    생성 중...
+                  </span>
+                ) : (
+                  '생성'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
