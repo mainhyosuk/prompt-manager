@@ -1,12 +1,12 @@
 /**
  * 컬렉션 및 관련 프롬프트 API 요청 함수
  */
-import { API_HEADERS, API_FETCH_OPTIONS } from './config';
+import { API_HEADERS, API_FETCH_OPTIONS, API_BASE_URL } from './config';
 
 // 모든 컬렉션 가져오기
 export const getCollections = async () => {
   try {
-    const response = await fetch(`/api/collections`, API_FETCH_OPTIONS);
+    const response = await fetch(`${API_BASE_URL}/api/collections`, API_FETCH_OPTIONS);
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -23,7 +23,7 @@ export const getCollections = async () => {
 // 컬렉션 생성
 export const createCollection = async (name) => {
   try {
-    const response = await fetch(`/api/collections`, {
+    const response = await fetch(`${API_BASE_URL}/api/collections`, {
       ...API_FETCH_OPTIONS,
       method: 'POST',
       body: JSON.stringify({ name }),
@@ -44,7 +44,7 @@ export const createCollection = async (name) => {
 // 컬렉션 삭제
 export const deleteCollection = async (id) => {
   try {
-    const response = await fetch(`/api/collections/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/api/collections/${id}`, {
       ...API_FETCH_OPTIONS,
       method: 'DELETE',
     });
@@ -64,7 +64,7 @@ export const deleteCollection = async (id) => {
 // 컬렉션의 프롬프트 목록 가져오기
 export const getCollectionPrompts = async (collectionId) => {
   try {
-    const response = await fetch(`/api/collections/${collectionId}/prompts`, API_FETCH_OPTIONS);
+    const response = await fetch(`${API_BASE_URL}/api/collections/${collectionId}/prompts`, API_FETCH_OPTIONS);
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -81,7 +81,7 @@ export const getCollectionPrompts = async (collectionId) => {
 // 프롬프트를 컬렉션에 추가
 export const addPromptToCollection = async (collectionId, promptId) => {
   try {
-    const response = await fetch(`/api/collections/${collectionId}/prompts/${promptId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/collections/${collectionId}/prompts/${promptId}`, {
       ...API_FETCH_OPTIONS,
       method: 'POST',
     });
@@ -101,7 +101,7 @@ export const addPromptToCollection = async (collectionId, promptId) => {
 // 프롬프트를 컬렉션에서 제거
 export const removePromptFromCollection = async (collectionId, promptId) => {
   try {
-    const response = await fetch(`/api/collections/${collectionId}/prompts/${promptId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/collections/${collectionId}/prompts/${promptId}`, {
       ...API_FETCH_OPTIONS,
       method: 'DELETE',
     });
@@ -121,7 +121,7 @@ export const removePromptFromCollection = async (collectionId, promptId) => {
 // 컬렉션 내 프롬프트 순서 변경
 export const reorderCollectionPrompts = async (collectionId, promptIds) => {
   try {
-    const response = await fetch(`/api/collections/${collectionId}/reorder`, {
+    const response = await fetch(`${API_BASE_URL}/api/collections/${collectionId}/reorder`, {
       ...API_FETCH_OPTIONS,
       method: 'PUT',
       body: JSON.stringify({ prompt_ids: promptIds }),
@@ -142,7 +142,7 @@ export const reorderCollectionPrompts = async (collectionId, promptIds) => {
 // 유사 프롬프트 가져오기
 export const getSimilarPrompts = async (promptId) => {
   try {
-    const response = await fetch(`/api/prompts/${promptId}/similar`, API_FETCH_OPTIONS);
+    const response = await fetch(`${API_BASE_URL}/api/prompts/${promptId}/similar`, API_FETCH_OPTIONS);
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -159,7 +159,7 @@ export const getSimilarPrompts = async (promptId) => {
 // 최근 사용 프롬프트 가져오기
 export const getRecentPrompts = async (excludedId = 0, limit = 10) => {
   try {
-    const response = await fetch(`/api/prompts/recent?excluded_id=${excludedId}&limit=${limit}`, API_FETCH_OPTIONS);
+    const response = await fetch(`${API_BASE_URL}/api/prompts/recent?excluded_id=${excludedId}&limit=${limit}`, API_FETCH_OPTIONS);
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));

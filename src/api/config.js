@@ -19,5 +19,5 @@ export const API_RETRY_COUNT = 3;
 export const API_FETCH_OPTIONS = {
   headers: API_HEADERS,
   mode: 'cors',  // CORS 모드 명시적 설정
-  credentials: 'include'  // 인증 정보 포함
+  credentials: 'omit'  // 자격 증명 제외 (CORS 문제 해결)
 };
