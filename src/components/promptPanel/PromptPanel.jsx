@@ -329,7 +329,7 @@ const PromptPanel = ({
               : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
           onClick={() => setActiveTab('similar')}
         >
-          비슷한 프롬프트
+          유사
         </button>
         <button
           className={`flex-1 py-3 text-center font-medium text-sm transition-colors
@@ -338,7 +338,7 @@ const PromptPanel = ({
               : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
           onClick={() => setActiveTab('collections')}
         >
-          내 컬렉션
+          컬렉션
         </button>
         <button
           className={`flex-1 py-3 text-center font-medium text-sm transition-colors
@@ -347,7 +347,7 @@ const PromptPanel = ({
               : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
           onClick={() => setActiveTab('recent')}
         >
-          최근 사용
+          최근
         </button>
       </div>
       

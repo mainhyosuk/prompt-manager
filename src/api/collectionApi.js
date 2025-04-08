@@ -143,7 +143,7 @@ export const getSimilarPrompts = async (promptId) => {
 };
 
 // 최근 사용 프롬프트 가져오기
-export const getRecentPrompts = async (excludedId = 0, limit = 10) => {
+export const getRecentPrompts = async (excludedId = 0, limit = 30) => {
   try {
     const response = await fetch(`/api/prompts/recent?excluded_id=${excludedId}&limit=${limit}`, API_FETCH_OPTIONS);
     

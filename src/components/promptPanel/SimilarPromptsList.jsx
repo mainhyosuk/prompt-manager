@@ -52,8 +52,6 @@ const SimilarPromptsList = ({ selectedPromptId, onPromptSelect }) => {
 
   return (
     <div className="h-full overflow-y-auto p-4">
-      <h3 className="font-medium mb-3">유사 프롬프트</h3>
-      
       {isLoading ? (
         renderLoading()
       ) : error ? (
