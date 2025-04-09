@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useLayoutEffect, useMemo } from 'react';
-import { ChevronDown, ChevronRight, Star, Folder, FolderOpen, Package, Edit, Trash2, ArrowUp, ArrowDown, FilePlus } from 'lucide-react';
+import { ChevronDown, ChevronRight, Star, Folder, FolderOpen, Package, Edit, Trash2, ArrowUp, ArrowDown, FilePlus, FolderPlus } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { updateFolder, deleteFolder, reorderFolder } from '../../api/folderApi';
 
@@ -44,6 +44,30 @@ const findFolderById = (folderList, id) => {
   return null;
 };
 
+// 폴더 ID를 키로 하고 자식 폴더 배열을 값으로 하는 맵을 생성하는 함수
+const buildFolderMap = (folders) => {
+  const folderMap = {};
+  folders.forEach(folder => {
+    if (folder.parent_id !== null) {
+      if (!folderMap[folder.parent_id]) {
+        folderMap[folder.parent_id] = [];
+      }
+      folderMap[folder.parent_id].push(folder);
+    }
+  });
+  
+  // 각 자식 배열을 position 기준으로 정렬
+  for (const parentId in folderMap) {
+    folderMap[parentId].sort((a, b) => {
+      const posA = a.position === null ? Infinity : a.position;
+      const posB = b.position === null ? Infinity : b.position;
+      return posA - posB;
+    });
+  }
+  
+  return folderMap;
+};
+
 // 커스텀 훅: 컨텍스트 메뉴 위치 계산
 const useContextMenuPosition = (x, y) => {
   const menuRef = useRef(null);
@@ -75,17 +99,18 @@ const useContextMenuPosition = (x, y) => {
 };
 
 // 컨텍스트 메뉴 컴포넌트
-const ContextMenu = ({ x, y, folder, onClose, onRename, onDelete, onMove, onAddPrompt }) => {
+const ContextMenu = ({ x, y, folder, onClose, onRename, onDelete, onMove, onAddPrompt, onAddFolder }) => {
   const isDefaultFolder = ['모든 프롬프트', '즐겨찾기'].includes(folder.name);
   const { menuRef, position } = useContextMenuPosition(x, y);
   
   // 메뉴 아이템 클릭 처리
   const handleMenuItemClick = (action) => {
+    if (action === 'addFolder') onAddFolder();
+    if (action === 'addPrompt') onAddPrompt();
     if (action === 'rename') onRename();
     if (action === 'delete') onDelete();
     if (action === 'moveUp') onMove('up');
     if (action === 'moveDown') onMove('down');
-    if (action === 'addPrompt') onAddPrompt();
     onClose();
   };
   
@@ -108,7 +133,7 @@ const ContextMenu = ({ x, y, folder, onClose, onRename, onDelete, onMove, onAddP
   return (
     <div 
       ref={menuRef}
-      className="fixed bg-white shadow-lg border rounded-lg py-1 z-[9999] contextMenu"
+      className="fixed bg-white shadow-lg border rounded-lg py-1 z-[9999] contextMenu dark:bg-gray-800 dark:border-gray-700"
       style={{ 
         left: `${position.x}px`, 
         top: `${position.y}px`,
@@ -121,19 +146,28 @@ const ContextMenu = ({ x, y, folder, onClose, onRename, onDelete, onMove, onAddP
         e.stopPropagation();
       }}
     >
-      {/* 프롬프트 추가 옵션 (신규 추가) */}
+      {/* 폴더 추가 옵션 */}
       <button
-        className="flex items-center w-full px-4 py-2 text-sm text-left hover:bg-gray-100"
+        className="flex items-center w-full px-4 py-2 text-sm text-left hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+        onClick={() => handleMenuItemClick('addFolder')}
+      >
+        <FolderPlus size={14} className="mr-2" />
+        폴더 추가
+      </button>
+
+      {/* 프롬프트 추가 옵션 (다시 추가) */}
+      <button
+        className="flex items-center w-full px-4 py-2 text-sm text-left hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
         onClick={() => handleMenuItemClick('addPrompt')}
       >
         <FilePlus size={14} className="mr-2" />
         프롬프트 추가
       </button>
       
-      <hr className="my-1 border-gray-200" />
+      <hr className="my-1 border-gray-200 dark:border-gray-600" />
       
       <button
-        className="flex items-center w-full px-4 py-2 text-sm text-left hover:bg-gray-100 disabled:text-gray-400 disabled:hover:bg-white"
+        className="flex items-center w-full px-4 py-2 text-sm text-left hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
         onClick={() => handleMenuItemClick('rename')}
         disabled={isDefaultFolder}
       >
@@ -142,7 +176,7 @@ const ContextMenu = ({ x, y, folder, onClose, onRename, onDelete, onMove, onAddP
       </button>
       
       <button
-        className="flex items-center w-full px-4 py-2 text-left hover:bg-gray-100"
+        className="flex items-center w-full px-4 py-2 text-left hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
         onClick={() => handleMenuItemClick('moveUp')}
       >
         <ArrowUp size={14} className="mr-2" />
@@ -150,17 +184,17 @@ const ContextMenu = ({ x, y, folder, onClose, onRename, onDelete, onMove, onAddP
       </button>
       
       <button
-        className="flex items-center w-full px-4 py-2 text-left hover:bg-gray-100"
+        className="flex items-center w-full px-4 py-2 text-left hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
         onClick={() => handleMenuItemClick('moveDown')}
       >
         <ArrowDown size={14} className="mr-2" />
         하위 폴더로 이동
       </button>
       
-      <hr className="my-1 border-gray-200" />
+      <hr className="my-1 border-gray-200 dark:border-gray-600" />
       
       <button
-        className="flex items-center w-full px-4 py-2 text-sm text-left text-red-600 hover:bg-red-50 disabled:text-gray-400 disabled:hover:bg-white"
+        className="flex items-center w-full px-4 py-2 text-sm text-left text-red-600 hover:bg-red-50 disabled:text-gray-400 disabled:hover:bg-white dark:text-red-400 dark:hover:bg-red-900 dark:disabled:text-gray-500 dark:disabled:hover:bg-gray-800"
         onClick={() => handleMenuItemClick('delete')}
         disabled={isDefaultFolder}
       >
@@ -422,7 +456,8 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
     toggleFolder,
     loadData,
     folders,
-    handleAddPrompt
+    handleAddPrompt,
+    openFolderModal
   } = useAppContext();
   
   // 컨텍스트 메뉴 관리
@@ -778,7 +813,7 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
         />
         
         {!isRenaming ? (
-          <span className={`flex-grow text-sm ${isSelected ? 'font-medium' : ''}`}>
+          <span className={`flex-grow text-sm ${isSelected ? 'font-medium' : ''} dark:text-gray-200`}>
             {folder.name}
           </span>
         ) : (
@@ -803,7 +838,7 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
         
         {/* 폴더 내 프롬프트 개수 표시 - total_count와 count 함께 표시 */}
         {folder.total_count !== undefined && (
-          <span className="text-gray-500 text-xs bg-gray-100 px-1.5 py-0.5 rounded-full flex items-center">
+          <span className="text-gray-500 text-xs bg-gray-100 px-1.5 py-0.5 rounded-full flex items-center dark:bg-gray-700 dark:text-gray-400">
             {folder.count !== folder.total_count ? (
               <span title={`직접 포함된 프롬프트: ${folder.count} / 하위 폴더 포함 전체: ${folder.total_count}`}>
                 <span className="font-medium">{folder.count}</span>
@@ -847,7 +882,12 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
             }
             
             deleteFolder(folder.id)
-              .then(() => loadData())
+              .then(() => {
+                loadData();
+                if (selectedFolder === folder.name) {
+                  setSelectedFolder('모든 프롬프트'); // 삭제된 폴더가 선택된 경우 기본 폴더로 변경
+                }
+              })
               .catch(error => {
                 console.error('폴더 삭제 실패:', error);
                 alert('폴더를 삭제하는데 실패했습니다. 폴더 내 프롬프트가 있거나 하위 폴더가 있는지 확인하세요.');
@@ -858,6 +898,7 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
             setMoveDirection(direction);
           }}
           onAddPrompt={() => handleAddPrompt(folder.id, folder.name)}
+          onAddFolder={() => openFolderModal(folder.id)}
         />
       )}
       
@@ -961,18 +1002,20 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
     </li>
   );
 }, (prevProps, nextProps) => {
-  // 커스텀 비교 함수로 리렌더링 조건 최적화
-  return (
+  // 커스텀 비교 함수: 직접 전달된 props만 비교
+  const shouldSkipRender = 
     prevProps.folder.id === nextProps.folder.id &&
     prevProps.folder.name === nextProps.folder.name &&
     prevProps.folder.count === nextProps.folder.count &&
+    prevProps.folder.total_count === nextProps.folder.total_count &&
     prevProps.isLast === nextProps.isLast &&
-    prevProps.level === nextProps.level
-  );
+    prevProps.level === nextProps.level;
+
+  return shouldSkipRender;
 });
 
 const FolderTree = React.memo(() => {
-  const { folders, isLoading, loadData } = useAppContext();
+  const { folders, isLoading, loadData, openFolderModal } = useAppContext();
   const rootDropAreaRef = useRef(null);
   
   // 드래그 상태를 Ref로 관리
@@ -1211,7 +1254,6 @@ const FolderTree = React.memo(() => {
       try {
         // 이미 마이그레이션이 완료되었는지 로컬 스토리지 확인
         if (localStorage.getItem(MIGRATION_KEY) === 'true') {
-          console.log('폴더 위치 마이그레이션이 이미 완료되었습니다.');
           return;
         }
         
@@ -1227,7 +1269,6 @@ const FolderTree = React.memo(() => {
         
         // 마이그레이션이 필요한 경우에만 실행
         if (checkData.migrationNeeded) {
-          console.log('폴더 위치 마이그레이션이 필요합니다. 마이그레이션을 시작합니다...');
           
           const response = await fetch('/api/folders/migrate', {
             method: 'POST'
@@ -1237,18 +1278,15 @@ const FolderTree = React.memo(() => {
             const data = await response.json();
             
             if (data.migrated) {
-              console.log('폴더 위치가 성공적으로 마이그레이션되었습니다.');
               localStorage.setItem(MIGRATION_KEY, 'true');
               loadData(); // 폴더 데이터 다시 불러오기
             } else {
-              console.log('마이그레이션 필요 없음:', data.message);
               localStorage.setItem(MIGRATION_KEY, 'true');
             }
           } else {
             console.error('마이그레이션 처리 실패');
           }
         } else {
-          console.log('마이그레이션이 필요하지 않습니다. 이미 모든 폴더가 위치 정보를 가지고 있습니다.');
           localStorage.setItem(MIGRATION_KEY, 'true');
         }
       } catch (error) {
@@ -1260,6 +1298,31 @@ const FolderTree = React.memo(() => {
     migrateFolderPositions();
   }, [loadData]); // loadData를 의존성 배열에 추가
   
+  // 최상위 레벨 폴더 필터링 및 계층 구조 빌드
+  const rootFolders = useMemo(() => {
+    const folderMap = buildFolderMap(folders);
+    
+    // parent_id가 null인 폴더 (최상위)
+    const topLevelFolders = folders.filter(f => f.parent_id === null);
+    
+    // position 기준으로 정렬 (null 값을 마지막으로 처리)
+    topLevelFolders.sort((a, b) => {
+      const posA = a.position === null ? Infinity : a.position;
+      const posB = b.position === null ? Infinity : b.position;
+      return posA - posB;
+    });
+    
+    // 계층 구조 빌드
+    const buildHierarchy = (folderList) => {
+      return folderList.map(folder => ({
+        ...folder,
+        children: folderMap[folder.id] ? buildHierarchy(folderMap[folder.id]) : []
+      }));
+    };
+    
+    return buildHierarchy(topLevelFolders);
+  }, [folders]);
+
   if (isLoading && folders.length === 0) {
     return (
       <div className="p-4 text-center text-gray-500">
