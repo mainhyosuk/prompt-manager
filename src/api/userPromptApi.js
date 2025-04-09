@@ -71,13 +71,33 @@ export const createUserAddedPrompt = async (promptData) => {
     // 프롬프트 ID 생성 (실제로는 서버에서 생성)
     const promptId = `user-added-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     
+    // 부모 프롬프트 제목 가져오기 시도
+    let parentTitle = promptData.parent_title || '';
+    
+    // 부모 제목이 없으면 로컬 스토리지에서 다른 프롬프트 목록을 조회해 찾아보기
+    if (!parentTitle) {
+      try {
+        const allPromptsJSON = localStorage.getItem('prompts');
+        if (allPromptsJSON) {
+          const allPrompts = JSON.parse(allPromptsJSON);
+          const parentPrompt = allPrompts.find(p => p.id === promptData.parent_id);
+          if (parentPrompt) {
+            parentTitle = parentPrompt.title;
+          }
+        }
+      } catch (err) {
+        console.warn('부모 프롬프트 제목 가져오기 실패:', err);
+      }
+    }
+    
     // 데이터에 ID와 생성 시간 추가
     const newPromptData = {
       ...promptData,
       id: promptId,
       created_at: promptData.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      is_user_added: true
+      is_user_added: true,
+      parent_title: parentTitle
     };
     
     // 로컬 스토리지에서 사용자 추가 프롬프트 데이터 조회
@@ -152,7 +172,8 @@ export const updateUserAddedPrompt = async (promptId, promptData) => {
         updatedPrompt = {
           ...parentPrompts[promptIndex],
           ...promptData,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          is_user_added: true // is_user_added 속성 보존
         };
         
         parentPrompts[promptIndex] = updatedPrompt;

@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { getPrompts, createPrompt, updatePrompt, deletePrompt, toggleFavorite, recordPromptUsage, duplicatePrompt, updateVariableDefaultValue } from '../api/promptApi';
 import { getFolders } from '../api/folderApi';
 import { getTags } from '../api/tagApi';
+import PromptOverlayModal from '../modals/PromptOverlayModal';
+import UserPromptDetailModal from '../modals/UserPromptDetailModal';
 
 // 초기 상태
 const initialState = {
@@ -68,6 +70,10 @@ export const AppProvider = ({ children }) => {
   const [sortBy, setSortBy] = useState(initialState.sortBy);
   const [sortDirection, setSortDirection] = useState(initialState.sortDirection);
   const [viewMode, setViewMode] = useState(initialState.viewMode);
+
+  // 사용자 추가 프롬프트 모달 상태 추가
+  const [isUserPromptModalOpen, setIsUserPromptModalOpen] = useState(false);
+  const [userPrompt, setUserPrompt] = useState(null);
 
   // 테마 변경 함수
   const changeTheme = useCallback((newTheme) => {
@@ -512,17 +518,42 @@ export const AppProvider = ({ children }) => {
     const latestPrompt = prompts.find(p => p.id === prompt.id);
     
     if (!latestPrompt) {
-      console.error('프롬프트를 찾을 수 없습니다:', prompt.id);
-      return;
+      console.log('일반 프롬프트 목록에서 프롬프트를 찾을 수 없습니다. 사용자 추가 프롬프트에서 확인합니다:', prompt.id);
+      
+      // 직접 사용자 추가 프롬프트를 확인
+      if (prompt.is_user_added) {
+        // 사용자 추가 프롬프트 모달 상태 설정
+        setUserPrompt(prompt);
+        
+        // 약간의 딜레이 후 모달 표시 (이벤트 버블링 방지에 도움)
+        setTimeout(() => {
+          setIsUserPromptModalOpen(true);
+        }, 10);
+        return;
+      } else {
+        console.error('프롬프트를 찾을 수 없습니다:', prompt.id);
+        return;
+      }
     }
     
-    // 오버레이 모달 상태 설정 (최신 프롬프트 데이터 사용)
-    setOverlayPrompt(latestPrompt);
-    
-    // 약간의 딜레이 후 모달 표시 (이벤트 버블링 방지에 도움)
-    setTimeout(() => {
-      setIsOverlayModalOpen(true);
-    }, 10);
+    // 사용자 추가 프롬프트인지 확인
+    if (latestPrompt.is_user_added) {
+      // 사용자 추가 프롬프트 모달 상태 설정
+      setUserPrompt(latestPrompt);
+      
+      // 약간의 딜레이 후 모달 표시 (이벤트 버블링 방지에 도움)
+      setTimeout(() => {
+        setIsUserPromptModalOpen(true);
+      }, 10);
+    } else {
+      // 일반 오버레이 모달 상태 설정
+      setOverlayPrompt(latestPrompt);
+      
+      // 약간의 딜레이 후 모달 표시 (이벤트 버블링 방지에 도움)
+      setTimeout(() => {
+        setIsOverlayModalOpen(true);
+      }, 10);
+    }
   }, [prompts]);
 
   // 오버레이 모달 닫기
@@ -536,6 +567,17 @@ export const AppProvider = ({ children }) => {
     // 모달이 닫힌 후 데이터 초기화 (애니메이션 완료 후)
     setTimeout(() => {
       setOverlayPrompt(null);
+    }, 300);
+  }, []);
+  
+  // 사용자 추가 프롬프트 모달 닫기
+  const closeUserPromptModal = useCallback(() => {
+    // 우선 모달 상태부터 변경
+    setIsUserPromptModalOpen(false);
+    
+    // 모달이 닫힌 후 데이터 초기화 (애니메이션 완료 후)
+    setTimeout(() => {
+      setUserPrompt(null);
     }, 300);
   }, []);
 
@@ -563,6 +605,8 @@ export const AppProvider = ({ children }) => {
     viewMode,
     isOverlayModalOpen,
     overlayPrompt,
+    isUserPromptModalOpen,
+    userPrompt,
     
     // 데이터 접근 함수
     getFilteredPrompts,
@@ -599,13 +643,34 @@ export const AppProvider = ({ children }) => {
     updatePromptItem,
     openOverlayModal,
     closeOverlayModal,
+    closeUserPromptModal,
     setIsOverlayModalOpen,
-    setOverlayPrompt
+    setOverlayPrompt,
+    setIsUserPromptModalOpen,
+    setUserPrompt
   };
 
   return (
     <AppContext.Provider value={value}>
       {children}
+      
+      {/* 오버레이 모달 (일반 프롬프트용) */}
+      {isOverlayModalOpen && overlayPrompt && (
+        <PromptOverlayModal
+          isOpen={isOverlayModalOpen}
+          onClose={closeOverlayModal}
+          prompt={overlayPrompt}
+        />
+      )}
+      
+      {/* 사용자 추가 프롬프트 모달 */}
+      {isUserPromptModalOpen && userPrompt && (
+        <UserPromptDetailModal
+          isOpen={isUserPromptModalOpen}
+          onClose={closeUserPromptModal}
+          prompt={userPrompt}
+        />
+      )}
     </AppContext.Provider>
   );
 };

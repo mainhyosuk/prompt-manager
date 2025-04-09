@@ -421,7 +421,7 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   
   // 현재 선택된 프롬프트 정보를 가져오기 위한 컨텍스트 접근
-  const { selectedPrompt, updatePromptItem } = useAppContext();
+  const { selectedPrompt, updatePromptItem, openOverlayModal: contextOpenOverlayModal } = useAppContext();
   
   // 사용자 추가 프롬프트 데이터 로드
   const loadUserPrompts = useCallback(async () => {
@@ -450,6 +450,7 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
       // 새 프롬프트 생성을 위한 데이터 준비
       const newPromptData = {
         parent_id: selectedPrompt.id,
+        parent_title: selectedPrompt.title, // 부모 프롬프트 제목 추가
         title: newPromptTitle.trim() || `${selectedPrompt.title}의 사용자 추가 프롬프트`,
         content: "", // 기본 내용은 비워둡니다
         variables: [], // 기본 변수는 비워둡니다
@@ -523,16 +524,22 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
   }, []);
   
   // 프롬프트 편집 핸들러
-  const handlePromptEdit = useCallback((prompt) => {
+  const handlePromptEdit = useCallback((prompt, e) => {
+    e.stopPropagation(); // 클릭 이벤트 버블링 방지
     setEditingPrompt(prompt);
     setIsEditModalOpen(true);
   }, []);
   
-  // 카드 클릭 핸들러 (상세 모달 표시 대신 바로 편집 모달 표시)
+  // 카드 클릭 핸들러 (오버레이 모달 표시)
   const handleCardClick = useCallback((prompt) => {
-    // 상세 모달 대신 바로 편집 모달을 열도록 수정
-    handlePromptEdit(prompt);
-  }, [handlePromptEdit]);
+    // 오버레이 모달을 열기 위해 onPromptSelect 콜백 사용
+    if (onPromptSelect && prompt) {
+      onPromptSelect(prompt);
+    } else if (contextOpenOverlayModal && prompt) {
+      // 콜백이 없는 경우 컨텍스트의 오버레이 모달 열기 함수 직접 호출
+      contextOpenOverlayModal(prompt);
+    }
+  }, [onPromptSelect, contextOpenOverlayModal]);
   
   // 편집 모달 닫기
   const handleCloseEditModal = useCallback(() => {
@@ -543,7 +550,7 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
   // 프롬프트 패널 내에서 편집 버튼 클릭 시 호출될 핸들러
   const handleEditButtonClick = useCallback((prompt, e) => {
     e.stopPropagation(); // 카드 클릭 이벤트 전파 중지
-    handlePromptEdit(prompt);
+    handlePromptEdit(prompt, e);
   }, [handlePromptEdit]);
   
   // 프롬프트 카드용 커스텀 렌더링 함수
