@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "lodash": "^4.17.21",
     "lucide-react": "^0.335.0",
     "node-abi": "^4.2.0",
     "react": "^18.2.0",

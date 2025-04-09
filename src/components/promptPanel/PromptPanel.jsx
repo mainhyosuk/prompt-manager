@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import PromptItemCard from './PromptItemCard';
 import { Plus } from 'lucide-react';
 import { getCollections, createCollection, deleteCollection, addPromptToCollection, removePromptFromCollection, renameCollection, reorderCollections } from '../../api/collectionApi';
 import { getCollectionPrompts, getSimilarPrompts, getRecentPrompts } from '../../api/collectionApi';
 import { getPromptVersions, createPromptVersion, updatePromptVersion, setAsLatestVersion, deletePromptVersion } from '../../api/versionApi';
-import { getUserAddedPrompts, createUserAddedPrompt, updateUserAddedPrompt, deleteUserAddedPrompt } from '../../api/userPromptApi';
+import { getUserAddedPrompts, createUserAddedPrompt, updateUserAddedPrompt, deleteUserAddedPrompt, reorderUserAddedPrompts } from '../../api/userPromptApi';
 import AddPromptToCollectionModal from '../../modals/AddPromptToCollectionModal';
 import CollectionsList from './CollectionsList';
 import SimilarPromptsList from './SimilarPromptsList';
@@ -422,9 +422,13 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [isExporting, setIsExporting] = useState(false); // 내보내기 로딩 상태
-  
-  // 현재 선택된 프롬프트 정보를 가져오기 위한 컨텍스트 접근
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Drag and Drop state
+  const dragItem = useRef(null); // ID of the item being dragged
+  const [dragOverId, setDragOverId] = useState(null);
+  const [dropPos, setDropPos] = useState(null);
+
   const { 
     selectedPrompt, 
     updatePromptItem, 
@@ -638,20 +642,164 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
     }
   };
   
-  // 프롬프트 카드용 커스텀 렌더링 함수 (내보내기 핸들러 추가)
+  // --- Drag and Drop Handlers --- 
+
+  const handleDragStart = (e, id) => {
+    dragItem.current = id;
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => e.target.classList.add('dragging-card'), 0);
+  };
+
+  const handleDragOver = (e, id) => {
+    e.preventDefault();
+
+    const element = document.querySelector(`[data-id="${id}"]`);
+    if (!element) {
+       if (dragOverId === id) {
+           setDragOverId(null);
+           setDropPos(null);
+       }
+        return;
+    }
+
+    if (dragItem.current === id) {
+        if (dragOverId === id) {
+            setDragOverId(null);
+            setDropPos(null);
+        }
+        return; 
+    }
+    
+    // Ensure drop effect is set correctly
+    e.dataTransfer.dropEffect = 'move';
+
+    const rect = element.getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+    const newPosition = e.clientY < midpoint ? 'before' : 'after';
+
+    if (newPosition !== dropPos || dragOverId !== id) {
+      setDragOverId(id);
+      setDropPos(newPosition);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    const listContainer = e.currentTarget.closest('.user-prompt-list-container');
+    if (listContainer && !listContainer.contains(e.relatedTarget)) {
+         setDragOverId(null);
+         setDropPos(null);
+    }
+    else if (dragItem.current && e.relatedTarget?.dataset?.id === dragItem.current) {
+         setDragOverId(null);
+         setDropPos(null);
+     }
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+
+    if (!dragItem.current || !dragOverId || !dropPos) {
+       setDragOverId(null);
+       setDropPos(null);
+       dragItem.current = null;
+       return;
+    }
+
+    const draggedItemId = dragItem.current;
+    const targetItemId = dragOverId;
+    const position = dropPos;
+
+    const draggedItemIndex = userPrompts.findIndex(p => p.id === draggedItemId);
+    const originalTargetIndex = userPrompts.findIndex(p => p.id === targetItemId);
+
+    if (draggedItemIndex === -1 || originalTargetIndex === -1) {
+       setDragOverId(null);
+       setDropPos(null);
+       dragItem.current = null;
+       return;
+    }
+
+    const newPrompts = [...userPrompts];
+    const [draggedItem] = newPrompts.splice(draggedItemIndex, 1);
+    
+    let insertAtIndex;
+    if (position === 'before') {
+        insertAtIndex = originalTargetIndex;
+    } else {
+        insertAtIndex = originalTargetIndex + 1;
+    }
+    insertAtIndex = Math.max(0, Math.min(newPrompts.length, insertAtIndex));
+
+    newPrompts.splice(insertAtIndex, 0, draggedItem);
+
+    setUserPrompts(newPrompts);
+    try {
+      if (selectedPromptId) {
+        await reorderUserAddedPrompts(selectedPromptId, newPrompts);
+      } else {
+      }
+    } catch (error) {
+      setUserPrompts(userPrompts);
+      alert('프롬프트 순서 저장에 실패했습니다.');
+    }
+
+    dragItem.current = null;
+    setDragOverId(null);
+    setDropPos(null);
+  };
+
+  const handleDragEnd = (e) => {
+    const draggedElement = document.querySelector(`[data-id="${dragItem.current}"]`);
+    draggedElement?.classList.remove('dragging-card');
+
+    dragItem.current = null;
+    setDragOverId(null);
+    setDropPos(null);
+  };
+
+  // --- End Drag and Drop Handlers ---
+
   const renderPromptItemCard = useCallback((prompt) => {
+    const isDraggingOver = dragOverId === prompt.id;
+    const showMarker = isDraggingOver && dropPos;
+    const isBeingDragged = dragItem.current === prompt.id;
+    const hoverClasses = "hover:bg-blue-50";
+
+    const handleInlineDrop = (e) => {
+        handleDrop(e);
+    }
+
     return (
-      <PromptItemCard
+      <div
         key={prompt.id}
-        prompt={prompt}
-        onClick={handleCardClick}
-        customEditHandler={(e) => handlePromptEdit(prompt, e)}
-        customDeleteHandler={(e) => handlePromptDelete(prompt, e)}
-        customExportHandler={(e) => handleExportPrompt(prompt, e)} // 내보내기 핸들러 추가
-        isVersionTab={false} // 사용자 추가 탭은 isVersionTab=false
-      />
+        className={`relative user-prompt-card ${isBeingDragged ? 'opacity-50' : hoverClasses} cursor-move`}
+        draggable={!isExporting && !isDeleting}
+        onDragStart={(e) => handleDragStart(e, prompt.id)}
+        onDragOver={(e) => handleDragOver(e, prompt.id)}
+        onDragLeave={handleDragLeave}
+        onDrop={handleInlineDrop}
+        onDragEnd={handleDragEnd}
+        data-id={prompt.id}
+      >
+        {showMarker && dropPos === 'before' && (
+          <div className="absolute top-0 left-0 right-0 h-1 bg-blue-500 z-10 pointer-events-none" />
+        )}
+        <div style={{ pointerEvents: isDraggingOver ? 'none' : 'auto' }}>
+          <PromptItemCard
+            prompt={prompt}
+            onClick={handleCardClick}
+            customEditHandler={(e) => handlePromptEdit(prompt, e)}
+            customDeleteHandler={(e) => handlePromptDelete(prompt, e)}
+            customExportHandler={(e) => handleExportPrompt(prompt, e)}
+            isVersionTab={false}
+          />
+        </div>
+         {showMarker && dropPos === 'after' && (
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-500 z-10 pointer-events-none" />
+        )}
+      </div>
     );
-  }, [handleCardClick, handlePromptEdit, handlePromptDelete, handleExportPrompt]); // 의존성 배열에 handleExportPrompt 추가
+  }, [handleCardClick, handlePromptEdit, handlePromptDelete, handleExportPrompt, isExporting, isDeleting, handleDrop, dragOverId, dropPos]);
   
   // 로딩 상태 표시
   const renderLoading = () => (
@@ -710,8 +858,8 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
       </div>
       
       {/* 프롬프트 목록 영역 */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {isLoading || isExporting ? ( // 내보내기 로딩 상태 추가
+      <div className="flex-1 overflow-y-auto p-4 user-prompt-list-container">
+        {isLoading || isExporting ? (
           renderLoading()
         ) : error ? (
           renderError()
@@ -720,7 +868,7 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
         ) : userPrompts.length === 0 ? (
           renderEmpty('추가된 사용자 프롬프트가 없습니다')
         ) : (
-          <div className="space-y-2">
+          <div>
             {userPrompts.map(prompt => renderPromptItemCard(prompt))}
           </div>
         )}
@@ -741,7 +889,7 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
         <ImportPromptModal 
           isOpen={isImportModalOpen}
           onClose={() => setIsImportModalOpen(false)}
-          onImport={handleImportPrompt} // 임포트 핸들러 전달
+          onImport={handleImportPrompt}
         />
       )}
     </div>

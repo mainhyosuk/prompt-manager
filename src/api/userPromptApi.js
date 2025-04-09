@@ -247,4 +247,34 @@ export const deleteUserAddedPrompt = async (promptId) => {
     console.error('사용자 추가 프롬프트 삭제 오류:', error);
     throw error;
   }
+};
+
+/**
+ * 특정 부모 프롬프트에 대한 사용자 추가 프롬프트 목록의 순서를 업데이트합니다.
+ * @param {string} parentId - 부모 프롬프트 ID
+ * @param {Array} reorderedPrompts - 순서가 변경된 프롬프트 객체 배열
+ * @returns {Promise<void>}
+ */
+export const reorderUserAddedPrompts = async (parentId, reorderedPrompts) => {
+  if (!parentId || !Array.isArray(reorderedPrompts)) {
+    console.error('Invalid arguments for reordering user prompts.');
+    throw new Error('순서 변경을 위한 유효하지 않은 인자입니다.');
+  }
+
+  try {
+    const userPrompts = getUserPromptsFromStorage();
+
+    // 해당 부모 ID의 목록을 새 순서로 업데이트
+    userPrompts[parentId] = reorderedPrompts;
+
+    // 로컬 스토리지에 저장
+    saveUserPromptsToStorage(userPrompts);
+
+    // 인위적인 지연 (선택적)
+    await new Promise(resolve => setTimeout(resolve, 100)); 
+
+  } catch (error) {
+    console.error('사용자 추가 프롬프트 순서 변경 오류:', error);
+    throw error;
+  }
 }; 
