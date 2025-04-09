@@ -97,7 +97,15 @@ export const createUserAddedPrompt = async (promptData) => {
       created_at: promptData.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
       is_user_added: true,
-      parent_title: parentTitle
+      parent_title: parentTitle,
+      
+      // 필요한 경우 기본값을 설정
+      variables: promptData.variables || [],
+      tags: promptData.tags || [],
+      memo: promptData.memo || '',
+      folder_id: promptData.folder_id || null,
+      folder: promptData.folder || null,
+      is_favorite: promptData.is_favorite || false
     };
     
     // 로컬 스토리지에서 사용자 추가 프롬프트 데이터 조회
@@ -168,10 +176,18 @@ export const updateUserAddedPrompt = async (promptId, promptData) => {
       const promptIndex = parentPrompts.findIndex(p => p.id === promptId);
       
       if (promptIndex !== -1) {
-        // 프롬프트 업데이트
+        // 프롬프트 업데이트 - 태그, 변수, 폴더 정보 등 모든 필드 보존
         updatedPrompt = {
           ...parentPrompts[promptIndex],
           ...promptData,
+          title: promptData.title || parentPrompts[promptIndex].title,
+          content: promptData.content || parentPrompts[promptIndex].content,
+          memo: promptData.memo || parentPrompts[promptIndex].memo,
+          variables: promptData.variables || parentPrompts[promptIndex].variables || [],
+          tags: promptData.tags || parentPrompts[promptIndex].tags || [],
+          folder_id: promptData.folder_id,
+          folder: promptData.folder,
+          is_favorite: typeof promptData.is_favorite !== 'undefined' ? promptData.is_favorite : parentPrompts[promptIndex].is_favorite,
           updated_at: new Date().toISOString(),
           is_user_added: true // is_user_added 속성 보존
         };
