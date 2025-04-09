@@ -11,6 +11,7 @@ from routes.prompt_routes import prompt_bp
 from routes.folder_routes import folder_bp
 from routes.tag_routes import tag_bp
 from routes.settings_routes import settings_bp
+from routes.collection_routes import collection_bp
 
 app = Flask(__name__)
 
@@ -48,6 +49,7 @@ app.register_blueprint(prompt_bp)
 app.register_blueprint(folder_bp)
 app.register_blueprint(tag_bp)
 app.register_blueprint(settings_bp)
+app.register_blueprint(collection_bp)
 
 
 # 루트 경로

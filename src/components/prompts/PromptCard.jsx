@@ -74,7 +74,9 @@ const PromptCard = ({ prompt }) => {
       <button
         onClick={(e) => {
           e.stopPropagation();
-          handleEditPrompt(prompt);
+          // 최신 프롬프트 데이터를 편집 모달로 전달
+          const latestPromptData = { ...prompt };
+          handleEditPrompt(latestPromptData);
         }}
         className="p-1 rounded-full bg-white bg-opacity-80 hover:bg-opacity-100 text-gray-600 hover:text-blue-500"
         title="편집"

@@ -107,6 +107,33 @@ def init_db():
     """
     )
 
+    # 컬렉션 테이블 추가
+    cursor.execute(
+        """
+    CREATE TABLE IF NOT EXISTS collections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """
+    )
+
+    # 컬렉션-프롬프트 관계 테이블 추가
+    cursor.execute(
+        """
+    CREATE TABLE IF NOT EXISTS collection_prompts (
+        collection_id INTEGER,
+        prompt_id INTEGER,
+        position INTEGER DEFAULT 0,
+        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (collection_id, prompt_id),
+        FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+        FOREIGN KEY (prompt_id) REFERENCES prompts(id) ON DELETE CASCADE
+    )
+    """
+    )
+
     conn.commit()
 
     # 기존 DB가 없는 경우에만 기본 데이터 추가
@@ -287,6 +314,22 @@ def create_default_data(conn=None):
         """
         )
 
+    # 기본 컬렉션 생성 (아직 없는 경우에만)
+    cursor.execute("SELECT COUNT(*) FROM collections")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute(
+            """
+        INSERT INTO collections (name)
+        VALUES ('자주 사용하는 프롬프트')
+        """
+        )
+        cursor.execute(
+            """
+        INSERT INTO collections (name)
+        VALUES ('유용한 템플릿')
+        """
+        )
+
     # 데이터베이스에 변경 사항 반영
     conn.commit()
 
@@ -408,6 +451,72 @@ def add_sample_prompts():
     conn.close()
 
 
+def migrate_collections_tables():
+    """collections 및 collection_prompts 테이블이 없으면 추가합니다."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # 테이블 목록 확인
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [table[0] for table in cursor.fetchall()]
+
+        # collections 테이블이 없으면 추가
+        if "collections" not in tables:
+            print("collections 테이블이 없어 새로 생성합니다.")
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS collections (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+
+            # 기본 컬렉션 추가
+            cursor.execute(
+                """
+                INSERT INTO collections (name)
+                VALUES ('자주 사용하는 프롬프트')
+                """
+            )
+            cursor.execute(
+                """
+                INSERT INTO collections (name)
+                VALUES ('유용한 템플릿')
+                """
+            )
+            print("기본 컬렉션이 추가되었습니다.")
+
+        # collection_prompts 테이블이 없으면 추가
+        if "collection_prompts" not in tables:
+            print("collection_prompts 테이블이 없어 새로 생성합니다.")
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS collection_prompts (
+                    collection_id INTEGER,
+                    prompt_id INTEGER,
+                    position INTEGER DEFAULT 0,
+                    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (collection_id, prompt_id),
+                    FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+                    FOREIGN KEY (prompt_id) REFERENCES prompts(id) ON DELETE CASCADE
+                )
+                """
+            )
+            print("collection_prompts 테이블이 추가되었습니다.")
+
+        conn.commit()
+
+    except Exception as e:
+        conn.rollback()
+        print(f"컬렉션 테이블 마이그레이션 오류: {str(e)}")
+    finally:
+        conn.close()
+
+
 # 데이터베이스 초기화 함수 - 애플리케이션 시작 시 호출
 def setup_database():
     """데이터베이스 초기화 및 필요한 경우 샘플 데이터 추가"""
@@ -423,6 +532,9 @@ def setup_database():
 
         # memo 필드 마이그레이션
         migrate_memo_field()
+
+        # collections 테이블 마이그레이션
+        migrate_collections_tables()
 
         # 데이터베이스가 새로 생성된 경우에만 샘플 프롬프트 추가
         if not db_exists:
