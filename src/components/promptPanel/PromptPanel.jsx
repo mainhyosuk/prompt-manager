@@ -5,12 +5,14 @@ import { Plus } from 'lucide-react';
 import { getCollections, createCollection, deleteCollection, addPromptToCollection, removePromptFromCollection, renameCollection, reorderCollections } from '../../api/collectionApi';
 import { getCollectionPrompts, getSimilarPrompts, getRecentPrompts } from '../../api/collectionApi';
 import { getPromptVersions, createPromptVersion, updatePromptVersion, setAsLatestVersion, deletePromptVersion } from '../../api/versionApi';
+import { getUserAddedPrompts, createUserAddedPrompt, updateUserAddedPrompt, deleteUserAddedPrompt } from '../../api/userPromptApi';
 import AddPromptToCollectionModal from '../../modals/AddPromptToCollectionModal';
 import CollectionsList from './CollectionsList';
 import SimilarPromptsList from './SimilarPromptsList';
 import RecentPromptsList from './RecentPromptsList';
 import VersionDetailModal from '../../modals/VersionDetailModal';
 import VersionEditModal from '../../modals/VersionEditModal';
+import UserPromptEditModal from '../../modals/UserPromptEditModal';
 
 // 버전 관리 탭 컴포넌트 추가
 const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
@@ -408,6 +410,233 @@ const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
   );
 };
 
+// 사용자 추가 프롬프트 관리 컴포넌트
+const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
+  const [userPrompts, setUserPrompts] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [newPromptTitle, setNewPromptTitle] = useState('');
+  const [editingPrompt, setEditingPrompt] = useState(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  // 현재 선택된 프롬프트 정보를 가져오기 위한 컨텍스트 접근
+  const { selectedPrompt, updatePromptItem } = useAppContext();
+  
+  // 사용자 추가 프롬프트 데이터 로드
+  const loadUserPrompts = useCallback(async () => {
+    if (!selectedPromptId) return;
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // API를 통해 사용자 추가 프롬프트 목록 가져오기
+      const response = await getUserAddedPrompts(selectedPromptId);
+      setUserPrompts(response);
+    } catch (err) {
+      console.error('사용자 추가 프롬프트 로드 오류:', err);
+      setError('사용자 추가 프롬프트를 불러오는데 실패했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedPromptId]);
+  
+  // 새 사용자 프롬프트 생성 핸들러
+  const handleCreateNewPrompt = async () => {
+    if (!selectedPrompt) return;
+    
+    try {
+      // 새 프롬프트 생성을 위한 데이터 준비
+      const newPromptData = {
+        parent_id: selectedPrompt.id,
+        title: newPromptTitle.trim() || `${selectedPrompt.title}의 사용자 추가 프롬프트`,
+        content: "", // 기본 내용은 비워둡니다
+        variables: [], // 기본 변수는 비워둡니다
+        tags: [],
+        is_user_added: true, // 사용자 추가 프롬프트 플래그
+        created_at: new Date().toISOString()
+      };
+      
+      // API를 통해 새 프롬프트 생성 및 저장
+      const createdPrompt = await createUserAddedPrompt(newPromptData);
+      
+      // 응답 받은 프롬프트를 목록에 추가
+      setUserPrompts(prev => [createdPrompt, ...prev]);
+      
+      // 입력 필드 초기화
+      setNewPromptTitle('');
+      
+    } catch (err) {
+      console.error('사용자 추가 프롬프트 생성 오류:', err);
+      alert('사용자 추가 프롬프트를 생성하는데 실패했습니다.');
+    }
+  };
+  
+  // 프롬프트 삭제 핸들러
+  const handlePromptDelete = async (prompt, e) => {
+    e.stopPropagation(); // 이벤트 버블링 방지
+    
+    if (!prompt) return;
+    
+    if (window.confirm(`정말로 "${prompt.title}" 프롬프트를 삭제하시겠습니까?`)) {
+      try {
+        setIsDeleting(true);
+        
+        // API를 통해 프롬프트 삭제
+        await deleteUserAddedPrompt(prompt.id);
+        
+        // 프롬프트 목록에서 해당 프롬프트 제거
+        setUserPrompts(prev => prev.filter(p => p.id !== prompt.id));
+        
+        // 편집 모달이 열려있고, 삭제한 프롬프트와 같은 프롬프트이면 모달 닫기
+        if (isEditModalOpen && editingPrompt && editingPrompt.id === prompt.id) {
+          setIsEditModalOpen(false);
+          setEditingPrompt(null);
+        }
+        
+      } catch (error) {
+        console.error('프롬프트 삭제 오류:', error);
+        alert('프롬프트 삭제에 실패했습니다.');
+      } finally {
+        setIsDeleting(false);
+      }
+    }
+  };
+  
+  // 프롬프트 업데이트 핸들러
+  const handlePromptUpdate = useCallback(async (updatedPrompt) => {
+    try {
+      // API를 통해 프롬프트 업데이트
+      const updatedData = await updateUserAddedPrompt(updatedPrompt.id, updatedPrompt);
+      
+      // 프롬프트 목록에서 해당 프롬프트 업데이트
+      setUserPrompts(prev => 
+        prev.map(prompt => 
+          prompt.id === updatedData.id ? updatedData : prompt
+        )
+      );
+    } catch (error) {
+      console.error('프롬프트 업데이트 오류:', error);
+      alert('프롬프트 업데이트에 실패했습니다.');
+    }
+  }, []);
+  
+  // 프롬프트 편집 핸들러
+  const handlePromptEdit = useCallback((prompt) => {
+    setEditingPrompt(prompt);
+    setIsEditModalOpen(true);
+  }, []);
+  
+  // 카드 클릭 핸들러 (상세 모달 표시 대신 바로 편집 모달 표시)
+  const handleCardClick = useCallback((prompt) => {
+    // 상세 모달 대신 바로 편집 모달을 열도록 수정
+    handlePromptEdit(prompt);
+  }, [handlePromptEdit]);
+  
+  // 편집 모달 닫기
+  const handleCloseEditModal = useCallback(() => {
+    setIsEditModalOpen(false);
+    setEditingPrompt(null);
+  }, []);
+  
+  // 프롬프트 패널 내에서 편집 버튼 클릭 시 호출될 핸들러
+  const handleEditButtonClick = useCallback((prompt, e) => {
+    e.stopPropagation(); // 카드 클릭 이벤트 전파 중지
+    handlePromptEdit(prompt);
+  }, [handlePromptEdit]);
+  
+  // 프롬프트 카드용 커스텀 렌더링 함수
+  const renderPromptItemCard = useCallback((prompt) => {
+    return (
+      <PromptItemCard
+        key={prompt.id}
+        prompt={prompt}
+        onClick={handleCardClick}
+        customEditHandler={(e) => handleEditButtonClick(prompt, e)}
+        customDeleteHandler={(e) => handlePromptDelete(prompt, e)}
+        isVersionTab={true} // 같은 아이콘 스타일 사용
+      />
+    );
+  }, [handleCardClick, handleEditButtonClick, handlePromptDelete]);
+  
+  // 로딩 상태 표시
+  const renderLoading = () => (
+    <div className="flex items-center justify-center h-32">
+      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+    </div>
+  );
+  
+  // 오류 메시지 표시
+  const renderError = () => (
+    <div className="text-red-500 p-4 text-center">
+      <p>{error}</p>
+    </div>
+  );
+  
+  // 빈 상태 표시
+  const renderEmpty = (message) => (
+    <div className="text-center py-6">
+      <p className="text-gray-500">{message}</p>
+    </div>
+  );
+  
+  // useEffect - 프롬프트가 변경되거나 컴포넌트 마운트될 때 프롬프트 목록 로드
+  useEffect(() => {
+    loadUserPrompts();
+  }, [loadUserPrompts]);
+  
+  return (
+    <div className="h-full flex flex-col">
+      {/* 프롬프트 생성 입력 영역 */}
+      <div className="p-4 border-b flex items-center space-x-2">
+        <input
+          type="text"
+          value={newPromptTitle}
+          onChange={(e) => setNewPromptTitle(e.target.value)}
+          placeholder="새 프롬프트 제목 입력"
+          className="flex-1 p-2 border rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+          disabled={!selectedPromptId}
+        />
+        <button
+          onClick={handleCreateNewPrompt}
+          className="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+          disabled={!selectedPromptId}
+        >
+          추가하기
+        </button>
+      </div>
+      
+      {/* 프롬프트 목록 영역 */}
+      <div className="flex-1 overflow-y-auto p-4">
+        {isLoading ? (
+          renderLoading()
+        ) : error ? (
+          renderError()
+        ) : !selectedPromptId ? (
+          renderEmpty('선택된 프롬프트가 없습니다')
+        ) : userPrompts.length === 0 ? (
+          renderEmpty('추가된 사용자 프롬프트가 없습니다')
+        ) : (
+          <div className="space-y-2">
+            {userPrompts.map(prompt => renderPromptItemCard(prompt))}
+          </div>
+        )}
+      </div>
+      
+      {/* 편집 모달 */}
+      {isEditModalOpen && editingPrompt && (
+        <UserPromptEditModal
+          isOpen={isEditModalOpen}
+          onClose={handleCloseEditModal}
+          prompt={editingPrompt}
+          onUpdate={handlePromptUpdate}
+        />
+      )}
+    </div>
+  );
+};
+
 const PromptPanel = ({ 
   selectedPromptId = null, 
   onPromptSelect, 
@@ -644,15 +873,15 @@ const PromptPanel = ({
       case 'version':
         // 버전 관리 탭은 컴포넌트 내부에서 데이터를 로드하므로 여기서는 처리하지 않음
         break;
+      case 'user-added':
+        // 사용자 추가 탭은 컴포넌트 내부에서 데이터를 로드하므로 여기서는 처리하지 않음
+        break;
       case 'collections':
         if (selectedCollectionId) {
           loadCollectionPrompts(selectedCollectionId);
         } else {
           setPrompts([]);
         }
-        break;
-      case 'similar':
-        loadSimilarPrompts();
         break;
       case 'recent':
         loadRecentPrompts();
@@ -715,6 +944,18 @@ const PromptPanel = ({
             onPromptSelect={(prompt) => {
               // 버전 관리 탭에서는 onPromptSelect가 필요하지 않음
               // 카드 클릭 시 자체적으로 편집 모달을 표시
+            }}
+          />
+        );
+      case 'user-added':
+        return (
+          <UserAddedPromptsList
+            selectedPromptId={selectedPromptId}
+            onPromptSelect={(prompt) => {
+              // 이벤트 버블링을 방지하고 오버레이 모달을 열도록 수정
+              if (prompt) {
+                openOverlayModal(prompt);
+              }
             }}
           />
         );
@@ -782,6 +1023,16 @@ const PromptPanel = ({
           onClick={() => setActiveTab('version')}
         >
           버전 관리
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium ${
+            activeTab === 'user-added' 
+              ? 'border-b-2 border-blue-500 text-blue-600' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+          onClick={() => setActiveTab('user-added')}
+        >
+          사용자 추가
         </button>
         <button
           className={`px-4 py-2 text-sm font-medium ${
