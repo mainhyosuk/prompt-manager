@@ -13,6 +13,7 @@ import RecentPromptsList from './RecentPromptsList';
 import VersionDetailModal from '../../modals/VersionDetailModal';
 import VersionEditModal from '../../modals/VersionEditModal';
 import UserPromptEditModal from '../../modals/UserPromptEditModal';
+import ImportPromptModal from '../../modals/ImportPromptModal';
 
 // 버전 관리 탭 컴포넌트 추가
 const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
@@ -419,9 +420,10 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
   const [editingPrompt, setEditingPrompt] = useState(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   
   // 현재 선택된 프롬프트 정보를 가져오기 위한 컨텍스트 접근
-  const { selectedPrompt, updatePromptItem, openOverlayModal: contextOpenOverlayModal, userPromptUpdateTimestamp } = useAppContext();
+  const { selectedPrompt, updatePromptItem, openOverlayModal: contextOpenOverlayModal, userPromptUpdateTimestamp, setUserPromptUpdateTimestamp } = useAppContext();
   
   // 사용자 추가 프롬프트 데이터 로드
   const loadUserPrompts = useCallback(async () => {
@@ -547,11 +549,46 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
     setEditingPrompt(null);
   }, []);
   
-  // 프롬프트 패널 내에서 편집 버튼 클릭 시 호출될 핸들러
-  const handleEditButtonClick = useCallback((prompt, e) => {
-    e.stopPropagation(); // 카드 클릭 이벤트 전파 중지
-    handlePromptEdit(prompt, e);
-  }, [handlePromptEdit]);
+  // 프롬프트 불러오기 핸들러 (모달 열기)
+  const handleOpenImportModal = () => {
+    setIsImportModalOpen(true);
+  };
+
+  // 프롬프트 불러오기 완료 핸들러 (모달 닫고 프롬프트 생성)
+  const handleImportPrompt = async (importedPrompt) => {
+    if (!selectedPromptId || !importedPrompt) return;
+    
+    try {
+      // 1. 불러온 프롬프트 데이터 기반으로 새 사용자 프롬프트 데이터 준비
+      const newPromptData = {
+        parent_id: selectedPromptId, 
+        parent_title: selectedPrompt?.title, // 현재 패널의 부모 정보 사용
+        title: `${importedPrompt.title} (불러옴)`, // 제목 구분
+        content: importedPrompt.content,
+        variables: importedPrompt.variables || [],
+        tags: importedPrompt.tags || [], // 태그도 가져올 수 있음 (선택사항)
+        memo: importedPrompt.memo || '',
+        is_user_added: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        // 원본 ID 저장 (선택사항)
+        // original_prompt_id: importedPrompt.id 
+      };
+
+      // 2. createUserAddedPrompt API 호출하여 저장
+      await createUserAddedPrompt(newPromptData);
+
+      // 3. 타임스탬프 업데이트하여 목록 새로고침
+      setUserPromptUpdateTimestamp(Date.now());
+
+      setIsImportModalOpen(false); // 모달 닫기
+      
+    } catch (err) {
+      console.error('프롬프트 불러오기 오류:', err);
+      alert('프롬프트를 불러오는 중 오류가 발생했습니다.');
+      setIsImportModalOpen(false); // 오류 시에도 모달 닫기
+    }
+  };
   
   // 프롬프트 카드용 커스텀 렌더링 함수
   const renderPromptItemCard = useCallback((prompt) => {
@@ -560,12 +597,12 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
         key={prompt.id}
         prompt={prompt}
         onClick={handleCardClick}
-        customEditHandler={(e) => handleEditButtonClick(prompt, e)}
+        customEditHandler={(e) => handlePromptEdit(prompt, e)}
         customDeleteHandler={(e) => handlePromptDelete(prompt, e)}
         isVersionTab={true} // 같은 아이콘 스타일 사용
       />
     );
-  }, [handleCardClick, handleEditButtonClick, handlePromptDelete]);
+  }, [handleCardClick, handlePromptEdit, handlePromptDelete]);
   
   // 로딩 상태 표시
   const renderLoading = () => (
@@ -607,10 +644,19 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
         />
         <button
           onClick={handleCreateNewPrompt}
-          className="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+          className="px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm"
           disabled={!selectedPromptId}
         >
-          추가하기
+          추가
+        </button>
+        {/* 불러오기 버튼 추가 */}
+        <button
+          onClick={handleOpenImportModal} 
+          className="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm"
+          disabled={!selectedPromptId} 
+          title="기존 프롬프트 불러오기"
+        >
+          불러오기
         </button>
       </div>
       
@@ -638,6 +684,15 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
           onClose={handleCloseEditModal}
           prompt={editingPrompt}
           onUpdate={handlePromptUpdate}
+        />
+      )}
+
+      {/* 불러오기 모달 추가 */}
+      {isImportModalOpen && (
+        <ImportPromptModal 
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          onImport={handleImportPrompt} // 임포트 핸들러 전달
         />
       )}
     </div>
@@ -1099,3 +1154,4 @@ const PromptPanel = ({
 };
 
 export default PromptPanel;
+

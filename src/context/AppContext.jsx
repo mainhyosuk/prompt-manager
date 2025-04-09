@@ -679,7 +679,8 @@ export const AppProvider = ({ children }) => {
     setOverlayPrompt,
     setIsUserPromptModalOpen,
     setUserPrompt,
-    handleUpdateUserAddedPrompt
+    handleUpdateUserAddedPrompt,
+    setUserPromptUpdateTimestamp
   };
 
   return (
