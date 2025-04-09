@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { copyToClipboard } from '../../utils/clipboard';
+import { Download } from 'lucide-react';
 
 const PromptItemCard = ({ 
   prompt, 
@@ -81,7 +82,10 @@ const PromptItemCard = ({
       }}
     >
       <div className="flex justify-between items-start mb-2 flex-none">
-        <h3 className="font-medium text-gray-800 flex-1 mr-2 truncate max-w-[75%]">{truncateText(prompt.title, 30)}</h3>
+        <h3 className="font-medium text-gray-800 flex items-center flex-1 mr-2 truncate max-w-[75%]">
+          {prompt.is_imported && <Download size={14} className="mr-1.5 text-blue-500 flex-shrink-0" title="불러온 프롬프트"/>}
+          <span className="truncate">{truncateText(prompt.title, 30)}</span>
+        </h3>
         <div className="flex items-center space-x-1 ml-auto">
           {/* 버전 관리 탭일 때는 편집 및 삭제 버튼만 표시 */}
           {isVersionTab ? (

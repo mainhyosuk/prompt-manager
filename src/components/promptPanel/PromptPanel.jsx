@@ -563,16 +563,15 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
       const newPromptData = {
         parent_id: selectedPromptId, 
         parent_title: selectedPrompt?.title, // 현재 패널의 부모 정보 사용
-        title: `${importedPrompt.title} (불러옴)`, // 제목 구분
+        title: importedPrompt.title, // 원본 제목 유지
         content: importedPrompt.content,
         variables: importedPrompt.variables || [],
-        tags: importedPrompt.tags || [], // 태그도 가져올 수 있음 (선택사항)
+        tags: importedPrompt.tags || [], 
         memo: importedPrompt.memo || '',
         is_user_added: true,
+        is_imported: true, // 불러옴 플래그 추가
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        // 원본 ID 저장 (선택사항)
-        // original_prompt_id: importedPrompt.id 
       };
 
       // 2. createUserAddedPrompt API 호출하여 저장
