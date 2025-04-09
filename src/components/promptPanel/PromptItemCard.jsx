@@ -6,7 +6,9 @@ const PromptItemCard = ({
   prompt, 
   onRemoveFromCollection,
   onClick,
-  customEditHandler // 버전 관리 탭에서 사용될 때 편집 버튼의 동작을 오버라이드
+  customEditHandler, // 버전 관리 탭에서 사용될 때 편집 버튼의 동작을 오버라이드
+  customDeleteHandler, // 버전 관리 탭에서 사용될 때 삭제 버튼의 동작을 오버라이드
+  isVersionTab = false // 버전 관리 탭에서 사용되는지 여부
 }) => {
   const { getTagColorClasses, handleToggleFavorite, handleRecordUsage, handleEditPrompt } = useAppContext();
   
@@ -51,6 +53,16 @@ const PromptItemCard = ({
     handleEditPrompt(latestPromptData);
   };
   
+  // 삭제 핸들러
+  const handleDelete = (e) => {
+    e.stopPropagation();
+    
+    // 커스텀 삭제 핸들러가 제공된 경우 (버전 관리 탭에서 사용 시)
+    if (customDeleteHandler) {
+      customDeleteHandler(e);
+    }
+  };
+  
   // 컬렉션에서 제거 핸들러
   const handleRemove = (e) => {
     e.stopPropagation();
@@ -69,43 +81,66 @@ const PromptItemCard = ({
       }}
     >
       <div className="flex justify-between items-start mb-2 flex-none">
-        <h3 className="font-medium text-gray-800 flex-1 mr-2 truncate">{truncateText(prompt.title, 30)}</h3>
-        <div className="flex space-x-1 w-[110px] justify-end flex-none">
-          <button 
-            onClick={handleFavoriteToggle}
-            className="text-gray-400 hover:text-yellow-500 p-1 w-7 h-7 flex items-center justify-center"
-            title={prompt.is_favorite ? '즐겨찾기 해제' : '즐겨찾기에 추가'}
-          >
-            <span className={prompt.is_favorite ? 'text-yellow-400' : ''}>★</span>
-          </button>
-          
-          <button
-            onClick={handleEdit}
-            className="text-gray-400 hover:text-blue-500 p-1 w-7 h-7 flex items-center justify-center"
-            title="편집"
-          >
-            <span>✎</span>
-          </button>
-          
-          <button
-            onClick={handleCopy}
-            className="text-gray-400 hover:text-green-500 p-1 w-7 h-7 flex items-center justify-center"
-            title="클립보드에 복사"
-          >
-            <span>📋</span>
-          </button>
-          
-          <div className="w-7 h-7 flex items-center justify-center">
-            {onRemoveFromCollection && (
+        <h3 className="font-medium text-gray-800 flex-1 mr-2 truncate max-w-[75%]">{truncateText(prompt.title, 30)}</h3>
+        <div className="flex items-center space-x-1 ml-auto">
+          {/* 버전 관리 탭일 때는 편집 및 삭제 버튼만 표시 */}
+          {isVersionTab ? (
+            <>
               <button
-                onClick={handleRemove}
-                className="text-red-400 hover:text-red-600 p-1"
-                title="컬렉션에서 제거"
+                onClick={handleEdit}
+                className="text-gray-400 hover:text-blue-500 p-1 flex items-center justify-center"
+                title="편집"
               >
-                <span>✕</span>
+                <span>✎</span>
               </button>
-            )}
-          </div>
+              
+              {!prompt.is_current_version && (
+                <button
+                  onClick={handleDelete}
+                  className="text-gray-400 hover:text-red-600 p-1 flex items-center justify-center"
+                  title="삭제"
+                >
+                  <span>🗑️</span>
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <button 
+                onClick={handleFavoriteToggle}
+                className="text-gray-400 hover:text-yellow-500 p-1 flex items-center justify-center"
+                title={prompt.is_favorite ? '즐겨찾기 해제' : '즐겨찾기에 추가'}
+              >
+                <span className={prompt.is_favorite ? 'text-yellow-400' : ''}>★</span>
+              </button>
+              
+              <button
+                onClick={handleEdit}
+                className="text-gray-400 hover:text-blue-500 p-1 flex items-center justify-center"
+                title="편집"
+              >
+                <span>✎</span>
+              </button>
+              
+              <button
+                onClick={handleCopy}
+                className="text-gray-400 hover:text-green-500 p-1 flex items-center justify-center"
+                title="클립보드에 복사"
+              >
+                <span>📋</span>
+              </button>
+              
+              {onRemoveFromCollection && (
+                <button
+                  onClick={handleRemove}
+                  className="text-red-400 hover:text-red-600 p-1 flex items-center justify-center"
+                  title="컬렉션에서 제거"
+                >
+                  <span>✕</span>
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
       
