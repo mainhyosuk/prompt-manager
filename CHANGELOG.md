@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.4] - 2024-04-09
+
+### Added
+- 프롬프트 모달 우측 패널 하단에 유사한 프롬프트 목록 표시 기능 추가
+
 ## [v1.362] - 2025-04-08
 
 ### Fixed
