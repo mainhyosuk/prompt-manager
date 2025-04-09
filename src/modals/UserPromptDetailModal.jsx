@@ -81,39 +81,23 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
     }
   }, [isOpen, prompt]);
   
-  // 외부 클릭 감지
-  useEffect(() => {
-    const handleOutsideClick = (event) => {
-      if (isOpen && modalRef.current && !modalRef.current.contains(event.target)) {
-        event.stopPropagation();
-        onClose();
-      }
-    };
-    
-    if (isOpen) {
-      document.addEventListener('mousedown', handleOutsideClick, true);
-    }
-    
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick, true);
-    };
-  }, [isOpen, onClose]);
-
   // ESC 키 입력 감지
   useEffect(() => {
     const handleEscKey = (event) => {
       if (isOpen && event.key === 'Escape') {
-        event.stopPropagation();
+        // onClose 호출 전 로그 주석 처리
+        // console.log('Closing UserPromptDetailModal due to ESC key.'); 
+        // ESC 키는 document 레벨에서 감지되므로 여기서 stopPropagation은 불필요
         onClose();
       }
     };
     
     if (isOpen) {
-      document.addEventListener('keydown', handleEscKey, true);
+      document.addEventListener('keydown', handleEscKey);
     }
     
     return () => {
-      document.removeEventListener('keydown', handleEscKey, true);
+      document.removeEventListener('keydown', handleEscKey);
     };
   }, [isOpen, onClose]);
 
@@ -181,11 +165,26 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
   if (!isOpen || !prompt) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div 
-        ref={modalRef} 
+    // 배경 div: mousedown 이벤트 처리 수정
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      onMouseDown={(e) => {
+        // 클릭 대상이 배경 div 자신일 경우 자식 모달 닫기
+        if (e.target === e.currentTarget) {
+          console.log('[Child Modal] Background directly clicked. Closing child modal and stopping propagation.');
+          onClose(); 
+        }
+        // 배경 또는 그 내부에서 시작된 mousedown 이벤트는 항상 전파 중단
+        e.stopPropagation();
+      }}
+    >
+      <div
+        ref={modalRef}
         className="bg-white rounded-lg shadow-xl w-10/12 max-w-5xl h-[67vh] flex flex-col"
+        // 이벤트 버블링을 막기 위해 onClick 핸들러 추가 (Click 이벤트 용도, mousedown과 별개)
         onClick={(e) => e.stopPropagation()}
+        // 자식 모달 식별을 위한 data-id 추가
+        data-id="user-prompt-detail-modal"
       >
         {/* 모달 헤더 */}
         <div className="flex justify-between items-center border-b px-5 py-3 flex-shrink-0">
@@ -208,7 +207,10 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
               <span>✎</span>
             </button>
             <button 
-              onClick={onClose}
+              onClick={(e) => { // 이벤트 객체 e를 받도록 수정
+                e.stopPropagation(); // 이벤트 전파 중단 추가
+                onClose();
+              }}
               className="text-gray-400 hover:text-gray-600"
               title="닫기"
             >
