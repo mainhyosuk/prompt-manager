@@ -184,6 +184,11 @@ const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
         title: updatedPrompt.title,
         content: updatedPrompt.content,
         memo: updatedPrompt.memo || '',
+        variables: updatedPrompt.variables || [],
+        tags: updatedPrompt.tags || [],
+        folder_id: updatedPrompt.folder_id,
+        folder: updatedPrompt.folder,
+        is_favorite: updatedPrompt.is_favorite !== undefined ? updatedPrompt.is_favorite : parentPrompt.is_favorite,
         updated_at: new Date().toISOString()
       };
       

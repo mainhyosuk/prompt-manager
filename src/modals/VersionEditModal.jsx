@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
+import { X, AlertTriangle } from 'lucide-react';
+import VariableList from '../components/variables/VariableList';
+import VariableHighlighter, { extractVariablesFromContent } from '../components/variables/VariableHighlighter';
+import TagSelector from '../components/tags/TagSelector';
+import FolderSelector from '../components/folders/FolderSelector';
 
 const VersionEditModal = ({ isOpen, onClose, prompt, onUpdate, onSetAsLatest }) => {
   const { updatePromptItem } = useAppContext();
@@ -8,6 +13,13 @@ const VersionEditModal = ({ isOpen, onClose, prompt, onUpdate, onSetAsLatest }) 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [memo, setMemo] = useState('');
+  const [folderInfo, setFolderInfo] = useState(null);
+  const [tags, setTags] = useState([]);
+  const [variables, setVariables] = useState([]);
+  const [isFavorite, setIsFavorite] = useState(false);
+  
+  // 검증 상태
+  const [errors, setErrors] = useState({});
   
   // 모달 참조
   const modalRef = useRef(null);
@@ -18,11 +30,22 @@ const VersionEditModal = ({ isOpen, onClose, prompt, onUpdate, onSetAsLatest }) 
       setTitle(prompt.title || '');
       setContent(prompt.content || '');
       setMemo(prompt.memo || '');
+      setVariables(prompt.variables || []);
+      setTags(prompt.tags || []);
+      setFolderInfo(prompt.folder_id ? {
+        id: prompt.folder_id,
+        name: prompt.folder
+      } : null);
+      setIsFavorite(!!prompt.is_favorite);
     } else {
       // 모달이 닫히거나 prompt가 없는 경우 상태 초기화
       setTitle('');
       setContent('');
       setMemo('');
+      setVariables([]);
+      setTags([]);
+      setFolderInfo(null);
+      setIsFavorite(false);
     }
   }, [isOpen, prompt]);
   
@@ -62,6 +85,63 @@ const VersionEditModal = ({ isOpen, onClose, prompt, onUpdate, onSetAsLatest }) 
     };
   }, [isOpen, onClose]);
   
+  // 내용 변경 시 변수 자동 추출
+  const handleContentChange = (newContent) => {
+    setContent(newContent);
+    
+    // 내용에서 변수 추출
+    const extractedVariables = extractVariablesFromContent(newContent);
+    
+    // 기존 변수 정보 유지하면서 새 변수 추가
+    const updatedVariables = [...variables];
+    
+    extractedVariables.forEach(newVar => {
+      // 이미 같은 이름의 변수가 있는지 확인
+      const existingVarIndex = updatedVariables.findIndex(v => v.name === newVar.name);
+      
+      if (existingVarIndex === -1) {
+        // 없으면 추가
+        updatedVariables.push(newVar);
+      }
+    });
+    
+    // 내용에 없는 변수 제거 (수동으로 추가한 변수는 유지)
+    const contentVariableNames = extractedVariables.map(v => v.name);
+    const finalVariables = updatedVariables.filter(v => 
+      contentVariableNames.includes(v.name) || v.name === ''
+    );
+    
+    setVariables(finalVariables);
+  };
+  
+  // 폼 검증
+  const validateForm = () => {
+    const newErrors = {};
+    
+    if (!title.trim()) {
+      newErrors.title = '제목을 입력해주세요.';
+    }
+    
+    if (!content.trim()) {
+      newErrors.content = '내용을 입력해주세요.';
+    }
+    
+    // 빈 변수명 검사
+    if (variables.some(v => v.name.trim() === '')) {
+      newErrors.variables = '변수명을 모두 입력해주세요.';
+    }
+    
+    // 중복 변수명 검사
+    const varNames = variables.map(v => v.name.trim());
+    const uniqueVarNames = new Set(varNames);
+    if (varNames.length !== uniqueVarNames.size) {
+      newErrors.variables = '중복된 변수명이 있습니다.';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+  
   // 메모 변경 핸들러
   const handleMemoChange = (e) => {
     setMemo(e.target.value);
@@ -76,6 +156,10 @@ const VersionEditModal = ({ isOpen, onClose, prompt, onUpdate, onSetAsLatest }) 
   const handleUpdate = async () => {
     if (!prompt) return;
     
+    if (!validateForm()) {
+      return;
+    }
+    
     try {
       // 수정된 데이터
       const updatedPrompt = {
@@ -83,6 +167,11 @@ const VersionEditModal = ({ isOpen, onClose, prompt, onUpdate, onSetAsLatest }) 
         title,
         content,
         memo,
+        variables,
+        tags,
+        folder_id: folderInfo?.id,
+        folder: folderInfo?.name,
+        is_favorite: isFavorite,
         updated_at: new Date().toISOString()
       };
       
@@ -123,12 +212,21 @@ const VersionEditModal = ({ isOpen, onClose, prompt, onUpdate, onSetAsLatest }) 
       return;
     }
     
+    if (!validateForm()) {
+      return;
+    }
+    
     // 수정된 데이터
     const updatedPrompt = {
       ...prompt,
       title,
       content,
       memo,
+      variables,
+      tags,
+      folder_id: folderInfo?.id,
+      folder: folderInfo?.name,
+      is_favorite: isFavorite,
       updated_at: new Date().toISOString()
     };
     
@@ -147,7 +245,7 @@ const VersionEditModal = ({ isOpen, onClose, prompt, onUpdate, onSetAsLatest }) 
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div 
         ref={modalRef} 
-        className="bg-white rounded-lg shadow-xl w-10/12 max-w-5xl h-[80vh] flex flex-col"
+        className="bg-white rounded-lg shadow-xl w-10/12 max-w-5xl h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 모달 헤더 */}
@@ -160,7 +258,7 @@ const VersionEditModal = ({ isOpen, onClose, prompt, onUpdate, onSetAsLatest }) 
             className="text-gray-400 hover:text-gray-600"
             title="닫기"
           >
-            <span>✕</span>
+            <X size={20} />
           </button>
         </div>
         
@@ -176,9 +274,17 @@ const VersionEditModal = ({ isOpen, onClose, prompt, onUpdate, onSetAsLatest }) 
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                  errors.title ? 'border-red-500' : 'border-gray-300'
+                }`}
                 placeholder="프롬프트 제목"
               />
+              {errors.title && (
+                <p className="mt-1 text-sm text-red-500 flex items-center">
+                  <AlertTriangle size={14} className="mr-1" />
+                  {errors.title}
+                </p>
+              )}
             </div>
             
             {/* 내용 입력 */}
@@ -188,11 +294,66 @@ const VersionEditModal = ({ isOpen, onClose, prompt, onUpdate, onSetAsLatest }) 
               </label>
               <textarea
                 value={content}
-                onChange={(e) => setContent(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="프롬프트 내용"
-                rows={15}
+                onChange={(e) => handleContentChange(e.target.value)}
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                  errors.content ? 'border-red-500' : 'border-gray-300'
+                }`}
+                placeholder="프롬프트 내용. {변수명} 형태로 변수를 추가할 수 있습니다."
+                rows={10}
               />
+              {errors.content && (
+                <p className="mt-1 text-sm text-red-500 flex items-center">
+                  <AlertTriangle size={14} className="mr-1" />
+                  {errors.content}
+                </p>
+              )}
+            </div>
+            
+            {/* 변수 하이라이팅 */}
+            {content && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  변수 미리보기
+                </label>
+                <VariableHighlighter content={content} />
+              </div>
+            )}
+            
+            {/* 변수 관리 */}
+            <VariableList 
+              variables={variables} 
+              setVariables={setVariables} 
+            />
+            {errors.variables && (
+              <p className="mt-1 mb-4 text-sm text-red-500 flex items-center">
+                <AlertTriangle size={14} className="mr-1" />
+                {errors.variables}
+              </p>
+            )}
+            
+            {/* 폴더 선택 */}
+            <FolderSelector 
+              selectedFolder={folderInfo} 
+              setSelectedFolder={setFolderInfo} 
+            />
+            
+            {/* 태그 선택 */}
+            <TagSelector 
+              selectedTags={tags} 
+              setSelectedTags={setTags} 
+            />
+            
+            {/* 즐겨찾기 토글 */}
+            <div>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={isFavorite}
+                  onChange={(e) => setIsFavorite(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">즐겨찾기에 추가</span>
+              </label>
             </div>
             
             {/* 메모 입력 */}
@@ -225,12 +386,14 @@ const VersionEditModal = ({ isOpen, onClose, prompt, onUpdate, onSetAsLatest }) 
           >
             업데이트
           </button>
-          <button
-            onClick={handleSetAsLatest}
-            className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
-          >
-            최신 버전 등록
-          </button>
+          {!prompt.is_current_version && (
+            <button
+              onClick={handleSetAsLatest}
+              className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
+            >
+              최신 버전 등록
+            </button>
+          )}
         </div>
       </div>
     </div>
