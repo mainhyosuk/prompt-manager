@@ -4,11 +4,13 @@ import PromptItemCard from './PromptItemCard';
 import { Plus } from 'lucide-react';
 import { getCollections, createCollection, deleteCollection, addPromptToCollection, removePromptFromCollection, renameCollection, reorderCollections } from '../../api/collectionApi';
 import { getCollectionPrompts, getSimilarPrompts, getRecentPrompts } from '../../api/collectionApi';
+import { getPromptVersions, createPromptVersion, updatePromptVersion, setAsLatestVersion } from '../../api/versionApi';
 import AddPromptToCollectionModal from '../../modals/AddPromptToCollectionModal';
 import CollectionsList from './CollectionsList';
 import SimilarPromptsList from './SimilarPromptsList';
 import RecentPromptsList from './RecentPromptsList';
 import VersionDetailModal from '../../modals/VersionDetailModal';
+import VersionEditModal from '../../modals/VersionEditModal';
 
 // 버전 관리 탭 컴포넌트 추가
 const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
@@ -18,9 +20,10 @@ const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
   const [newVersionTitle, setNewVersionTitle] = useState('');
   const [editingPrompt, setEditingPrompt] = useState(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   
   // 현재 선택된 프롬프트 정보를 가져오기 위한 컨텍스트 접근
-  const { selectedPrompt } = useAppContext();
+  const { selectedPrompt, updatePromptItem } = useAppContext();
   
   // 버전 데이터 로드 (실제는 선택된 프롬프트의 버전만 가져와야 함)
   useEffect(() => {
@@ -31,19 +34,40 @@ const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
       setError(null);
       
       try {
-        // 임시 로직: 현재 직접적인 버전 API가 없으므로, 로컬 상태만 관리
-        // 초기 로드 시 비워서 시작 (외부 프롬프트 연동하지 않음)
-        setVersions([]);
+        let versionsList = [];
         
-        // 현재 선택된 프롬프트가 있으면 첫 요소로 추가
-        // (실제로는 API에서 관리될 부분)
+        // 현재 선택된 프롬프트가 있으면
         if (selectedPrompt) {
-          setVersions([{
+          // 1. 현재 버전을 목록에 추가
+          const currentVersion = {
             ...selectedPrompt,
             title: `${selectedPrompt.title} (현재 버전)`,
-            is_current_version: true
-          }]);
+            is_current_version: true,
+            parent_id: selectedPrompt.id // 부모 ID 추가
+          };
+          
+          versionsList.push(currentVersion);
+          
+          // 2. DB에서 기존 버전 히스토리 가져오기
+          try {
+            const versionHistory = await getPromptVersions(selectedPrompt.id);
+            
+            // 버전 히스토리가 있으면 목록에 추가 (최신순 정렬)
+            if (versionHistory && Array.isArray(versionHistory) && versionHistory.length > 0) {
+              // 현재 버전을 제외하고 날짜순으로 정렬하여 추가
+              const sortedVersions = versionHistory
+                .filter(v => v.id !== selectedPrompt.id) // 현재 버전 제외
+                .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at)); // 최신순 정렬
+              
+              versionsList = [...versionsList, ...sortedVersions];
+            }
+          } catch (versionErr) {
+            console.error('버전 히스토리 로드 오류:', versionErr);
+            // 버전 히스토리 로드 실패 시에도 현재 버전은 표시
+          }
         }
+        
+        setVersions(versionsList);
       } catch (err) {
         console.error('버전 목록 로드 오류:', err);
         setError('버전 목록을 불러오는데 실패했습니다.');
@@ -62,15 +86,24 @@ const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
     try {
       // 새 버전 생성을 위한 데이터 준비
       const newVersionData = {
-        ...selectedPrompt,
-        id: `version-${Date.now()}`, // 임시 ID 생성 (실제로는 서버에서 생성된 ID를 사용)
+        parent_id: selectedPrompt.id,
         title: newVersionTitle.trim() || `${selectedPrompt.title} (복제본)`,
-        created_at: new Date().toISOString(),
-        is_version: true, // 버전 플래그 추가
+        content: selectedPrompt.content,
+        variables: selectedPrompt.variables || [],
+        tags: selectedPrompt.tags || [],
+        folder_id: selectedPrompt.folder_id,
+        folder: selectedPrompt.folder,
+        memo: selectedPrompt.memo || '',
+        is_version: true,
+        is_favorite: false,
+        created_at: new Date().toISOString()
       };
       
-      // 현재는 로컬 상태에만 추가 (실제로는 API 호출로 저장)
-      setVersions(prev => [newVersionData, ...prev]);
+      // API를 통해 새 버전 생성 및 저장
+      const createdVersion = await createPromptVersion(newVersionData);
+      
+      // 응답 받은 버전을 목록에 추가
+      setVersions(prev => [createdVersion, ...prev]);
       
       // 입력 필드 초기화
       setNewVersionTitle('');
@@ -81,17 +114,161 @@ const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
     }
   };
   
+  // 프롬프트 편집 핸들러 (버전 편집 모달 열기)
+  const handleVersionEdit = (prompt) => {
+    setEditingPrompt(prompt);
+    setIsEditModalOpen(true);
+    setIsDetailModalOpen(false); // 상세 모달이 열려있다면 닫기
+  };
+  
   // 버전 편집 모달 닫기
   const handleCloseEditModal = () => {
     setIsEditModalOpen(false);
     setEditingPrompt(null);
   };
   
-  // 카드 클릭 핸들러 (편집이 아닌 경우)
+  // 버전 업데이트 핸들러
+  const handleVersionUpdate = async (updatedPrompt) => {
+    try {
+      // API를 통해 버전 업데이트
+      const updatedVersion = await updatePromptVersion(updatedPrompt.id, updatedPrompt);
+      
+      // 버전 목록에서 해당 프롬프트 업데이트
+      setVersions(prev => 
+        prev.map(version => 
+          version.id === updatedVersion.id ? updatedVersion : version
+        )
+      );
+    } catch (error) {
+      console.error('버전 업데이트 오류:', error);
+      alert('버전 업데이트에 실패했습니다.');
+    }
+  };
+  
+  // 최신 버전으로 등록 핸들러
+  const handleSetAsLatest = async (updatedPrompt) => {
+    if (!updatedPrompt || !updatedPrompt.parent_id) return;
+    
+    try {
+      // 1. 부모 프롬프트 찾기
+      const parentPrompt = selectedPrompt;
+      
+      if (!parentPrompt) {
+        console.error('부모 프롬프트를 찾을 수 없습니다.');
+        return;
+      }
+      
+      // 2. 기존 부모 프롬프트의 스냅샷 생성 (히스토리에 보존)
+      const parentSnapshotData = {
+        parent_id: parentPrompt.id,
+        title: `${parentPrompt.title} (이전 버전)`,
+        content: parentPrompt.content,
+        variables: parentPrompt.variables || [],
+        tags: parentPrompt.tags || [],
+        folder_id: parentPrompt.folder_id,
+        folder: parentPrompt.folder,
+        memo: parentPrompt.memo || '',
+        is_version: true,
+        is_history: true,
+        is_favorite: false,
+        created_at: parentPrompt.updated_at || parentPrompt.created_at,
+        updated_at: new Date().toISOString()
+      };
+      
+      // 3. API를 통해 스냅샷 저장 (중복 방지를 위해 히스토리 플래그 추가)
+      await createPromptVersion(parentSnapshotData);
+      
+      // 4. 부모 프롬프트의 내용 업데이트
+      const updatedParentPrompt = {
+        ...parentPrompt,
+        title: updatedPrompt.title,
+        content: updatedPrompt.content,
+        memo: updatedPrompt.memo || '',
+        updated_at: new Date().toISOString()
+      };
+      
+      // 5. API를 통해 최신 버전으로 설정 (복제본 ID를 전달)
+      await setAsLatestVersion(parentPrompt.id, updatedPrompt.id);
+      
+      // 6. AppContext를 통해 부모 프롬프트 업데이트
+      updatePromptItem(parentPrompt.id, updatedParentPrompt);
+      
+      // 7. 버전 목록 새로 로드 (중복 방지를 위해 목록을 직접 조작하는 대신 다시 로드)
+      const loadVersions = async () => {
+        if (!selectedPromptId) return;
+        
+        setIsLoading(true);
+        setError(null);
+        
+        try {
+          let versionsList = [];
+          
+          // 현재 선택된 프롬프트가 있으면
+          if (selectedPrompt) {
+            // 1. 현재 버전을 목록에 추가
+            const currentVersion = {
+              ...updatedParentPrompt,
+              title: `${updatedParentPrompt.title} (현재 버전)`,
+              is_current_version: true,
+              parent_id: selectedPrompt.id // 부모 ID 추가
+            };
+            
+            versionsList.push(currentVersion);
+            
+            // 2. DB에서 기존 버전 히스토리 가져오기
+            try {
+              const versionHistory = await getPromptVersions(selectedPrompt.id);
+              
+              // 버전 히스토리가 있으면 목록에 추가 (최신순 정렬)
+              if (versionHistory && Array.isArray(versionHistory) && versionHistory.length > 0) {
+                // 현재 버전을 제외하고 날짜순으로 정렬하여 추가
+                const sortedVersions = versionHistory
+                  .filter(v => v.id !== selectedPrompt.id && v.id !== updatedPrompt.id) // 현재 버전 및 복제본 제외
+                  .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at)); // 최신순 정렬
+                
+                versionsList = [...versionsList, ...sortedVersions];
+              }
+            } catch (versionErr) {
+              console.error('버전 히스토리 로드 오류:', versionErr);
+              // 버전 히스토리 로드 실패 시에도 현재 버전은 표시
+            }
+          }
+          
+          setVersions(versionsList);
+        } catch (err) {
+          console.error('버전 목록 로드 오류:', err);
+          setError('버전 목록을 불러오는데 실패했습니다.');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      
+      await loadVersions();
+      
+      alert('최신 버전으로 등록되었습니다. 이전 버전이 히스토리에 저장되었습니다.');
+    } catch (error) {
+      console.error('최신 버전 등록 오류:', error);
+      alert('최신 버전 등록에 실패했습니다.');
+    }
+  };
+  
+  // 카드 클릭 핸들러 (상세 모달 표시)
   const handleCardClick = (prompt) => {
-    // 카드 클릭 시 버전 편집 모달 열기
     setEditingPrompt(prompt);
-    setIsEditModalOpen(true);
+    setIsDetailModalOpen(true);
+    setIsEditModalOpen(false); // 편집 모달이 열려있다면 닫기
+  };
+  
+  // 버전 상세 모달 닫기
+  const handleCloseDetailModal = () => {
+    setIsDetailModalOpen(false);
+    setEditingPrompt(null);
+  };
+  
+  // 버전 관리 탭 내에서 편집 버튼 클릭 시 호출될 핸들러
+  const handleEditButtonClick = (prompt, e) => {
+    e.stopPropagation(); // 카드 클릭 이벤트 전파 중지
+    handleVersionEdit(prompt);
   };
   
   // 프롬프트 카드용 커스텀 렌더링 함수 (버전 관리용 오버라이드)
@@ -101,7 +278,7 @@ const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
         key={prompt.id}
         prompt={prompt}
         onClick={handleCardClick}
-        // 버전 관리에서는 편집 버튼을 기본 동작으로 복원 (customEditHandler 제거)
+        customEditHandler={(e) => handleEditButtonClick(prompt, e)}
       />
     );
   };
@@ -165,12 +342,23 @@ const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
         )}
       </div>
       
+      {/* 버전 상세 모달 */}
+      {isDetailModalOpen && editingPrompt && (
+        <VersionDetailModal
+          isOpen={isDetailModalOpen}
+          onClose={handleCloseDetailModal}
+          prompt={editingPrompt}
+        />
+      )}
+      
       {/* 버전 편집 모달 */}
       {isEditModalOpen && editingPrompt && (
-        <VersionDetailModal
+        <VersionEditModal
           isOpen={isEditModalOpen}
           onClose={handleCloseEditModal}
           prompt={editingPrompt}
+          onUpdate={handleVersionUpdate}
+          onSetAsLatest={handleSetAsLatest}
         />
       )}
     </div>
