@@ -52,13 +52,18 @@ const VersionDetailModal = ({ isOpen, onClose, prompt }) => {
     handleToggleFavorite,
     handleEditPrompt,
     handleRecordUsage,
-    updatePromptItem
   } = useAppContext();
   
   const [variableValues, setVariableValues] = useState({});
-  const [copyStatus, setCopyStatus] = useState('idle'); // 'idle', 'copying', 'copied', 'error'
+  const [copyStatus, setCopyStatus] = useState('idle');
   const modalRef = useRef(null);
   
+  // 텍스트 에디터 관련 상태 추가
+  const [isTextEditorOpen, setIsTextEditorOpen] = useState(false);
+  const [editingVariable, setEditingVariable] = useState(null);
+  const [textEditorValue, setTextEditorValue] = useState('');
+  const textEditorRef = useRef(null);
+
   // 모달이 열릴 때 prompt에서 데이터 초기화
   useEffect(() => {
     if (isOpen && prompt) {
@@ -103,8 +108,11 @@ const VersionDetailModal = ({ isOpen, onClose, prompt }) => {
   useEffect(() => {
     const handleEscKey = (event) => {
       if (isOpen && event.key === 'Escape') {
-        event.stopPropagation();
-        onClose();
+        if (isTextEditorOpen) {
+          closeTextEditor();
+        } else {
+          onClose();
+        }
       }
     };
     
@@ -115,7 +123,24 @@ const VersionDetailModal = ({ isOpen, onClose, prompt }) => {
     return () => {
       document.removeEventListener('keydown', handleEscKey, true);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, isTextEditorOpen]);
+
+  // 텍스트 에디터 외부 클릭 감지 추가
+  useEffect(() => {
+    const handleTextEditorOutsideClick = (event) => {
+      if (isTextEditorOpen && textEditorRef.current && !textEditorRef.current.contains(event.target)) {
+        closeTextEditor();
+      }
+    };
+    
+    if (isTextEditorOpen) {
+      document.addEventListener('mousedown', handleTextEditorOutsideClick);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleTextEditorOutsideClick);
+    };
+  }, [isTextEditorOpen]);
 
   // 클립보드 복사 핸들러
   const handleCopyToClipboard = async () => {
@@ -178,6 +203,27 @@ const VersionDetailModal = ({ isOpen, onClose, prompt }) => {
     Array.isArray(prompt.variables) && 
     prompt.variables.length > 0;
 
+  // 텍스트 에디터 관련 함수 추가
+  const openTextEditor = (variable) => {
+    setEditingVariable(variable);
+    setTextEditorValue(variableValues[variable.name] || '');
+    setIsTextEditorOpen(true);
+  };
+
+  const closeTextEditor = () => {
+    setIsTextEditorOpen(false);
+    setEditingVariable(null);
+    setTextEditorValue('');
+  };
+
+  // 버전 모달에서는 저장 기능 없이 적용만 함
+  const saveTextEditorValue = () => {
+    if (editingVariable) {
+      handleVariableChange(editingVariable.name, textEditorValue);
+    }
+    closeTextEditor();
+  };
+
   if (!isOpen || !prompt) return null;
 
   return (
@@ -220,7 +266,7 @@ const VersionDetailModal = ({ isOpen, onClose, prompt }) => {
         {/* 모달 콘텐츠 - 스크롤 가능한 영역 */}
         <div className="flex-1 overflow-y-auto p-4">
           <div className="space-y-4">
-            {/* 변수 입력 영역 - 3열 그리드 */}
+            {/* 변수 입력 영역 수정 */}
             {hasVariables && (
               <div className="border rounded-lg p-3 bg-gray-50">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">변수 입력</h3>
@@ -231,13 +277,23 @@ const VersionDetailModal = ({ isOpen, onClose, prompt }) => {
                         {variable.name}
                         {variable.required && <span className="text-red-500 ml-1">*</span>}
                       </label>
-                      <input
-                        type="text"
-                        value={variableValues[variable.name] || ''}
-                        onChange={(e) => handleVariableChange(variable.name, e.target.value)}
-                        className="w-full px-2 py-1 text-sm border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        placeholder={`{${variable.name}} 값 입력...`}
-                      />
+                      <div className="flex w-full">
+                        <input
+                          type="text"
+                          value={variableValues[variable.name] || ''}
+                          onChange={(e) => handleVariableChange(variable.name, e.target.value)}
+                          className="flex-1 px-2 py-1 text-sm border rounded-l-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          placeholder={`{${variable.name}} 값 입력...`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => openTextEditor(variable)}
+                          className="px-2 py-1 border border-l-0 rounded-r-md bg-gray-50 hover:bg-gray-100 text-gray-600 text-xs"
+                          title="텍스트 에디터 열기"
+                        >
+                          <span>📝</span>
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -348,6 +404,49 @@ const VersionDetailModal = ({ isOpen, onClose, prompt }) => {
             </div>
           </div>
         </div>
+        
+        {/* 텍스트 에디터 모달 추가 */}
+        {isTextEditorOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-60">
+            <div ref={textEditorRef} className="bg-white rounded-lg shadow-xl w-2/3 max-w-2xl flex flex-col">
+              <div className="flex justify-between items-center border-b px-4 py-2">
+                <h3 className="font-medium">
+                  "{editingVariable?.name}" 변수 편집
+                </h3>
+                <button 
+                  onClick={closeTextEditor}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <span>✕</span>
+                </button>
+              </div>
+              
+              <div className="p-4">
+                <textarea
+                  value={textEditorValue}
+                  onChange={(e) => setTextEditorValue(e.target.value)}
+                  className="w-full h-56 px-3 py-2 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  placeholder="내용을 입력하세요..."
+                />
+              </div>
+              
+              <div className="border-t p-3 flex justify-end space-x-2">
+                <button
+                  onClick={closeTextEditor}
+                  className="px-3 py-1.5 border rounded-lg text-gray-600 hover:bg-gray-50"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={saveTextEditorValue}
+                  className="px-3 py-1.5 rounded-lg bg-blue-500 text-white hover:bg-blue-600"
+                >
+                  적용 (현재 모달에만)
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

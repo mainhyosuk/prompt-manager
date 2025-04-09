@@ -37,7 +37,10 @@ const initialState = {
   filterTags: [],
   sortBy: 'updated_at',
   sortDirection: 'desc',
-  viewMode: 'grid'
+  viewMode: 'grid',
+  
+  // 새로고침 트리거 상태 추가
+  userPromptUpdateTimestamp: null,
 };
 
 const AppContext = createContext(initialState);
@@ -75,6 +78,9 @@ export const AppProvider = ({ children }) => {
   // 사용자 추가 프롬프트 모달 상태 추가
   const [isUserPromptModalOpen, setIsUserPromptModalOpen] = useState(false);
   const [userPrompt, setUserPrompt] = useState(null);
+
+  // 새로고침 트리거 상태 추가
+  const [userPromptUpdateTimestamp, setUserPromptUpdateTimestamp] = useState(initialState.userPromptUpdateTimestamp);
 
   // 테마 변경 함수
   const changeTheme = useCallback((newTheme) => {
@@ -480,9 +486,7 @@ export const AppProvider = ({ children }) => {
     setError(null);
     try {
       const updatedPrompt = await updateUserAddedPromptApi(promptId, updatedData);
-      // 로컬 상태 업데이트는 UserPromptDetailModal 내에서 직접 처리하거나, 
-      // 혹은 AppContext에서 사용자 추가 프롬프트 목록을 관리한다면 여기서 업데이트
-      // 현재는 AppContext에서 사용자 추가 프롬프트를 직접 관리하지 않으므로 반환만 함
+      setUserPromptUpdateTimestamp(Date.now()); // 성공 시 타임스탬프 업데이트
       return updatedPrompt;
     } catch (err) {
       console.error('사용자 추가 프롬프트 업데이트 오류:', err);
@@ -633,6 +637,7 @@ export const AppProvider = ({ children }) => {
     overlayPrompt,
     isUserPromptModalOpen,
     userPrompt,
+    userPromptUpdateTimestamp,
     
     // 데이터 접근 함수
     getFilteredPrompts,

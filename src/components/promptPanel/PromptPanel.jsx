@@ -421,7 +421,7 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   
   // 현재 선택된 프롬프트 정보를 가져오기 위한 컨텍스트 접근
-  const { selectedPrompt, updatePromptItem, openOverlayModal: contextOpenOverlayModal } = useAppContext();
+  const { selectedPrompt, updatePromptItem, openOverlayModal: contextOpenOverlayModal, userPromptUpdateTimestamp } = useAppContext();
   
   // 사용자 추가 프롬프트 데이터 로드
   const loadUserPrompts = useCallback(async () => {
@@ -591,7 +591,7 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
   // useEffect - 프롬프트가 변경되거나 컴포넌트 마운트될 때 프롬프트 목록 로드
   useEffect(() => {
     loadUserPrompts();
-  }, [loadUserPrompts]);
+  }, [loadUserPrompts, userPromptUpdateTimestamp]);
   
   return (
     <div className="h-full flex flex-col">
