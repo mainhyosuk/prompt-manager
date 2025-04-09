@@ -50,14 +50,14 @@ def get_folders():
             """
             SELECT id, name, parent_id, position, created_at
             FROM folders
-            ORDER BY 
-                CASE 
-                    WHEN name IN ('모든 프롬프트', '즐겨찾기') THEN 0 
-                    ELSE 1 
+            ORDER BY
+                CASE
+                    WHEN name IN ('모든 프롬프트', '즐겨찾기') THEN 0
+                    ELSE 1
                 END,
-                CASE 
-                    WHEN parent_id IS NULL THEN 0 
-                    ELSE 1 
+                CASE
+                    WHEN parent_id IS NULL THEN 0
+                    ELSE 1
                 END,
                 position
         """
@@ -130,10 +130,12 @@ def get_folders():
                 final_result.append(folder)
 
         conn.close()
+        # print(f"DEBUG: Folders data being sent to frontend: {final_result}") # Debug log removed
         return jsonify(final_result)
     except Exception as e:
         print(f"폴더 조회 오류: {str(e)}")
-        conn.close()
+        if conn:
+            conn.close()
         return jsonify({"error": str(e)}), 500
 
 

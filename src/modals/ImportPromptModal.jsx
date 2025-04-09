@@ -4,7 +4,7 @@ import { Search, X } from 'lucide-react';
 
 const ImportPromptModal = ({ isOpen, onClose, onImport }) => {
   // AppContext에서 필요한 데이터와 함수 가져오기
-  const { prompts, folders, tags, getTagColorClasses } = useAppContext();
+  const { prompts, folders: hierarchicalFolders, tags, getTagColorClasses } = useAppContext();
 
   // 검색 및 필터링 상태
   const [searchTerm, setSearchTerm] = useState('');
@@ -14,6 +14,26 @@ const ImportPromptModal = ({ isOpen, onClose, onImport }) => {
   const [sortDirection, setSortDirection] = useState('desc'); // 'asc', 'desc'
 
   const modalRef = useRef(null);
+
+  // Function to flatten the folder hierarchy
+  const flattenFolders = (folderList) => {
+    let flatList = [];
+    folderList.forEach(folder => {
+      // Exclude special folders like '모든 프롬프트' and '즐겨찾기'
+      if (folder.id >= 0) { // Assuming special folders have negative IDs
+          flatList.push(folder);
+          if (folder.children && folder.children.length > 0) {
+              flatList = flatList.concat(flattenFolders(folder.children));
+          }
+      }
+    });
+    return flatList;
+  };
+
+  // UseMemo to get the flattened list of user folders
+  const userFolders = useMemo(() => {
+    return flattenFolders(hierarchicalFolders);
+  }, [hierarchicalFolders]);
 
   // 모달 외부 클릭 감지
   useEffect(() => {
@@ -58,8 +78,8 @@ const ImportPromptModal = ({ isOpen, onClose, onImport }) => {
         // 폴더가 없는 프롬프트 (folder_id가 null 또는 undefined)
         result = result.filter(p => !p.folder_id);
       } else {
-        // 특정 폴더 이름으로 폴더 ID 찾기
-        const targetFolder = folders.find(f => f.name === selectedFolder);
+        // 특정 폴더 이름으로 폴더 ID 찾기 (Use userFolders)
+        const targetFolder = userFolders.find(f => f.name === selectedFolder);
         if (targetFolder) {
           // 해당 폴더 ID를 가진 프롬프트만 필터링
           result = result.filter(p => p.folder_id === targetFolder.id);
@@ -114,7 +134,7 @@ const ImportPromptModal = ({ isOpen, onClose, onImport }) => {
     });
 
     return result; // 최종 필터링 및 정렬된 목록 반환
-  }, [prompts, folders, tags, searchTerm, selectedFolder, selectedTags, sortBy, sortDirection]); // 의존성 배열
+  }, [prompts, userFolders, tags, searchTerm, selectedFolder, selectedTags, sortBy, sortDirection]); // 의존성 배열에 userFolders 추가
 
   // 태그 선택/해제 핸들러
   const handleTagToggle = (tagId) => {
@@ -168,15 +188,15 @@ const ImportPromptModal = ({ isOpen, onClose, onImport }) => {
             <Search size={16} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
           </div>
 
-          {/* 폴더 필터 드롭다운 */}
+          {/* 폴더 필터 드롭다운 (Use userFolders) */}
           <select
             value={selectedFolder}
             onChange={(e) => setSelectedFolder(e.target.value)}
             className="px-3 py-1.5 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
             <option value="all">모든 폴더</option>
-            {/* 폴더 목록 매핑 */}
-            {folders.map(folder => (
+            {/* 폴더 목록 매핑 (Use userFolders) */}
+            {userFolders.map(folder => (
               <option key={folder.id} value={folder.name}>{folder.name}</option>
             ))}
             {/* 폴더 없음 옵션 */}
