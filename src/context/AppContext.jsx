@@ -331,6 +331,12 @@ export const AppProvider = ({ children }) => {
 
   // 프롬프트 사용 기록 핸들러
   const handleRecordUsage = useCallback(async (promptId) => {
+    // 사용자 추가 프롬프트는 로컬 스토리지를 사용하므로 서버 API 호출을 건너뛰도록 수정합니다.
+    if (typeof promptId === 'string' && promptId.startsWith('user-added-')) {
+      console.log('사용자 추가 프롬프트는 사용 기록 API를 호출하지 않습니다.');
+      return; // API 호출 없이 함수 종료
+    }
+    
     try {
       await recordPromptUsage(promptId);
       
