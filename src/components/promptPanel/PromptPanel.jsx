@@ -422,9 +422,18 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false); // 내보내기 로딩 상태
   
   // 현재 선택된 프롬프트 정보를 가져오기 위한 컨텍스트 접근
-  const { selectedPrompt, updatePromptItem, openOverlayModal: contextOpenOverlayModal, userPromptUpdateTimestamp, setUserPromptUpdateTimestamp } = useAppContext();
+  const { 
+    selectedPrompt, 
+    updatePromptItem, 
+    openOverlayModal: contextOpenOverlayModal, 
+    userPromptUpdateTimestamp, 
+    setUserPromptUpdateTimestamp,
+    handleSavePrompt, // 일반 프롬프트 생성 함수 가져오기
+    loadData // 메인 목록 새로고침 함수 가져오기
+  } = useAppContext();
   
   // 사용자 추가 프롬프트 데이터 로드
   const loadUserPrompts = useCallback(async () => {
@@ -590,7 +599,46 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
     }
   };
   
-  // 프롬프트 카드용 커스텀 렌더링 함수
+  // 사용자 프롬프트 내보내기 핸들러
+  const handleExportPrompt = async (promptToExport, e) => {
+    e.stopPropagation(); // 이벤트 버블링 방지
+    if (!promptToExport) return;
+
+    if (window.confirm(`"${promptToExport.title}" 프롬프트를 일반 프롬프트로 내보내시겠습니까? (원본 사용자 추가 프롬프트는 유지됩니다.)`)) {
+      setIsExporting(true);
+      try {
+        // 1. 내보낼 데이터 준비 (일반 프롬프트 형식)
+        const exportData = {
+          title: promptToExport.title,
+          content: promptToExport.content,
+          variables: promptToExport.variables || [],
+          tags: promptToExport.tags || [],
+          memo: promptToExport.memo || '',
+          folder_id: null, // 우선 폴더 없음으로 설정
+          is_favorite: promptToExport.is_favorite || false,
+        };
+
+        // 2. 일반 프롬프트 생성 API 호출 (handleSavePrompt 사용)
+        await handleSavePrompt(exportData); // 이 함수가 loadData를 호출하여 메인 목록 새로고침
+
+        // 3. 원본 사용자 추가 프롬프트 삭제 로직 제거
+        // await deleteUserAddedPrompt(promptToExport.id);
+
+        // 4. 사용자 추가 목록 새로고침 로직 제거 (원본이 유지되므로 불필요)
+        // setUserPromptUpdateTimestamp(Date.now());
+        
+        alert('프롬프트를 성공적으로 내보냈습니다.');
+
+      } catch (error) {
+        console.error('프롬프트 내보내기 오류:', error);
+        alert('프롬프트를 내보내는 중 오류가 발생했습니다.');
+      } finally {
+        setIsExporting(false);
+      }
+    }
+  };
+  
+  // 프롬프트 카드용 커스텀 렌더링 함수 (내보내기 핸들러 추가)
   const renderPromptItemCard = useCallback((prompt) => {
     return (
       <PromptItemCard
@@ -599,10 +647,11 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
         onClick={handleCardClick}
         customEditHandler={(e) => handlePromptEdit(prompt, e)}
         customDeleteHandler={(e) => handlePromptDelete(prompt, e)}
-        isVersionTab={true} // 같은 아이콘 스타일 사용
+        customExportHandler={(e) => handleExportPrompt(prompt, e)} // 내보내기 핸들러 추가
+        isVersionTab={false} // 사용자 추가 탭은 isVersionTab=false
       />
     );
-  }, [handleCardClick, handlePromptEdit, handlePromptDelete]);
+  }, [handleCardClick, handlePromptEdit, handlePromptDelete, handleExportPrompt]); // 의존성 배열에 handleExportPrompt 추가
   
   // 로딩 상태 표시
   const renderLoading = () => (
@@ -662,7 +711,7 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
       
       {/* 프롬프트 목록 영역 */}
       <div className="flex-1 overflow-y-auto p-4">
-        {isLoading ? (
+        {isLoading || isExporting ? ( // 내보내기 로딩 상태 추가
           renderLoading()
         ) : error ? (
           renderError()
@@ -705,7 +754,7 @@ const PromptPanel = ({
   onClose
 }) => {
   // 탭과 데이터 상태
-  const [activeTab, setActiveTab] = useState('version');  // 기본 탭을 버전 관리로 변경
+  const [activeTab, setActiveTab] = useState('user-added');  // 기본 탭을 사용자 추가로 변경
   const [collections, setCollections] = useState([]);
   const [selectedCollectionId, setSelectedCollectionId] = useState(null);
   const [prompts, setPrompts] = useState([]);
@@ -1078,16 +1127,6 @@ const PromptPanel = ({
       <div className="flex border-b items-center">
         <button
           className={`px-4 py-2 text-sm font-medium ${
-            activeTab === 'version' 
-              ? 'border-b-2 border-blue-500 text-blue-600' 
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-          onClick={() => setActiveTab('version')}
-        >
-          버전 관리
-        </button>
-        <button
-          className={`px-4 py-2 text-sm font-medium ${
             activeTab === 'user-added' 
               ? 'border-b-2 border-blue-500 text-blue-600' 
               : 'text-gray-500 hover:text-gray-700'
@@ -1095,6 +1134,16 @@ const PromptPanel = ({
           onClick={() => setActiveTab('user-added')}
         >
           사용자 추가
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium ${
+            activeTab === 'version' 
+              ? 'border-b-2 border-blue-500 text-blue-600' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+          onClick={() => setActiveTab('version')}
+        >
+          버전 관리
         </button>
         <button
           className={`px-4 py-2 text-sm font-medium ${

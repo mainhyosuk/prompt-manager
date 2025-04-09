@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { copyToClipboard } from '../../utils/clipboard';
-import { Download, Copy, Star } from 'lucide-react';
+import { Download, Copy, Star, Upload, Trash2 } from 'lucide-react';
 
 const PromptItemCard = ({ 
   prompt, 
@@ -9,6 +9,7 @@ const PromptItemCard = ({
   onClick,
   customEditHandler, // 버전 관리 탭에서 사용될 때 편집 버튼의 동작을 오버라이드
   customDeleteHandler, // 버전 관리 탭에서 사용될 때 삭제 버튼의 동작을 오버라이드
+  customExportHandler, // 내보내기 핸들러 prop 추가
   isVersionTab = false // 버전 관리 탭에서 사용되는지 여부
 }) => {
   const { getTagColorClasses, handleToggleFavorite, handleRecordUsage, handleEditPrompt } = useAppContext();
@@ -70,6 +71,12 @@ const PromptItemCard = ({
     onRemoveFromCollection?.(prompt.id);
   };
   
+  // 내보내기 핸들러
+  const handleExport = (e) => {
+    e.stopPropagation();
+    customExportHandler?.(e);
+  };
+  
   if (!prompt) return null;
   
   return (
@@ -112,14 +119,17 @@ const PromptItemCard = ({
             </>
           ) : (
             <>
-              <button 
-                onClick={handleFavoriteToggle}
-                className="text-gray-400 hover:text-yellow-500 p-1 flex items-center justify-center"
-                title={prompt.is_favorite ? '즐겨찾기 해제' : '즐겨찾기에 추가'}
-              >
-                <span className={prompt.is_favorite ? 'text-yellow-400' : ''}>★</span>
-              </button>
-              
+              {/* 내보내기 버튼 */}
+              {customExportHandler && (
+                 <button
+                   onClick={handleExport}
+                   className="text-gray-400 hover:text-indigo-500 p-1 flex items-center justify-center"
+                   title="일반 프롬프트로 내보내기"
+                 >
+                   <Upload size={15} />
+                 </button>
+              )}
+
               <button
                 onClick={handleEdit}
                 className="text-gray-400 hover:text-blue-500 p-1 flex items-center justify-center"
@@ -128,13 +138,16 @@ const PromptItemCard = ({
                 <span>✎</span>
               </button>
               
-              <button
-                onClick={handleCopy}
-                className="text-gray-400 hover:text-green-500 p-1 flex items-center justify-center"
-                title="클립보드에 복사"
-              >
-                <span>📋</span>
-              </button>
+              {/* 삭제 버튼 추가 */}
+              {customDeleteHandler && (
+                <button
+                  onClick={handleDelete}
+                  className="text-gray-400 hover:text-red-600 p-1 flex items-center justify-center"
+                  title="삭제"
+                >
+                  <Trash2 size={15} />
+                </button>
+              )}
               
               {onRemoveFromCollection && (
                 <button
