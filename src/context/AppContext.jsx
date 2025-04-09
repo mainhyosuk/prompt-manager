@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { getPrompts, createPrompt, updatePrompt, deletePrompt, toggleFavorite, recordPromptUsage, duplicatePrompt, updateVariableDefaultValue } from '../api/promptApi';
 import { getFolders } from '../api/folderApi';
 import { getTags } from '../api/tagApi';
+import { updateUserAddedPrompt as updateUserAddedPromptApi } from '../api/userPromptApi';
 import PromptOverlayModal from '../modals/PromptOverlayModal';
 import UserPromptDetailModal from '../modals/UserPromptDetailModal';
 
@@ -473,6 +474,25 @@ export const AppProvider = ({ children }) => {
     }
   }, [selectedPrompt]);
 
+  // 사용자 추가 프롬프트 업데이트 핸들러 추가
+  const handleUpdateUserAddedPrompt = useCallback(async (promptId, updatedData) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const updatedPrompt = await updateUserAddedPromptApi(promptId, updatedData);
+      // 로컬 상태 업데이트는 UserPromptDetailModal 내에서 직접 처리하거나, 
+      // 혹은 AppContext에서 사용자 추가 프롬프트 목록을 관리한다면 여기서 업데이트
+      // 현재는 AppContext에서 사용자 추가 프롬프트를 직접 관리하지 않으므로 반환만 함
+      return updatedPrompt;
+    } catch (err) {
+      console.error('사용자 추가 프롬프트 업데이트 오류:', err);
+      setError('사용자 추가 프롬프트를 업데이트하는 중 오류가 발생했습니다.');
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   // 설정 페이지로 이동
   const goToSettings = useCallback(() => {
     setCurrentScreen('settings');
@@ -653,7 +673,8 @@ export const AppProvider = ({ children }) => {
     setIsOverlayModalOpen,
     setOverlayPrompt,
     setIsUserPromptModalOpen,
-    setUserPrompt
+    setUserPrompt,
+    handleUpdateUserAddedPrompt
   };
 
   return (

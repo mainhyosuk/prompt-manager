@@ -144,12 +144,12 @@ const PromptDetailModal = () => {
   // 외부 클릭 감지
   useEffect(() => {
     const handleOutsideClick = async (event) => {
-      console.log('[Parent Modal] handleOutsideClick triggered. Target:', event.target);
+      // console.log('[Parent Modal] handleOutsideClick triggered. Target:', event.target);
       // 클릭된 대상이 자식 모달(UserPromptDetailModal) 내부인지 확인
       const clickedInsideChildModal = event.target.closest('[data-id="user-prompt-detail-modal"]');
       const isParentModalContent = modalRef.current && modalRef.current.contains(event.target);
 
-      console.log(`[Parent Modal] Conditions: isParentModalContent=${isParentModalContent}, clickedInsideChildModal=${!!clickedInsideChildModal}`);
+      // console.log(`[Parent Modal] Conditions: isParentModalContent=${isParentModalContent}, clickedInsideChildModal=${!!clickedInsideChildModal}`);
       
       // 부모 모달(PromptDetailModal)의 참조가 있고,
       // 클릭된 대상이 부모 모달 외부에 있으며,
@@ -158,7 +158,7 @@ const PromptDetailModal = () => {
           !isParentModalContent && // 변수 사용
           !clickedInsideChildModal)
       {
-        console.log('[Parent Modal] Conditions met. Closing parent modal.');
+        // console.log('[Parent Modal] Conditions met. Closing parent modal.');
         // 모달을 닫기 전에 메모가 저장되도록 함
         if (memoTimerRef.current) {
           clearTimeout(memoTimerRef.current);
@@ -176,7 +176,7 @@ const PromptDetailModal = () => {
         }
         
         // 모달 닫기
-        console.log('[Parent Modal] Calling setIsDetailModalOpen(false).');
+        // console.log('[Parent Modal] Calling setIsDetailModalOpen(false).');
         setIsDetailModalOpen(false);
       }
     };

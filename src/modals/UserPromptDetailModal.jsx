@@ -52,46 +52,57 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
     handleToggleFavorite,
     handleEditPrompt,
     handleRecordUsage,
-    updatePromptItem
+    handleUpdateUserAddedPrompt
   } = useAppContext();
   
   const [variableValues, setVariableValues] = useState({});
-  const [copyStatus, setCopyStatus] = useState('idle'); // 'idle', 'copying', 'copied', 'error'
+  const [copyStatus, setCopyStatus] = useState('idle');
   const modalRef = useRef(null);
   
-  // 모달이 열릴 때 prompt에서 데이터 초기화
+  // 텍스트 에디터 관련 상태 추가
+  const [isTextEditorOpen, setIsTextEditorOpen] = useState(false);
+  const [editingVariable, setEditingVariable] = useState(null);
+  const [textEditorValue, setTextEditorValue] = useState('');
+  const textEditorRef = useRef(null);
+  
+  // 변수 저장 상태 추가
+  const [savingStates, setSavingStates] = useState({});
+
+  // 모달 열릴 때 savingStates 초기화 추가
   useEffect(() => {
     if (isOpen && prompt) {
-      // 변수 기본값 설정
       if (prompt.variables && Array.isArray(prompt.variables) && prompt.variables.length > 0) {
         const initialValues = {};
+        const initialSavingStates = {};
         prompt.variables.forEach(variable => {
           if (variable && variable.name) {
             initialValues[variable.name] = variable.default_value || '';
+            initialSavingStates[variable.name] = 'idle'; // 'idle', 'saving', 'saved', 'error'
           }
         });
         setVariableValues(initialValues);
+        setSavingStates(initialSavingStates);
       } else {
-        // 변수가 없는 경우 기본 설정
         setVariableValues({});
+        setSavingStates({});
       }
     } else {
-      // 모달이 닫히거나 prompt가 없는 경우 상태 초기화
       setVariableValues({});
+      setSavingStates({});
     }
   }, [isOpen, prompt]);
-  
-  // ESC 키 입력 감지
+
+  // ESC 키 입력 감지 (텍스트 에디터 닫기 로직 추가)
   useEffect(() => {
     const handleEscKey = (event) => {
       if (isOpen && event.key === 'Escape') {
-        // onClose 호출 전 로그 주석 처리
-        // console.log('Closing UserPromptDetailModal due to ESC key.'); 
-        // ESC 키는 document 레벨에서 감지되므로 여기서 stopPropagation은 불필요
-        onClose();
+        if (isTextEditorOpen) {
+          closeTextEditor();
+        } else {
+          onClose();
+        }
       }
     };
-    
     if (isOpen) {
       document.addEventListener('keydown', handleEscKey);
     }
@@ -99,7 +110,24 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
     return () => {
       document.removeEventListener('keydown', handleEscKey);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, isTextEditorOpen]);
+
+  // 텍스트 에디터 외부 클릭 감지 추가
+  useEffect(() => {
+    const handleTextEditorOutsideClick = (event) => {
+      if (isTextEditorOpen && textEditorRef.current && !textEditorRef.current.contains(event.target)) {
+        closeTextEditor();
+      }
+    };
+    
+    if (isTextEditorOpen) {
+      document.addEventListener('mousedown', handleTextEditorOutsideClick);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleTextEditorOutsideClick);
+    };
+  }, [isTextEditorOpen]);
 
   // 클립보드 복사 핸들러
   const handleCopyToClipboard = async () => {
@@ -134,12 +162,95 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
     }
   };
   
-  // 변수 값 변경 핸들러
+  // 변수 값 변경 핸들러 (savingStates 업데이트 추가)
   const handleVariableChange = (name, value) => {
     setVariableValues(prev => ({
       ...prev,
       [name]: value
     }));
+    // 값이 변경되면 저장 상태 초기화
+    setSavingStates(prev => ({
+      ...prev,
+      [name]: 'idle'
+    }));
+  };
+  
+  // 변수 값 저장 핸들러 (사용자 추가 프롬프트용)
+  const handleSaveVariableValue = async (variableName) => {
+    if (!prompt?.id || !variableName) return;
+
+    setSavingStates(prev => ({ ...prev, [variableName]: 'saving' }));
+
+    try {
+      // 현재 프롬프트 데이터 복사
+      const updatedPromptData = { ...prompt };
+      
+      // 변수 배열 업데이트 시도
+      if (!updatedPromptData.variables) {
+        updatedPromptData.variables = [];
+      }
+      
+      const variableIndex = updatedPromptData.variables.findIndex(v => v.name === variableName);
+      const currentValue = variableValues[variableName] || '';
+
+      if (variableIndex > -1) {
+        // 기존 변수 업데이트 (default_value 대신 현재 값을 저장하는 개념)
+        updatedPromptData.variables[variableIndex] = {
+           ...updatedPromptData.variables[variableIndex],
+           default_value: currentValue // default_value 필드를 업데이트 
+        };
+      } else {
+        // 새 변수 추가 (실제로는 이 경우는 거의 없음)
+        updatedPromptData.variables.push({ name: variableName, default_value: currentValue });
+      }
+
+      // API 호출하여 업데이트
+      await handleUpdateUserAddedPrompt(prompt.id, { variables: updatedPromptData.variables });
+
+      setSavingStates(prev => ({ ...prev, [variableName]: 'saved' }));
+      setTimeout(() => {
+        setSavingStates(prev => ({ ...prev, [variableName]: 'idle' }));
+      }, 3000);
+
+    } catch (error) {
+      console.error('사용자 추가 프롬프트 변수 값 저장 오류:', error);
+      setSavingStates(prev => ({ ...prev, [variableName]: 'error' }));
+      setTimeout(() => {
+        setSavingStates(prev => ({ ...prev, [variableName]: 'idle' }));
+      }, 3000);
+    }
+  };
+
+  // 텍스트 에디터 관련 함수 추가
+  const openTextEditor = (variable) => {
+    setEditingVariable(variable);
+    setTextEditorValue(variableValues[variable.name] || '');
+    setIsTextEditorOpen(true);
+  };
+
+  const closeTextEditor = () => {
+    setIsTextEditorOpen(false);
+    setEditingVariable(null);
+    setTextEditorValue('');
+  };
+
+  const saveTextEditorValue = () => {
+    if (editingVariable) {
+      handleVariableChange(editingVariable.name, textEditorValue);
+    }
+    closeTextEditor();
+  };
+  
+  // 텍스트 에디터에서 값 저장 버튼 핸들러
+  const saveTextEditorValueAndStore = async () => {
+    if (!editingVariable || !prompt) return;
+    try {
+      handleVariableChange(editingVariable.name, textEditorValue);
+      await handleSaveVariableValue(editingVariable.name);
+      closeTextEditor();
+    } catch (error) {
+      console.error('텍스트 에디터에서 변수 저장 오류:', error);
+    }
   };
   
   // 편집 핸들러
@@ -171,7 +282,7 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
       onMouseDown={(e) => {
         // 클릭 대상이 배경 div 자신일 경우 자식 모달 닫기
         if (e.target === e.currentTarget) {
-          console.log('[Child Modal] Background directly clicked. Closing child modal and stopping propagation.');
+          // console.log('[Child Modal] Background directly clicked. Closing child modal and stopping propagation.');
           onClose(); 
         }
         // 배경 또는 그 내부에서 시작된 mousedown 이벤트는 항상 전파 중단
@@ -222,24 +333,54 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
         {/* 모달 콘텐츠 - 스크롤 가능한 영역 */}
         <div className="flex-1 overflow-y-auto p-4">
           <div className="space-y-4">
-            {/* 변수 입력 영역 - 3열 그리드 */}
+            {/* 변수 입력 영역 수정 */}
             {hasVariables && (
               <div className="border rounded-lg p-3 bg-gray-50">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">변수 입력</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {prompt.variables.map((variable, index) => (
-                    <div key={index} className="border rounded-md p-2 bg-white">
+                    <div key={`${variable.id || variable.name}-${index}`} className="border rounded-md p-2 bg-white">
                       <label className="block text-xs font-medium text-gray-700 mb-1">
                         {variable.name}
-                        {variable.required && <span className="text-red-500 ml-1">*</span>}
+                        {/* required 표시가 필요하면 추가 */}
                       </label>
-                      <input
-                        type="text"
-                        value={variableValues[variable.name] || ''}
-                        onChange={(e) => handleVariableChange(variable.name, e.target.value)}
-                        className="w-full px-2 py-1 text-sm border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        placeholder={`{${variable.name}} 값 입력...`}
-                      />
+                      <div className="flex w-full">
+                        <input
+                          type="text"
+                          value={variableValues[variable.name] || ''}
+                          onChange={(e) => handleVariableChange(variable.name, e.target.value)}
+                          className="flex-1 px-2 py-1 text-sm border rounded-l-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          placeholder={`{${variable.name}} 값 입력...`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSaveVariableValue(variable.name)} // 저장 함수 연결
+                          className={`px-2 py-1 border border-l-0 rounded-none text-xs 
+                            ${savingStates[variable.name] === 'saved' ? 'bg-green-50 text-green-600' : 
+                              savingStates[variable.name] === 'error' ? 'bg-red-50 text-red-600' : 
+                              savingStates[variable.name] === 'saving' ? 'bg-blue-50 text-blue-400' : 
+                              'bg-gray-50 hover:bg-gray-100 text-gray-600'}`}
+                          title="현재 값 저장"
+                          disabled={savingStates[variable.name] === 'saving'}
+                        >
+                          {/* 아이콘 및 상태 표시 */} 
+                          {savingStates[variable.name] === 'saved' ? (
+                            <span>✓</span>
+                          ) : savingStates[variable.name] === 'saving' ? (
+                            <div className="w-3 h-3 border-2 border-t-blue-500 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin" />
+                          ) : (
+                            <span>💾</span>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openTextEditor(variable)} // 에디터 열기 함수 연결
+                          className="px-2 py-1 border border-l-0 rounded-r-md bg-gray-50 hover:bg-gray-100 text-gray-600 text-xs"
+                          title="텍스트 에디터 열기"
+                        >
+                          <span>📝</span>
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -329,6 +470,55 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
             </div>
           </div>
         </div>
+        
+        {/* 텍스트 에디터 모달 추가 */} 
+        {isTextEditorOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-60"> {/* z-index 상향 조정 */} 
+            <div ref={textEditorRef} className="bg-white rounded-lg shadow-xl w-2/3 max-w-2xl flex flex-col">
+              <div className="flex justify-between items-center border-b px-4 py-2">
+                <h3 className="font-medium">
+                  "{editingVariable?.name}" 변수 편집
+                </h3>
+                <button 
+                  onClick={closeTextEditor}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <span>✕</span>
+                </button>
+              </div>
+              
+              <div className="p-4">
+                <textarea
+                  value={textEditorValue}
+                  onChange={(e) => setTextEditorValue(e.target.value)}
+                  className="w-full h-56 px-3 py-2 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  placeholder="내용을 입력하세요..."
+                />
+              </div>
+              
+              <div className="border-t p-3 flex justify-end space-x-2">
+                <button
+                  onClick={closeTextEditor}
+                  className="px-3 py-1.5 border rounded-lg text-gray-600 hover:bg-gray-50"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={saveTextEditorValueAndStore} // 저장 후 스토리지 업데이트
+                  className="px-3 py-1.5 border rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100"
+                >
+                  저장
+                </button>
+                <button
+                  onClick={saveTextEditorValue}
+                  className="px-3 py-1.5 rounded-lg bg-blue-500 text-white hover:bg-blue-600"
+                >
+                  적용 (현재만)
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
