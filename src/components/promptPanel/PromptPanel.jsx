@@ -377,19 +377,8 @@ const PromptPanel = ({
 
   return (
     <div className="bg-white rounded-lg shadow-md h-full max-h-full flex flex-col overflow-hidden">
-      {/* 헤더 */}
-      <div className="p-3 border-b flex justify-between items-center">
-        <h2 className="text-lg font-semibold">프롬프트 패널</h2>
-        <button 
-          onClick={onClose}
-          className="text-gray-400 hover:text-gray-600"
-        >
-          ✕
-        </button>
-      </div>
-      
-      {/* 탭 선택기 */}
-      <div className="flex border-b">
+      {/* 탭 선택기와 닫기 버튼 */}
+      <div className="flex border-b items-center">
         <button
           className={`px-4 py-2 text-sm font-medium ${
             activeTab === 'similar' 
@@ -420,6 +409,14 @@ const PromptPanel = ({
         >
           최근 사용
         </button>
+        <div className="ml-auto mr-2">
+          <button 
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            ✕
+          </button>
+        </div>
       </div>
       
       {/* 탭 컨텐츠 */}
