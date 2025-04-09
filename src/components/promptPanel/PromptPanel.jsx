@@ -9,13 +9,150 @@ import CollectionsList from './CollectionsList';
 import SimilarPromptsList from './SimilarPromptsList';
 import RecentPromptsList from './RecentPromptsList';
 
+// 버전 관리 탭 컴포넌트 추가
+const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
+  const [versions, setVersions] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [newVersionTitle, setNewVersionTitle] = useState('');
+  
+  // 현재 선택된 프롬프트 정보를 가져오기 위한 컨텍스트 접근
+  const { selectedPrompt } = useAppContext();
+  
+  // 버전 데이터 로드 (실제는 선택된 프롬프트의 버전만 가져와야 함)
+  useEffect(() => {
+    const loadVersions = async () => {
+      if (!selectedPromptId) return;
+      
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        // 임시 로직: 현재 직접적인 버전 API가 없으므로, 로컬 상태만 관리
+        // 초기 로드 시 비워서 시작 (외부 프롬프트 연동하지 않음)
+        setVersions([]);
+        
+        // 현재 선택된 프롬프트가 있으면 첫 요소로 추가
+        // (실제로는 API에서 관리될 부분)
+        if (selectedPrompt) {
+          setVersions([{
+            ...selectedPrompt,
+            title: `${selectedPrompt.title} (현재 버전)`,
+            is_current_version: true
+          }]);
+        }
+      } catch (err) {
+        console.error('버전 목록 로드 오류:', err);
+        setError('버전 목록을 불러오는데 실패했습니다.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadVersions();
+  }, [selectedPromptId, selectedPrompt]);
+  
+  // 새 버전 프롬프트 생성 핸들러
+  const handleCreateNewVersion = async () => {
+    if (!selectedPrompt) return;
+    
+    try {
+      // 새 버전 생성을 위한 데이터 준비
+      const newVersionData = {
+        ...selectedPrompt,
+        id: `version-${Date.now()}`, // 임시 ID 생성 (실제로는 서버에서 생성된 ID를 사용)
+        title: newVersionTitle.trim() || `${selectedPrompt.title} (복제본)`,
+        created_at: new Date().toISOString(),
+        is_version: true, // 버전 플래그 추가
+      };
+      
+      // 현재는 로컬 상태에만 추가 (실제로는 API 호출로 저장)
+      setVersions(prev => [newVersionData, ...prev]);
+      
+      // 입력 필드 초기화
+      setNewVersionTitle('');
+      
+    } catch (err) {
+      console.error('새 버전 생성 오류:', err);
+      alert('새 버전을 생성하는데 실패했습니다.');
+    }
+  };
+  
+  // 로딩 상태 표시
+  const renderLoading = () => (
+    <div className="flex items-center justify-center h-32">
+      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+    </div>
+  );
+  
+  // 오류 메시지 표시
+  const renderError = () => (
+    <div className="text-red-500 p-4 text-center">
+      <p>{error}</p>
+    </div>
+  );
+  
+  // 빈 상태 표시
+  const renderEmpty = (message) => (
+    <div className="text-center py-6">
+      <p className="text-gray-500">{message}</p>
+    </div>
+  );
+  
+  return (
+    <div className="h-full flex flex-col">
+      {/* 버전 생성 입력 영역 */}
+      <div className="p-4 border-b flex items-center space-x-2">
+        <input
+          type="text"
+          value={newVersionTitle}
+          onChange={(e) => setNewVersionTitle(e.target.value)}
+          placeholder="새 버전 제목 입력 (선택사항)"
+          className="flex-1 p-2 border rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+          disabled={!selectedPromptId}
+        />
+        <button
+          onClick={handleCreateNewVersion}
+          className="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+          disabled={!selectedPromptId}
+        >
+          복제 생성
+        </button>
+      </div>
+      
+      {/* 버전 목록 영역 */}
+      <div className="flex-1 overflow-y-auto p-4">
+        {isLoading ? (
+          renderLoading()
+        ) : error ? (
+          renderError()
+        ) : !selectedPromptId ? (
+          renderEmpty('선택된 프롬프트가 없습니다')
+        ) : versions.length === 0 ? (
+          renderEmpty('관리 중인 버전이 없습니다')
+        ) : (
+          <div className="space-y-2">
+            {versions.map(version => (
+              <PromptItemCard
+                key={version.id}
+                prompt={version}
+                onClick={onPromptSelect}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const PromptPanel = ({ 
   selectedPromptId = null, 
   onPromptSelect, 
   onClose
 }) => {
   // 탭과 데이터 상태
-  const [activeTab, setActiveTab] = useState('similar');
+  const [activeTab, setActiveTab] = useState('version');  // 기본 탭을 버전 관리로 변경
   const [collections, setCollections] = useState([]);
   const [selectedCollectionId, setSelectedCollectionId] = useState(null);
   const [prompts, setPrompts] = useState([]);
@@ -235,31 +372,16 @@ const PromptPanel = ({
   
   // 기본 탭을 설정하는 로직
   useEffect(() => {
-    // 기본적으로 Similar 탭을 보여줌
-    setActiveTab('similar');
-    
-    // 컬렉션이 있고 프롬프트가 선택되어 있다면, 컬렉션 탭을 활성화
-    if (collections && collections.length > 0) {
-      // 선택된 프롬프트가 있는지 확인
-      if (selectedPromptId) {
-        // 컬렉션에 이 프롬프트가 있는지 확인
-        const hasInCollection = collections.some(collection => 
-          collection.prompts && collection.prompts.some(prompt => 
-            prompt.id === selectedPromptId
-          )
-        );
-        
-        // 컬렉션에 있으면 컬렉션 탭을 활성화
-        if (hasInCollection) {
-          setActiveTab('collections');
-        }
-      }
-    }
-  }, [collections, selectedPromptId]);
+    // 기본적으로 버전 관리 탭을 보여줌
+    // 다른 탭으로 변경되는 로직은 제거
+  }, []);
   
   // 탭 변경 시 데이터 로드
   useEffect(() => {
     switch (activeTab) {
+      case 'version':
+        // 버전 관리 탭은 컴포넌트 내부에서 데이터를 로드하므로 여기서는 처리하지 않음
+        break;
       case 'collections':
         if (selectedCollectionId) {
           loadCollectionPrompts(selectedCollectionId);
@@ -324,6 +446,18 @@ const PromptPanel = ({
   // 탭 컨텐츠를 렌더링하는 함수
   const renderTabContent = () => {
     switch (activeTab) {
+      case 'version':
+        return (
+          <VersionManagementList
+            selectedPromptId={selectedPromptId}
+            onPromptSelect={(prompt) => {
+              // 이벤트 버블링을 방지하고 오버레이 모달을 열도록 수정
+              if (prompt) {
+                openOverlayModal(prompt);
+              }
+            }}
+          />
+        );
       case 'similar':
         return (
           <SimilarPromptsList 
@@ -379,6 +513,16 @@ const PromptPanel = ({
     <div className="bg-white rounded-lg shadow-md h-full max-h-full flex flex-col overflow-hidden">
       {/* 탭 선택기와 닫기 버튼 */}
       <div className="flex border-b items-center">
+        <button
+          className={`px-4 py-2 text-sm font-medium ${
+            activeTab === 'version' 
+              ? 'border-b-2 border-blue-500 text-blue-600' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+          onClick={() => setActiveTab('version')}
+        >
+          버전 관리
+        </button>
         <button
           className={`px-4 py-2 text-sm font-medium ${
             activeTab === 'similar' 
