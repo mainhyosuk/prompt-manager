@@ -8,6 +8,7 @@ import AddPromptToCollectionModal from '../../modals/AddPromptToCollectionModal'
 import CollectionsList from './CollectionsList';
 import SimilarPromptsList from './SimilarPromptsList';
 import RecentPromptsList from './RecentPromptsList';
+import VersionDetailModal from '../../modals/VersionDetailModal';
 
 // 버전 관리 탭 컴포넌트 추가
 const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
@@ -15,6 +16,8 @@ const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [newVersionTitle, setNewVersionTitle] = useState('');
+  const [editingPrompt, setEditingPrompt] = useState(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   
   // 현재 선택된 프롬프트 정보를 가져오기 위한 컨텍스트 접근
   const { selectedPrompt } = useAppContext();
@@ -78,6 +81,31 @@ const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
     }
   };
   
+  // 버전 편집 모달 닫기
+  const handleCloseEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditingPrompt(null);
+  };
+  
+  // 카드 클릭 핸들러 (편집이 아닌 경우)
+  const handleCardClick = (prompt) => {
+    // 카드 클릭 시 버전 편집 모달 열기
+    setEditingPrompt(prompt);
+    setIsEditModalOpen(true);
+  };
+  
+  // 프롬프트 카드용 커스텀 렌더링 함수 (버전 관리용 오버라이드)
+  const renderPromptItemCard = (prompt) => {
+    return (
+      <PromptItemCard
+        key={prompt.id}
+        prompt={prompt}
+        onClick={handleCardClick}
+        // 버전 관리에서는 편집 버튼을 기본 동작으로 복원 (customEditHandler 제거)
+      />
+    );
+  };
+  
   // 로딩 상태 표시
   const renderLoading = () => (
     <div className="flex items-center justify-center h-32">
@@ -132,16 +160,19 @@ const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
           renderEmpty('관리 중인 버전이 없습니다')
         ) : (
           <div className="space-y-2">
-            {versions.map(version => (
-              <PromptItemCard
-                key={version.id}
-                prompt={version}
-                onClick={onPromptSelect}
-              />
-            ))}
+            {versions.map(version => renderPromptItemCard(version))}
           </div>
         )}
       </div>
+      
+      {/* 버전 편집 모달 */}
+      {isEditModalOpen && editingPrompt && (
+        <VersionDetailModal
+          isOpen={isEditModalOpen}
+          onClose={handleCloseEditModal}
+          prompt={editingPrompt}
+        />
+      )}
     </div>
   );
 };
@@ -451,10 +482,8 @@ const PromptPanel = ({
           <VersionManagementList
             selectedPromptId={selectedPromptId}
             onPromptSelect={(prompt) => {
-              // 이벤트 버블링을 방지하고 오버레이 모달을 열도록 수정
-              if (prompt) {
-                openOverlayModal(prompt);
-              }
+              // 버전 관리 탭에서는 onPromptSelect가 필요하지 않음
+              // 카드 클릭 시 자체적으로 편집 모달을 표시
             }}
           />
         );

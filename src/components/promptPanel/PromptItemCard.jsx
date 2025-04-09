@@ -5,7 +5,8 @@ import { copyToClipboard } from '../../utils/clipboard';
 const PromptItemCard = ({ 
   prompt, 
   onRemoveFromCollection,
-  onClick 
+  onClick,
+  customEditHandler // 버전 관리 탭에서 사용될 때 편집 버튼의 동작을 오버라이드
 }) => {
   const { getTagColorClasses, handleToggleFavorite, handleRecordUsage, handleEditPrompt } = useAppContext();
   
@@ -37,6 +38,14 @@ const PromptItemCard = ({
   // 편집 핸들러
   const handleEdit = (e) => {
     e.stopPropagation();
+    
+    // 커스텀 편집 핸들러가 제공된 경우 (버전 관리 탭에서 사용 시)
+    if (customEditHandler) {
+      customEditHandler(e);
+      return;
+    }
+    
+    // 기본 편집 동작 (일반 탭에서 사용 시)
     // 최신 프롬프트 데이터를 편집 모달로 전달
     const latestPromptData = { ...prompt };
     handleEditPrompt(latestPromptData);
