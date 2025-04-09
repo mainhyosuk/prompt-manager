@@ -6,6 +6,7 @@ import { updatePromptMemo } from '../api/promptApi';
 import { getSimilarPrompts } from '../api/collectionApi';
 import PromptPanel from '../components/promptPanel/PromptPanel';
 import PromptItemCard from '../components/promptPanel/PromptItemCard';
+import { ChevronLeft } from 'lucide-react';
 
 // 변수가 적용된 내용을 하이라이트하는 컴포넌트
 const HighlightedContent = ({ content, variableValues }) => {
@@ -86,7 +87,10 @@ const PromptDetailModal = () => {
     handleUpdateVariableDefaultValue,
     updatePromptItem,
     openOverlayModal,
-    handleViewPrompt
+    handleViewPrompt,
+    previousPrompt,
+    switchToPrompt,
+    handleGoBack
   } = useAppContext();
   
   const [variableValues, setVariableValues] = useState({});
@@ -280,9 +284,7 @@ const PromptDetailModal = () => {
   
   // 유사 프롬프트로 전환 핸들러
   const handleSwitchToPrompt = (prompt) => {
-    handleCloseModal(); // 현재 모달 닫기
-    // 약간의 지연 후 메인 모달 내용 전환
-    setTimeout(() => handleViewPrompt(prompt), 50);
+    switchToPrompt(prompt);
   };
   
   // 유사 프롬프트 로드 useEffect 추가
@@ -533,6 +535,19 @@ const PromptDetailModal = () => {
             </button>
           </div>
         </div>
+
+        {/* 뒤로 가기 버튼 (조건부 렌더링) */}
+        {previousPrompt && (
+          <div className="px-5 py-1 border-b bg-gray-50 flex-shrink-0">
+            <button 
+              onClick={handleGoBack}
+              className="text-xs text-blue-600 hover:underline flex items-center"
+            >
+              <ChevronLeft size={14} className="mr-0.5" /> 
+              {previousPrompt.title} (으)로 돌아가기
+            </button>
+          </div>
+        )}
 
         {/* 모달 콘텐츠 - 좌우 분할 레이아웃 */}
         <div className="flex-1 flex overflow-hidden">

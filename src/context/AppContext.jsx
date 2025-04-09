@@ -41,6 +41,7 @@ const initialState = {
   
   // 새로고침 트리거 상태 추가
   userPromptUpdateTimestamp: null,
+  previousPrompt: null, // 이전 프롬프트 상태 추가
 };
 
 const AppContext = createContext(initialState);
@@ -81,6 +82,9 @@ export const AppProvider = ({ children }) => {
 
   // 새로고침 트리거 상태 추가
   const [userPromptUpdateTimestamp, setUserPromptUpdateTimestamp] = useState(initialState.userPromptUpdateTimestamp);
+
+  // 이전 프롬프트 상태 추가
+  const [previousPrompt, setPreviousPrompt] = useState(initialState.previousPrompt);
 
   // 테마 변경 함수
   const changeTheme = useCallback((newTheme) => {
@@ -308,9 +312,40 @@ export const AppProvider = ({ children }) => {
 
   // 프롬프트 상세보기 핸들러
   const handleViewPrompt = useCallback((prompt) => {
+    // 중요: 뒤로가기 시 previousPrompt를 null로 설정해야 무한 루프 방지
+    // setPreviousPrompt(null); // handleGoBack에서 처리하므로 여기선 제거
     setSelectedPrompt(prompt);
     setIsDetailModalOpen(true);
   }, []);
+
+  // 프롬프트 전환 함수 (이전 상태 저장)
+  const switchToPrompt = useCallback((nextPrompt) => {
+    if (selectedPrompt && nextPrompt && selectedPrompt.id !== nextPrompt.id) {
+      setPreviousPrompt(selectedPrompt); // 현재 프롬프트를 이전 상태로 저장
+      setSelectedPrompt(nextPrompt); // 새 프롬프트로 전환
+      setIsDetailModalOpen(true); // 혹시 닫혔을 수 있으니 열기 상태 확인
+    } else {
+      // 동일 프롬프트 클릭 등 일반적인 경우
+      handleViewPrompt(nextPrompt);
+    }
+  }, [selectedPrompt, handleViewPrompt]); // handleViewPrompt 의존성 추가
+
+  // 뒤로 가기 핸들러
+  const handleGoBack = useCallback(() => {
+    if (previousPrompt) {
+      setSelectedPrompt(previousPrompt); // 이전 프롬프트로 복원
+      setPreviousPrompt(null); // 이전 상태 기록 초기화
+      setIsDetailModalOpen(true); // 모달 열기 상태 확인
+    }
+  }, [previousPrompt]);
+
+  // 상세 모달 닫기 함수 (previousPrompt 초기화 추가)
+  const handleCloseModal = useCallback(async () => {
+    // ... (기존 메모 저장 로직 등은 그대로 둠 - handleCloseModal 내부 코드 필요)
+    // 모달 닫을 때 이전 기록도 초기화
+    setPreviousPrompt(null);
+    setIsDetailModalOpen(false);
+  }, [/* handleCloseModal의 기존 의존성 배열 */ setIsDetailModalOpen]);
 
   // 즐겨찾기 토글 핸들러
   const handleToggleFavorite = useCallback(async (promptId) => {
@@ -638,6 +673,7 @@ export const AppProvider = ({ children }) => {
     isUserPromptModalOpen,
     userPrompt,
     userPromptUpdateTimestamp,
+    previousPrompt, // 이전 프롬프트 상태
     
     // 데이터 접근 함수
     getFilteredPrompts,
@@ -680,7 +716,10 @@ export const AppProvider = ({ children }) => {
     setIsUserPromptModalOpen,
     setUserPrompt,
     handleUpdateUserAddedPrompt,
-    setUserPromptUpdateTimestamp
+    setUserPromptUpdateTimestamp,
+    switchToPrompt, // 전환 함수
+    handleGoBack,   // 뒤로가기 함수
+    handleCloseModal  // 상세 모달 닫기 함수
   };
 
   return (
