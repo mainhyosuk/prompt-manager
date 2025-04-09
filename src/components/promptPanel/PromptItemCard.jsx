@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { copyToClipboard } from '../../utils/clipboard';
-import { Download, Copy, Star, Upload, Trash2 } from 'lucide-react';
+import { Download, Copy, Star, Upload, Trash2, ExternalLink } from 'lucide-react';
 
 const PromptItemCard = ({ 
   prompt, 
@@ -10,7 +10,9 @@ const PromptItemCard = ({
   customEditHandler, // 버전 관리 탭에서 사용될 때 편집 버튼의 동작을 오버라이드
   customDeleteHandler, // 버전 관리 탭에서 사용될 때 삭제 버튼의 동작을 오버라이드
   customExportHandler, // 내보내기 핸들러 prop 추가
-  isVersionTab = false // 버전 관리 탭에서 사용되는지 여부
+  isVersionTab = false, // 버전 관리 탭에서 사용되는지 여부
+  cardType = 'default', // 카드 타입 prop 추가 (default, similar)
+  onSwitchPrompt // 모달 전환 핸들러 prop 추가
 }) => {
   const { getTagColorClasses, handleToggleFavorite, handleRecordUsage, handleEditPrompt } = useAppContext();
   
@@ -96,8 +98,19 @@ const PromptItemCard = ({
           <span className="truncate">{truncateText(prompt.title, 30)}</span>
         </h3>
         <div className="flex items-center space-x-1 ml-auto">
-          {/* 버전 관리 탭일 때는 편집 및 삭제 버튼만 표시 */}
-          {isVersionTab ? (
+          {/* 카드 타입에 따른 아이콘 렌더링 */} 
+          {cardType === 'similar' ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation(); 
+                onSwitchPrompt?.(prompt); // onSwitchPrompt 호출로 변경
+              }}
+              className="text-gray-400 hover:text-blue-500 p-1 flex items-center justify-center"
+              title="이 프롬프트로 전환"
+            >
+              <ExternalLink size={15} />
+            </button>
+          ) : isVersionTab ? (
             <>
               <button
                 onClick={handleEdit}
@@ -119,7 +132,7 @@ const PromptItemCard = ({
             </>
           ) : (
             <>
-              {/* 내보내기 버튼 */}
+              {/* 기본/사용자 추가 탭 아이콘 */}
               {customExportHandler && (
                  <button
                    onClick={handleExport}
@@ -129,7 +142,6 @@ const PromptItemCard = ({
                    <Upload size={15} />
                  </button>
               )}
-
               <button
                 onClick={handleEdit}
                 className="text-gray-400 hover:text-blue-500 p-1 flex items-center justify-center"
@@ -137,8 +149,6 @@ const PromptItemCard = ({
               >
                 <span>✎</span>
               </button>
-              
-              {/* 삭제 버튼 추가 */}
               {customDeleteHandler && (
                 <button
                   onClick={handleDelete}
@@ -148,7 +158,6 @@ const PromptItemCard = ({
                   <Trash2 size={15} />
                 </button>
               )}
-              
               {onRemoveFromCollection && (
                 <button
                   onClick={handleRemove}
@@ -163,7 +172,7 @@ const PromptItemCard = ({
         </div>
       </div>
       
-      <div className="text-sm text-gray-600 mb-2 flex-grow overflow-y-auto">
+      <div className="text-sm text-gray-600 mb-2 flex-grow overflow-hidden overflow-y-auto">
         <div className="line-clamp-3 hover:line-clamp-none">
           {prompt.content}
         </div>

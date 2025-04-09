@@ -85,7 +85,8 @@ const PromptDetailModal = () => {
     getTagColorClasses,
     handleUpdateVariableDefaultValue,
     updatePromptItem,
-    openOverlayModal
+    openOverlayModal,
+    handleViewPrompt
   } = useAppContext();
   
   const [variableValues, setVariableValues] = useState({});
@@ -275,6 +276,13 @@ const PromptDetailModal = () => {
     
     // 모달 닫기
     setIsDetailModalOpen(false);
+  };
+  
+  // 유사 프롬프트로 전환 핸들러
+  const handleSwitchToPrompt = (prompt) => {
+    handleCloseModal(); // 현재 모달 닫기
+    // 약간의 지연 후 메인 모달 내용 전환
+    setTimeout(() => handleViewPrompt(prompt), 50);
   };
   
   // 유사 프롬프트 로드 useEffect 추가
@@ -730,10 +738,12 @@ const PromptDetailModal = () => {
           ) : (
             <div className="flex overflow-x-auto space-x-3 pb-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
               {similarPrompts.map(prompt => (
-                <div key={prompt.id} className="flex-shrink-0 w-64"> {/* 카드 너비 고정 */}
-                  <PromptItemCard
-                    prompt={prompt}
-                    onClick={(p) => openOverlayModal(p)} // 카드 클릭 시 오버레이 모달 열기
+                <div key={prompt.id} className="flex-shrink-0 w-80"> 
+                  <PromptItemCard 
+                    prompt={prompt} 
+                    onClick={(p) => openOverlayModal(p)} 
+                    cardType="similar"
+                    onSwitchPrompt={handleSwitchToPrompt}
                   />
                 </div>
               ))}
