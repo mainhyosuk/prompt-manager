@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { getPrompts, createPrompt, updatePrompt, deletePrompt, toggleFavorite, recordPromptUsage, duplicatePrompt, updateVariableDefaultValue } from '../api/promptApi';
+import { getPrompts, createPrompt, updatePrompt, deletePrompt, toggleFavorite, recordPromptUsage, duplicatePrompt, updateVariableDefaultValue, updatePromptMemo } from '../api/promptApi';
 import { getFolders } from '../api/folderApi';
 import { getTags } from '../api/tagApi';
 import { updateUserAddedPrompt as updateUserAddedPromptApi } from '../api/userPromptApi';
@@ -62,6 +62,11 @@ export const AppProvider = ({ children }) => {
   const [folders, setFolders] = useState(initialState.folders);
   const [tags, setTags] = useState(initialState.tags);
   
+  // 누락된 상태 선언 추가
+  const [favoritePrompts, setFavoritePrompts] = useState([]);
+  const [searchResults, setSearchResults] = useState([]);
+  const [userPrompts, setUserPrompts] = useState([]); // 사용자 추가 프롬프트 *목록* 상태
+
   const [selectedPrompt, setSelectedPrompt] = useState(initialState.selectedPrompt);
   const [overlayPrompt, setOverlayPrompt] = useState(initialState.overlayPrompt);
   const [selectedFolder, setSelectedFolder] = useState(initialState.selectedFolder);
@@ -542,22 +547,51 @@ export const AppProvider = ({ children }) => {
     setCurrentScreen('main');
   }, []);
 
-  // 개별 프롬프트 항목 업데이트 함수
+  // 프롬프트 아이템 업데이트 함수 (내부 상태 업데이트용)
   const updatePromptItem = useCallback((promptId, updatedData) => {
-    setPrompts(prev => prev.map(p => 
-      p.id === promptId 
-        ? { ...p, ...updatedData } 
-        : p
-    ));
+    const updateItem = (items) => items.map(item => item.id === promptId ? { ...item, ...updatedData } : item);
+
+    setPrompts(prev => updateItem(prev));
+    setFavoritePrompts(prev => updateItem(prev)); // 즐겨찾기 목록도 업데이트
+    setSearchResults(prev => updateItem(prev)); // 검색 결과도 업데이트
+    setUserPrompts(prev => updateItem(prev)); // 사용자 프롬프트 목록도 업데이트
     
-    // 현재 선택된 프롬프트가 있고, 그 프롬프트의 id가 변경된 프롬프트와 같으면 선택된 프롬프트도 업데이트
-    if (selectedPrompt && selectedPrompt.id === promptId) {
-      setSelectedPrompt(prev => ({
-        ...prev,
-        ...updatedData
-      }));
+    // 현재 선택된 프롬프트도 업데이트
+    setSelectedPrompt(prev => (prev && prev.id === promptId) ? { ...prev, ...updatedData } : prev);
+    // 이전 프롬프트도 업데이트 (뒤로가기 시 반영되도록)
+    setPreviousPrompt(prev => (prev && prev.id === promptId) ? { ...prev, ...updatedData } : prev);
+  }, [setSelectedPrompt, setPreviousPrompt]);
+
+  // 프롬프트 제목 업데이트 핸들러 (updatePrompt API 사용)
+  const handleUpdatePromptTitle = useCallback(async (promptId, newTitle) => {
+    if (!newTitle || newTitle.trim() === '') {
+      console.error('Prompt title cannot be empty.');
+      return; // 빈 제목은 저장하지 않음
     }
-  }, [selectedPrompt]);
+
+    // 현재 프롬프트 데이터 찾기 (상태에서)
+    // 중요: prompts 배열뿐만 아니라 다른 상태 배열에서도 찾아야 할 수 있음
+    // 여기서는 간단하게 prompts에서 찾는 것으로 가정
+    const currentPrompt = prompts.find(p => p.id === promptId);
+    
+    if (!currentPrompt) {
+      console.error('Prompt not found locally for title update:', promptId);
+      return;
+    }
+
+    // 업데이트할 데이터 준비 (전체 프롬프트 데이터 + 변경된 제목)
+    const updatedPromptData = { ...currentPrompt, title: newTitle };
+
+    try {
+      // 기존 updatePrompt API 함수 호출
+      await updatePrompt(promptId, updatedPromptData);
+      // 로컬 상태 업데이트 (내부 함수 호출)
+      updatePromptItem(promptId, { title: newTitle });
+    } catch (error) {
+      console.error('Failed to update prompt title via updatePrompt:', error);
+      // 필요시 사용자에게 에러 알림 표시
+    }
+  }, [prompts, updatePromptItem]); // prompts와 updatePromptItem 의존성 추가
 
   // 태그 색상 매핑
   const getTagColorClasses = useCallback((color) => {
@@ -719,7 +753,8 @@ export const AppProvider = ({ children }) => {
     setUserPromptUpdateTimestamp,
     switchToPrompt, // 전환 함수
     handleGoBack,   // 뒤로가기 함수
-    handleCloseModal  // 상세 모달 닫기 함수
+    handleCloseModal,  // 상세 모달 닫기 함수
+    handleUpdatePromptTitle, 
   };
 
   return (

@@ -90,7 +90,8 @@ const PromptDetailModal = () => {
     handleViewPrompt,
     previousPrompt,
     switchToPrompt,
-    handleGoBack
+    handleGoBack,
+    handleUpdatePromptTitle
   } = useAppContext();
   
   const [variableValues, setVariableValues] = useState({});
@@ -117,6 +118,11 @@ const PromptDetailModal = () => {
   const [similarPrompts, setSimilarPrompts] = useState([]);
   const [isLoadingSimilar, setIsLoadingSimilar] = useState(false);
   const [similarError, setSimilarError] = useState(null);
+  
+  // 제목 수정 상태 추가
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editableTitle, setEditableTitle] = useState('');
+  const titleInputRef = useRef(null);
   
   // 변수 기본값 설정
   useEffect(() => {
@@ -257,8 +263,60 @@ const PromptDetailModal = () => {
   useEffect(() => {
     if (selectedPrompt) {
       setMemo(selectedPrompt.memo || '');
+      setEditableTitle(selectedPrompt.title || ''); // editableTitle 초기화
+      setIsEditingTitle(false); // 편집 모드 해제
     }
   }, [selectedPrompt]);
+  
+  // 제목 편집 모드 활성화 시 input에 포커스
+  useEffect(() => {
+    if (isEditingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select(); // 텍스트 전체 선택
+    }
+  }, [isEditingTitle]);
+  
+  // 제목 클릭 핸들러
+  const handleTitleClick = () => {
+    setEditableTitle(selectedPrompt.title || ''); // 현재 제목으로 초기화
+    setIsEditingTitle(true);
+  };
+
+  // 제목 수정 완료 핸들러 (Enter 또는 Blur)
+  const handleTitleChangeComplete = async () => {
+    if (!isEditingTitle) return;
+
+    const trimmedTitle = editableTitle.trim();
+    // 제목이 변경되었고 비어있지 않으면 저장
+    if (selectedPrompt && trimmedTitle !== selectedPrompt.title && trimmedTitle !== '') {
+      try {
+        await handleUpdatePromptTitle(selectedPrompt.id, trimmedTitle);
+        // 상태 업데이트는 AppContext의 updatePromptItem에서 처리됨
+      } catch (error) { 
+        // 에러 처리 (예: 원래 제목으로 되돌리기)
+        setEditableTitle(selectedPrompt.title || '');
+      }
+    } else {
+      // 변경되지 않았거나 빈 제목이면 원래 제목으로 복구
+      setEditableTitle(selectedPrompt.title || '');
+    }
+    setIsEditingTitle(false);
+  };
+
+  // 제목 입력 변경 핸들러
+  const handleTitleInputChange = (e) => {
+    setEditableTitle(e.target.value);
+  };
+
+  // 제목 입력 KeyDown 핸들러 (Enter, Escape)
+  const handleTitleInputKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleTitleChangeComplete();
+    } else if (e.key === 'Escape') {
+      setEditableTitle(selectedPrompt.title || ''); // 원래 제목으로 복구
+      setIsEditingTitle(false);
+    }
+  };
   
   // 모달 닫기 전 메모 저장 처리
   const handleCloseModal = async () => {
@@ -504,7 +562,25 @@ const PromptDetailModal = () => {
       <div ref={modalRef} className="bg-white rounded-lg shadow-xl w-10/12 max-w-7xl h-[85vh] flex flex-col">
         {/* 모달 헤더 */}
         <div className="flex justify-between items-center border-b px-5 py-2 flex-shrink-0">
-          <h2 className="text-xl font-semibold">{selectedPrompt.title}</h2>
+          {isEditingTitle ? (
+            <input
+              ref={titleInputRef}
+              type="text"
+              value={editableTitle}
+              onChange={handleTitleInputChange}
+              onBlur={handleTitleChangeComplete} // 포커스 잃으면 저장
+              onKeyDown={handleTitleInputKeyDown} // Enter/Escape 처리
+              className="text-xl font-semibold border-b-2 border-blue-500 outline-none flex-1 mr-4 py-0.5"
+            />
+          ) : (
+            <h2 
+              className="text-xl font-semibold cursor-pointer hover:bg-gray-100 px-1 rounded"
+              onClick={handleTitleClick}
+              title="클릭하여 제목 수정"
+            >
+              {selectedPrompt.title}
+            </h2>
+          )}
           <div className="flex items-center space-x-2">
             {/* 즐겨찾기 버튼 */}
             <button
@@ -680,7 +756,6 @@ const PromptDetailModal = () => {
                    }}
                    className="flex-1 w-full p-2 border rounded-lg bg-gray-50 hover:bg-white focus:bg-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-300"
                    placeholder="메모를 입력하세요..."
-                   disabled={savingMemo}
                  />
                </div>
 
