@@ -277,18 +277,29 @@ const useContextMenu = (folderName) => {
 };
 
 // 일반 드래그 위치 확인 유틸리티 함수 (훅 사용 없음)
-const checkDragPosition = (e) => {
+const checkDragPosition = (e, threshold = 5) => {
   const rect = e.currentTarget.getBoundingClientRect();
   const mouseY = e.clientY;
-  
+
+  // Check if mouse is slightly outside the bounds (using threshold)
+  if (mouseY < rect.top - threshold) {
+    return 'before'; // Consider it 'before' if above with threshold
+  }
+  if (mouseY > rect.bottom + threshold) {
+    return 'after'; // Consider it 'after' if below with threshold
+  }
+
   // 역방향 스크롤에 대한 보정
   const mouseRelativeY = mouseY - rect.top;
   const relativePercentage = mouseRelativeY / rect.height;
-  
-  // 정확한 영역 계산 - 15% 상단/하단 경계, 70% 내부 영역
-  if (relativePercentage < 0.15) {
+
+  // 정확한 영역 계산 - 상/하 25%, 내부 50% (조정된 비율)
+  // Add clamping to handle values slightly outside [0, 1]
+  const clampedPercentage = Math.max(0, Math.min(1, relativePercentage));
+
+  if (clampedPercentage < 0.25) {
     return 'before';
-  } else if (relativePercentage > 0.85) {
+  } else if (clampedPercentage > 0.75) { // 1 - 0.25 = 0.75
     return 'after';
   } else {
     return 'inside';
@@ -476,7 +487,9 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
   const dragStateRef = useRef({
     isDragging: false,
     isDragOver: false,
-    dropPosition: null // 'before', 'inside', 'after'
+    dropPosition: null, // 'before', 'inside', 'after'
+    lastDragTime: 0, // For throttling dragOver
+    throttleInterval: 50 // Throttle interval in ms (adjust as needed)
   });
   
   // UI 업데이트를 위한 최소한의 상태만 유지
@@ -567,38 +580,49 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
   const handleDragOver = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    // 드래그 타이머를 사용하여 불필요한 계산 줄이기
+
+    // Throttle dragOver calls based on time interval
     const now = Date.now();
-    if (now - (dragStateRef.current.lastDragTime || 0) < 30) {
-      return; // 30ms 내에 다시 호출되면 무시
+    const { lastDragTime, throttleInterval } = dragStateRef.current;
+    if (now - lastDragTime < throttleInterval) {
+      return; // Ignore call if within throttle interval
     }
-    dragStateRef.current.lastDragTime = now;
-    
+    dragStateRef.current.lastDragTime = now; // Update last call time
+
     // 자기 자신이거나 특별 폴더인 경우 드롭 불가
-    if (isDefaultFolder) {
+    if (isDefaultFolder || dragStateRef.current.isDragging) { // Check if dragging itself
       e.dataTransfer.dropEffect = 'none'; // 드롭 불가 아이콘 표시
+      updateDragVisual(false); // Ensure no visual feedback if dropping is not allowed
       return;
     }
-    
+    e.dataTransfer.dropEffect = 'move'; // Allow drop effect
+
     // 드래그 위치에 따라 다른 시각적 피드백 표시
-    const dropPosition = checkDragPosition(e);
-    
+    const dropPosition = checkDragPosition(e); // Use updated checkDragPosition
+
     // 이전 위치와 같으면 불필요한 업데이트 방지
     if (dragStateRef.current.dropPosition === dropPosition && dragStateRef.current.isDragOver) {
       return;
     }
-    
+
     // 위치에 따른 피드백
     updateDragVisual(true, dropPosition);
   }, [isDefaultFolder, updateDragVisual]);
-  
+
   const handleDragLeave = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
+    // Check if the mouse truly left the element, not just moved to a child
+    const relatedTarget = e.relatedTarget;
+    if (folderItemRef.current && folderItemRef.current.contains(relatedTarget)) {
+        return; // Don't hide visuals if moving within the element
+    }
+
     // 시각적 피드백 제거
     updateDragVisual(false);
+    // Reset drop position in ref when leaving
+    dragStateRef.current.dropPosition = null;
   }, [updateDragVisual]);
   
   // CSS 스타일 최적화를 위한 클래스 문자열 생성 (position:relative 추가)
@@ -1022,7 +1046,9 @@ const FolderTree = React.memo(() => {
   const dragStateRef = useRef({
     isRootDragOver: false,
     rootDropPosition: null, // 드롭 위치 (before, inside, after)
-    targetFolder: null // 대상 폴더
+    targetFolder: null, // 대상 폴더
+    lastRootDragTime: 0, // Throttling for root drag over
+    rootThrottleInterval: 50 // Throttle interval in ms
   });
   
   // UI 업데이트를 위한 최소한의 상태만 유지
@@ -1149,46 +1175,73 @@ const FolderTree = React.memo(() => {
   // 루트 영역 드래그 앤 드롭 이벤트 핸들러 최적화
   const handleRootDragOver = useCallback((e) => {
     e.preventDefault();
+
+    // Throttle root dragOver calls
+    const now = Date.now();
+    const { lastRootDragTime, rootThrottleInterval } = dragStateRef.current;
+    if (now - lastRootDragTime < rootThrottleInterval) {
+      return; // Ignore call if within throttle interval
+    }
+    dragStateRef.current.lastRootDragTime = now; // Update last call time
+
+    // Check if the drag is currently over a specific folder item
+    if (e.target.closest('.folder-item')) {
+      // Let the FolderItem's handler manage the event
+      return;
+    }
+
+    // Proceed with root-level drop detection
     e.dataTransfer.dropEffect = 'move';
-    
+
     // 드래그 위치 확인
     const dropInfo = checkRootDragPosition(e, folders);
-    
+
     // 이전 상태와 동일하면 불필요한 업데이트 방지
     const currentState = dragStateRef.current;
     if (
-      currentState.isRootDragOver && 
-      currentState.rootDropPosition === dropInfo.position && 
+      currentState.isRootDragOver &&
+      currentState.rootDropPosition === dropInfo.position &&
       currentState.targetFolder?.id === dropInfo.targetFolder?.id
     ) {
       return;
     }
-    
+
     updateRootDragVisual(true, dropInfo);
-  }, [updateRootDragVisual, folders]);
-  
-  const handleRootDragLeave = useCallback(() => {
+  }, [updateRootDragVisual, folders, checkRootDragPosition]);
+
+  const handleRootDragLeave = useCallback((e) => {
+    // Prevent hiding marker if leaving towards a folder item
+    const relatedTarget = e.relatedTarget;
+    if (relatedTarget && relatedTarget.closest && relatedTarget.closest('.folder-item')) {
+      return;
+    }
     updateRootDragVisual(false);
     hideDropMarker();
   }, [updateRootDragVisual]);
-  
+
   const handleRootDrop = async (e) => {
     e.preventDefault();
-    
+
+    // Prevent drop if it happens over a folder-item (should be handled by FolderItem's drop)
+    if (e.target.closest('.folder-item')) {
+        hideDropMarker();
+        return;
+    }
+
     // Ref를 사용하여 상태 업데이트
     const dropInfo = dragStateRef.current;
     dragStateRef.current.isRootDragOver = false;
     forceUpdate({});
-    
+
     try {
       // 드래그 데이터 가져오기
       const data = JSON.parse(e.dataTransfer.getData('application/json'));
       const draggedFolderId = data.folderId;
-      
+
       // 계층 구조에서 폴더 찾기
       const draggedFolder = findFolderById(folders, draggedFolderId);
       if (!draggedFolder) return;
-      
+
       // 드롭 위치에 따라 처리
       if (dropInfo.rootDropPosition && dropInfo.targetFolder) {
         // 특정 폴더 기준 위치로 이동
@@ -1197,13 +1250,13 @@ const FolderTree = React.memo(() => {
           target_position: dropInfo.rootDropPosition
         });
       } else {
-        // 기본: 최상위 레벨의 마지막 위치로 이동
+        // 기본: 최상위 레벨의 마지막 위치로 이동 (또는 첫번째 위치 등 기본 정책)
         await reorderFolder(draggedFolderId, {
           reference_folder_id: 'root',
-          target_position: 'after'
+          target_position: 'after' // Example: place at the end by default
         });
       }
-      
+
       // 데이터 다시 로드
       await loadData();
     } catch (error) {
