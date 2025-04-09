@@ -3,7 +3,9 @@ import { useAppContext } from '../context/AppContext';
 import { applyVariables, extractVariables, splitContentByVariables } from '../utils/variableParser';
 import { copyToClipboard } from '../utils/clipboard';
 import { updatePromptMemo } from '../api/promptApi';
+import { getSimilarPrompts } from '../api/collectionApi';
 import PromptPanel from '../components/promptPanel/PromptPanel';
+import PromptItemCard from '../components/promptPanel/PromptItemCard';
 
 // 변수가 적용된 내용을 하이라이트하는 컴포넌트
 const HighlightedContent = ({ content, variableValues }) => {
@@ -105,6 +107,11 @@ const PromptDetailModal = () => {
   const [savingMemo, setSavingMemo] = useState(false);
   const memoTimerRef = useRef(null);
   const autoSaveDelay = 1000; // 1초 후 자동 저장
+  
+  // 유사 프롬프트 관련 상태 추가
+  const [similarPrompts, setSimilarPrompts] = useState([]);
+  const [isLoadingSimilar, setIsLoadingSimilar] = useState(false);
+  const [similarError, setSimilarError] = useState(null);
   
   // 변수 기본값 설정
   useEffect(() => {
@@ -269,6 +276,31 @@ const PromptDetailModal = () => {
     // 모달 닫기
     setIsDetailModalOpen(false);
   };
+  
+  // 유사 프롬프트 로드 useEffect 추가
+  useEffect(() => {
+    const loadSimilar = async () => {
+      if (!selectedPrompt?.id) {
+        setSimilarPrompts([]); // 선택된 프롬프트 없으면 비우기
+        return;
+      }
+      
+      setIsLoadingSimilar(true);
+      setSimilarError(null);
+      try {
+        const data = await getSimilarPrompts(selectedPrompt.id);
+        // 자기 자신은 제외하고 최대 10개만 가져오기 (선택사항)
+        setSimilarPrompts(data.filter(p => p.id !== selectedPrompt.id).slice(0, 10)); 
+      } catch (err) {
+        console.error('유사 프롬프트 로드 오류:', err);
+        setSimilarError('유사한 프롬프트를 불러오는데 실패했습니다.');
+      } finally {
+        setIsLoadingSimilar(false);
+      }
+    };
+
+    loadSimilar();
+  }, [selectedPrompt]); // selectedPrompt가 바뀔 때마다 로드
   
   if (!selectedPrompt) return null;
   
@@ -456,22 +488,25 @@ const PromptDetailModal = () => {
   }, []);
   
   return (
+    // 배경 div
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div ref={modalRef} className="bg-white rounded-lg shadow-xl w-10/12 max-w-7xl h-[70vh] flex flex-col">
+      {/* 모달 컨테이너 (높이 조정됨) */}
+      <div ref={modalRef} className="bg-white rounded-lg shadow-xl w-10/12 max-w-7xl h-[85vh] flex flex-col">
         {/* 모달 헤더 */}
         <div className="flex justify-between items-center border-b px-5 py-2 flex-shrink-0">
           <h2 className="text-xl font-semibold">{selectedPrompt.title}</h2>
           <div className="flex items-center space-x-2">
-            <button 
+            {/* 즐겨찾기 버튼 */}
+            <button
               onClick={() => handleToggleFavorite(selectedPrompt.id)}
               className="text-gray-400 hover:text-yellow-500"
               title={selectedPrompt.is_favorite ? '즐겨찾기 해제' : '즐겨찾기에 추가'}
             >
               <span className={selectedPrompt.is_favorite ? 'text-yellow-400' : ''}>★</span>
             </button>
-            <button 
+            {/* 편집 버튼 */}
+            <button
               onClick={() => {
-                // 프롬프트 데이터의 최신 상태를 가져와 편집 모달 열기
                 const latestPromptData = { ...selectedPrompt };
                 handleEditPrompt(latestPromptData);
               }}
@@ -480,7 +515,8 @@ const PromptDetailModal = () => {
             >
               <span>✎</span>
             </button>
-            <button 
+            {/* 닫기 버튼 */}
+            <button
               onClick={() => handleCloseModal()}
               className="text-gray-400 hover:text-gray-600"
               title="닫기"
@@ -489,18 +525,17 @@ const PromptDetailModal = () => {
             </button>
           </div>
         </div>
-        
+
         {/* 모달 콘텐츠 - 좌우 분할 레이아웃 */}
         <div className="flex-1 flex overflow-hidden">
-          {/* 왼쪽 영역 - 기존 콘텐츠 (고정 너비) */}
+          {/* 왼쪽 영역 - 변수, 내용, 메모, 메타데이터 (고정 너비 및 스크롤) */}
           <div className="w-8/12 flex flex-col overflow-hidden">
-            {/* 변수 입력 영역 - 상단에 고정, 변수가 있을 때만 표시 */}
+            {/* 변수 입력 영역 (있을 경우) */}
             {selectedPrompt.variables && selectedPrompt.variables.length > 0 && (
               <div className="flex-shrink-0 border-b">
                 <div className="p-2">
                   <div className="flex items-center justify-between">
                     <h3 className="font-medium text-gray-800 mb-1">변수 입력</h3>
-                    {/* 여기에 필요한 경우 접기/펼치기 버튼을 추가할 수 있음 */}
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-32 overflow-y-auto pr-2">
                     {selectedPrompt.variables.map((variable, index) => (
@@ -517,13 +552,14 @@ const PromptDetailModal = () => {
                             placeholder={variable.default_value || `${variable.name} 값 입력`}
                             className="flex-1 px-3 py-1 border rounded-l text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
                           />
+                          {/* 변수 기본값 저장 버튼 */}
                           <button
                             type="button"
                             onClick={() => handleSaveVariableDefaultValue(variable.name)}
-                            className={`px-3 py-1 border border-l-0 rounded-none 
-                              ${savingStates[variable.name] === 'saved' ? 'bg-green-50 text-green-600' : 
-                                savingStates[variable.name] === 'error' ? 'bg-red-50 text-red-600' : 
-                                savingStates[variable.name] === 'saving' ? 'bg-blue-50 text-blue-400' : 
+                            className={`px-3 py-1 border border-l-0 rounded-none
+                              ${savingStates[variable.name] === 'saved' ? 'bg-green-50 text-green-600' :
+                                savingStates[variable.name] === 'error' ? 'bg-red-50 text-red-600' :
+                                savingStates[variable.name] === 'saving' ? 'bg-blue-50 text-blue-400' :
                                 'bg-gray-50 hover:bg-gray-100 text-gray-600'}`}
                             title="변수값을 기본값으로 저장"
                             disabled={savingStates[variable.name] === 'saving'}
@@ -536,6 +572,7 @@ const PromptDetailModal = () => {
                               <span>💾</span>
                             )}
                           </button>
+                          {/* 텍스트 에디터 열기 버튼 */}
                           <button
                             type="button"
                             onClick={() => openTextEditor(variable)}
@@ -551,174 +588,176 @@ const PromptDetailModal = () => {
                 </div>
               </div>
             )}
-            
-            {/* 프롬프트 내용 및 메타데이터 영역 - 스크롤 가능 */}
-            <div className="flex-1 flex flex-col p-3 overflow-hidden">
-              {/* 프롬프트 내용 영역 - 가로 배치, 변수가 없을 때 더 큰 공간 할당 */}
-              <div className={`flex flex-col md:flex-row gap-3 ${selectedPrompt.variables && selectedPrompt.variables.length > 0 ? 'h-2/5' : 'h-3/5'}`}>
-                {/* 왼쪽 컬럼: 원본 내용 */}
-                <div className="flex-1 flex flex-col">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="font-medium text-gray-800">원본 프롬프트</h3>
-                  </div>
-                  <div className="flex-1 bg-gray-50 p-2 rounded-lg border text-base whitespace-pre-wrap overflow-y-auto">
-                    {selectedPrompt.content}
-                  </div>
-                </div>
-                
-                {/* 오른쪽 컬럼: 변수 적용된 내용 */}
-                <div className="flex-1 flex flex-col">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="font-medium text-gray-800">변수가 적용된 프롬프트</h3>
-                    <button
-                      onClick={handleCopyToClipboard}
-                      disabled={copyStatus === 'copying'}
-                      className={`px-2 py-0.5 rounded flex items-center text-xs
-                        ${copyStatus === 'copied' 
-                          ? 'bg-green-50 text-green-600' 
-                          : copyStatus === 'error'
-                          ? 'bg-red-50 text-red-600'
-                          : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
-                        }`}
-                    >
-                      <span className="mr-1">📋</span>
-                      {copyStatus === 'copying' 
-                        ? '복사 중...' 
-                        : copyStatus === 'copied' 
-                        ? '복사됨!' 
-                        : copyStatus === 'error'
-                        ? '복사 실패' 
-                        : '클립보드에 복사'}
-                    </button>
-                  </div>
-                  <div className="flex-1 bg-white border rounded-lg overflow-y-auto">
-                    <div className="p-2 text-base whitespace-pre-wrap">
-                      <HighlightedContent 
-                        content={selectedPrompt.content}
-                        variableValues={variableValues}
-                      />
+
+            {/* 내용, 메모, 메타데이터 스크롤 영역 */}
+            <div className="flex-1 flex flex-col p-3 overflow-y-auto">
+               {/* 원본/변수 적용 내용 영역 */}
+               <div className={`flex flex-col md:flex-row gap-3 ${selectedPrompt.variables && selectedPrompt.variables.length > 0 ? 'h-2/5' : 'h-3/5'}`}>
+                  {/* 원본 프롬프트 */}
+                  <div className="flex-1 flex flex-col">
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="font-medium text-gray-800">원본 프롬프트</h3>
+                    </div>
+                    <div className="flex-1 bg-gray-50 p-2 rounded-lg border text-base whitespace-pre-wrap overflow-y-auto">
+                      {selectedPrompt.content}
                     </div>
                   </div>
-                </div>
-              </div>
-              
-              {/* 메모장 컴포넌트 - 전체 너비 사용, 남은 공간 차지 */}
-              <div className="w-full mt-3 flex-1 flex flex-col">
-                <div className="flex items-center justify-between mb-1">
-                  <h3 className="font-medium text-gray-800 flex items-center">
-                    <span className="mr-2">📝</span>
-                    메모
-                  </h3>
-                  {savingMemo && (
-                    <span className="text-xs text-blue-500">저장 중...</span>
-                  )}
-                </div>
-                
-                <textarea
-                  value={memo}
-                  onChange={handleMemoChange}
-                  onBlur={() => {
-                    if (memoTimerRef.current) {
-                      clearTimeout(memoTimerRef.current);
-                      memoTimerRef.current = null;
-                    }
-                    autoSaveMemo(memo);
-                  }}
-                  className="flex-1 w-full p-2 border rounded-lg bg-gray-50 hover:bg-white focus:bg-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  placeholder="메모를 입력하세요..."
-                  disabled={savingMemo}
-                />
-              </div>
-              
-              {/* 메타데이터 - 압축된 레이아웃 */}
-              <div className="text-xs text-gray-600 mt-2 flex-shrink-0">
-                <div className="flex flex-wrap gap-x-4 gap-y-1">
-                  <div className="flex items-center">
-                    <span className="mr-1">📁</span>
-                    <span>폴더: {selectedPrompt.folder || '없음'}</span>
+                  {/* 변수 적용된 프롬프트 */}
+                  <div className="flex-1 flex flex-col">
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="font-medium text-gray-800">변수가 적용된 프롬프트</h3>
+                      {/* 복사 버튼 */}
+                      <button
+                        onClick={handleCopyToClipboard}
+                        disabled={copyStatus === 'copying'}
+                        className={`px-2 py-0.5 rounded flex items-center text-xs
+                          ${copyStatus === 'copied' ? 'bg-green-50 text-green-600' :
+                            copyStatus === 'error' ? 'bg-red-50 text-red-600' :
+                            'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                          }`}
+                      >
+                        <span className="mr-1">📋</span>
+                        {copyStatus === 'copying' ? '복사 중...' :
+                         copyStatus === 'copied' ? '복사됨!' :
+                         copyStatus === 'error' ? '복사 실패' :
+                         '클립보드에 복사'}
+                      </button>
+                    </div>
+                    <div className="flex-1 bg-white border rounded-lg overflow-y-auto">
+                      <div className="p-2 text-base whitespace-pre-wrap">
+                        <HighlightedContent
+                          content={selectedPrompt.content}
+                          variableValues={variableValues}
+                        />
+                      </div>
+                    </div>
                   </div>
-                  
-                  <div className="flex items-center">
-                    <span className="mr-1">🕒</span>
-                    <span>생성일: {new Date(selectedPrompt.created_at).toLocaleDateString()}</span>
-                  </div>
-                  
-                  <div className="flex items-center">
-                    <span className="mr-1">👤</span>
-                    <span>사용 횟수: {selectedPrompt.use_count || 0}회</span>
-                  </div>
-                  
-                  {selectedPrompt.last_used_at && (
+               </div>
+
+               {/* 메모 영역 */}
+               <div className="w-full mt-3 flex-1 flex flex-col">
+                 <div className="flex items-center justify-between mb-1">
+                   <h3 className="font-medium text-gray-800 flex items-center">
+                     <span className="mr-2">📝</span>
+                     메모
+                   </h3>
+                   {savingMemo && (
+                     <span className="text-xs text-blue-500">저장 중...</span>
+                   )}
+                 </div>
+                 <textarea
+                   value={memo}
+                   onChange={handleMemoChange}
+                   onBlur={() => {
+                     if (memoTimerRef.current) {
+                       clearTimeout(memoTimerRef.current);
+                       memoTimerRef.current = null;
+                     }
+                     autoSaveMemo(memo);
+                   }}
+                   className="flex-1 w-full p-2 border rounded-lg bg-gray-50 hover:bg-white focus:bg-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-300"
+                   placeholder="메모를 입력하세요..."
+                   disabled={savingMemo}
+                 />
+               </div>
+
+               {/* 메타데이터 영역 */}
+               <div className="text-xs text-gray-600 mt-2 flex-shrink-0">
+                 <div className="flex flex-wrap gap-x-4 gap-y-1">
+                   {/* 폴더, 생성일, 사용횟수, 마지막 사용, 태그 정보 */}
+                    <div className="flex items-center">
+                      <span className="mr-1">📁</span>
+                      <span>폴더: {selectedPrompt.folder || '없음'}</span>
+                    </div>
                     <div className="flex items-center">
                       <span className="mr-1">🕒</span>
-                      <span>마지막 사용: {selectedPrompt.last_used}</span>
+                      <span>생성일: {new Date(selectedPrompt.created_at).toLocaleDateString()}</span>
                     </div>
-                  )}
-                
-                  <div className="flex items-center">
-                    <span className="mr-1">🏷️</span>
-                    <span>태그: </span>
-                    <div className="flex flex-wrap gap-1 ml-1">
-                      {selectedPrompt.tags.length > 0 ? (
-                        selectedPrompt.tags.map(tag => (
-                          <span 
-                            key={tag.id} 
-                            className={`px-1.5 py-0.5 rounded-full text-xs ${getTagColorClasses(tag.color)}`}
-                          >
-                            {tag.name}
-                          </span>
-                        ))
-                      ) : (
-                        <span>없음</span>
-                      )}
+                    <div className="flex items-center">
+                      <span className="mr-1">👤</span>
+                      <span>사용 횟수: {selectedPrompt.use_count || 0}회</span>
                     </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          {/* 오른쪽 영역 - 프롬프트 패널 (고정 너비) */}
+                    {selectedPrompt.last_used_at && (
+                      <div className="flex items-center">
+                        <span className="mr-1">🕒</span>
+                        <span>마지막 사용: {selectedPrompt.last_used}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center">
+                      <span className="mr-1">🏷️</span>
+                      <span>태그: </span>
+                      <div className="flex flex-wrap gap-1 ml-1">
+                        {selectedPrompt.tags.length > 0 ? (
+                          selectedPrompt.tags.map(tag => (
+                            <span
+                              key={tag.id}
+                              className={`px-1.5 py-0.5 rounded-full text-xs ${getTagColorClasses(tag.color)}`}
+                            >
+                              {tag.name}
+                            </span>
+                          ))
+                        ) : (
+                          <span>없음</span>
+                        )}
+                      </div>
+                    </div>
+                 </div>
+               </div>
+            </div> {/* End of Content/Memo/Meta Scrollable Area */}
+          </div> {/* End of Left Area */}
+
+          {/* 오른쪽 영역 - 프롬프트 패널 */}
           <div className="w-4/12 border-l overflow-hidden" style={{ width: '33.333%', minWidth: '33.333%', maxWidth: '33.333%' }}>
-            <PromptPanel 
-              selectedPromptId={selectedPrompt?.id} 
+            <PromptPanel
+              selectedPromptId={selectedPrompt?.id}
               onPromptSelect={(prompt) => {
-                // 오버레이 모달을 열 때 커스텀 onClose 함수를 전달하여
-                // DetailModal이 닫히지 않도록 처리
-                const customCloseOverlay = () => {
-                  // 오버레이 모달만 닫고 DetailModal은 유지
-                  if (openOverlayModal) {
-                    const overlay = document.querySelector('.fixed.inset-0.bg-black.bg-opacity-50');
-                    if (overlay) {
-                      overlay.style.display = 'none';
-                    }
-                  }
-                };
-                
-                // 커스텀 onClose를 포함하여 OverlayModal 열기
                 openOverlayModal(prompt);
               }}
-              onClose={() => {}} 
+              onClose={() => {}}
             />
           </div>
+        </div> {/* End of Main Content Area */}
+
+        {/* 하단 유사 프롬프트 섹션 */}
+        <div className="flex-shrink-0 border-t p-3">
+          <h3 className="text-sm font-medium text-gray-700 mb-2">유사한 프롬프트</h3>
+          {isLoadingSimilar ? (
+            <div className="text-center text-gray-500 py-3">로딩 중...</div>
+          ) : similarError ? (
+            <div className="text-center text-red-500 py-3">{similarError}</div>
+          ) : similarPrompts.length === 0 ? (
+            <div className="text-center text-gray-500 py-3">유사한 프롬프트가 없습니다.</div>
+          ) : (
+            <div className="flex overflow-x-auto space-x-3 pb-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+              {similarPrompts.map(prompt => (
+                <div key={prompt.id} className="flex-shrink-0 w-64"> {/* 카드 너비 고정 */}
+                  <PromptItemCard
+                    prompt={prompt}
+                    onClick={(p) => openOverlayModal(p)} // 카드 클릭 시 오버레이 모달 열기
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-        
+
         {/* 텍스트 에디터 모달 */}
         {isTextEditorOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-60">
             <div ref={textEditorRef} className="bg-white rounded-lg shadow-xl w-2/3 max-w-2xl flex flex-col">
+              {/* 에디터 헤더 */}
               <div className="flex justify-between items-center border-b px-4 py-2">
                 <h3 className="font-medium">
                   "{editingVariable?.name}" 변수 편집
                 </h3>
-                <button 
+                <button
                   onClick={closeTextEditor}
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <span>✕</span>
                 </button>
               </div>
-              
+              {/* 에디터 내용 */}
               <div className="p-4">
                 <textarea
                   value={textEditorValue}
@@ -727,7 +766,7 @@ const PromptDetailModal = () => {
                   placeholder="내용을 입력하세요..."
                 />
               </div>
-              
+              {/* 에디터 푸터 */}
               <div className="border-t p-3 flex justify-end space-x-2">
                 <button
                   onClick={closeTextEditor}
@@ -751,8 +790,8 @@ const PromptDetailModal = () => {
             </div>
           </div>
         )}
-      </div>
-    </div>
+      </div> {/* End of Modal Container */}
+    </div> // End of Background
   );
 };
 

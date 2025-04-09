@@ -827,24 +827,6 @@ const PromptPanel = ({
     }
   };
   
-  // 유사 프롬프트 로드
-  const loadSimilarPrompts = async () => {
-    if (!selectedPromptId) return;
-    
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const response = await getSimilarPrompts(selectedPromptId);
-      setPrompts(response);
-    } catch (err) {
-      console.error('유사 프롬프트 로드 오류:', err);
-      setError('유사한 프롬프트를 불러오는데 실패했습니다.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
   // 최근 프롬프트 로드
   const loadRecentPrompts = async () => {
     setIsLoading(true);
@@ -1070,18 +1052,6 @@ const PromptPanel = ({
             }}
           />
         );
-      case 'similar':
-        return (
-          <SimilarPromptsList 
-            selectedPromptId={selectedPromptId}
-            onPromptSelect={(prompt) => {
-              // 이벤트 버블링을 방지하고 오버레이 모달을 열도록 수정
-              if (prompt) {
-                openOverlayModal(prompt);
-              }
-            }}
-          />
-        );
       case 'collections':
         return (
           <CollectionsList 
@@ -1144,16 +1114,6 @@ const PromptPanel = ({
           onClick={() => setActiveTab('version')}
         >
           버전 관리
-        </button>
-        <button
-          className={`px-4 py-2 text-sm font-medium ${
-            activeTab === 'similar' 
-              ? 'border-b-2 border-blue-500 text-blue-600' 
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-          onClick={() => setActiveTab('similar')}
-        >
-          유사한 프롬프트
         </button>
         <button
           className={`px-4 py-2 text-sm font-medium ${
