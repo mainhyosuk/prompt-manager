@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.41] - 2024-04-09
+
+### Fixed
+- 폴더 수정시 동기화 문제 해결
+- 프롬프트 추가/삭제시 동기화 문제 해결
+
+### Added
+- 폴더 추가 방식 개선
+
 ## [v1.4] - 2024-04-09
 
 ### Added
