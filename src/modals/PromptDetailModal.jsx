@@ -6,7 +6,8 @@ import { updatePromptMemo } from '../api/promptApi';
 import { getSimilarPrompts } from '../api/collectionApi';
 import PromptPanel from '../components/promptPanel/PromptPanel';
 import PromptItemCard from '../components/promptPanel/PromptItemCard';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, GripVertical } from 'lucide-react';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 // 변수가 적용된 내용을 하이라이트하는 컴포넌트
 const HighlightedContent = ({ content, variableValues }) => {
@@ -123,6 +124,45 @@ const PromptDetailModal = () => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editableTitle, setEditableTitle] = useState('');
   const titleInputRef = useRef(null);
+  
+  // 패널 리사이징 관련 상태 추가
+  const H_PANEL_SPLIT_KEY = 'promptDetailHSplit'; // 원본/적용된 프롬프트 분할 (가로)
+  const V_PANEL_SPLIT_KEY = 'promptDetailVSplit'; // 상단 영역/메모 분할 (세로)
+  const MAIN_SPLIT_KEY = 'promptDetailMainSplit'; // 주요 영역/사이드바 분할 (가로)
+  
+  // 가로 분할 (원본/적용된 프롬프트) - 기본값 50/50
+  const [hPanelSizes, setHPanelSizes] = useState(() => {
+    const saved = localStorage.getItem(H_PANEL_SPLIT_KEY);
+    return saved ? JSON.parse(saved) : [50, 50];
+  });
+  
+  // 세로 분할 (상단 영역/메모) - 기본값 70/30
+  const [vPanelSizes, setVPanelSizes] = useState(() => {
+    const saved = localStorage.getItem(V_PANEL_SPLIT_KEY);
+    return saved ? JSON.parse(saved) : [70, 30];
+  });
+  
+  // 메인 분할 (주요 영역/사이드바) - 기본값 70/30
+  const [mainSizes, setMainSizes] = useState(() => {
+    const saved = localStorage.getItem(MAIN_SPLIT_KEY);
+    return saved ? JSON.parse(saved) : [70, 30];
+  });
+  
+  // 리사이징 핸들러 함수들
+  const handleHPanelResize = (sizes) => {
+    setHPanelSizes(sizes);
+    localStorage.setItem(H_PANEL_SPLIT_KEY, JSON.stringify(sizes));
+  };
+  
+  const handleVPanelResize = (sizes) => {
+    setVPanelSizes(sizes);
+    localStorage.setItem(V_PANEL_SPLIT_KEY, JSON.stringify(sizes));
+  };
+  
+  const handleMainResize = (sizes) => {
+    setMainSizes(sizes);
+    localStorage.setItem(MAIN_SPLIT_KEY, JSON.stringify(sizes));
+  };
   
   // 변수 기본값 설정
   useEffect(() => {
@@ -343,6 +383,13 @@ const PromptDetailModal = () => {
   // 유사 프롬프트로 전환 핸들러
   const handleSwitchToPrompt = (prompt) => {
     switchToPrompt(prompt);
+  };
+  
+  // 유사한 프롬프트 상세 보기를 위한 오버레이 모달 핸들러
+  const handleViewSimilarPrompt = (prompt) => {
+    if (openOverlayModal) {
+      openOverlayModal(prompt);
+    }
   };
   
   // 유사 프롬프트 로드 useEffect 추가
@@ -625,223 +672,267 @@ const PromptDetailModal = () => {
           </div>
         )}
 
-        {/* 모달 콘텐츠 - 좌우 분할 레이아웃 */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* 왼쪽 영역 - 변수, 내용, 메모, 메타데이터 (고정 너비 및 스크롤) */}
-          <div className="w-8/12 flex flex-col overflow-hidden">
-            {/* 변수 입력 영역 (있을 경우) */}
-            {selectedPrompt.variables && selectedPrompt.variables.length > 0 && (
-              <div className="flex-shrink-0 border-b">
-                <div className="p-2">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-medium text-gray-800 mb-1">변수 입력</h3>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-32 overflow-y-auto pr-2">
-                    {selectedPrompt.variables.map((variable, index) => (
-                      <div key={`${variable.id || variable.name}-${index}`} className="flex flex-col">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          {variable.name}
-                        </label>
-                        <div className="flex w-full">
-                          <input
-                            type="text"
-                            value={variableValues[variable.name] || ''}
-                            onChange={(e) => handleVariableChange(variable.name, e.target.value)}
-                            onBlur={(e) => handleVariableChange(variable.name, e.target.value)}
-                            placeholder={variable.default_value || `${variable.name} 값 입력`}
-                            className="flex-1 px-3 py-1 border rounded-l text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-                          />
-                          {/* 변수 기본값 저장 버튼 */}
-                          <button
-                            type="button"
-                            onClick={() => handleSaveVariableDefaultValue(variable.name)}
-                            className={`px-3 py-1 border border-l-0 rounded-none
-                              ${savingStates[variable.name] === 'saved' ? 'bg-green-50 text-green-600' :
-                                savingStates[variable.name] === 'error' ? 'bg-red-50 text-red-600' :
-                                savingStates[variable.name] === 'saving' ? 'bg-blue-50 text-blue-400' :
-                                'bg-gray-50 hover:bg-gray-100 text-gray-600'}`}
-                            title="변수값을 기본값으로 저장"
-                            disabled={savingStates[variable.name] === 'saving'}
-                          >
-                            {savingStates[variable.name] === 'saved' ? (
-                              <span>✓</span>
-                            ) : savingStates[variable.name] === 'saving' ? (
-                              <div className="w-4 h-4 border-2 border-t-blue-500 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin" />
-                            ) : (
-                              <span>💾</span>
-                            )}
-                          </button>
-                          {/* 텍스트 에디터 열기 버튼 */}
-                          <button
-                            type="button"
-                            onClick={() => openTextEditor(variable)}
-                            className="px-3 py-1 border border-l-0 rounded-r bg-gray-50 hover:bg-gray-100 text-gray-600"
-                            title="텍스트 에디터 열기"
-                          >
-                            <span>📝</span>
-                          </button>
-                        </div>
+        {/* 메인 콘텐츠 영역 */}
+        <div className="flex-1 min-h-0 flex flex-col"> {/* min-h-0 추가 */}
+          {/* 좌측 넓은 영역 + 우측 사이드바 */}
+          <PanelGroup direction="horizontal" onLayout={handleMainResize} className="flex-1 min-h-0">
+            {/* 좌측 넓은 영역 */}
+            <Panel defaultSizePercentage={mainSizes[0]} minSizePercentage={50}>
+              <div className="h-full flex flex-col">
+                {/* 변수 입력 영역 (있을 경우) */}
+                {selectedPrompt.variables && selectedPrompt.variables.length > 0 && (
+                  <div className="flex-shrink-0 border-b">
+                    <div className="p-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-medium text-gray-800 mb-1">변수 입력</h3>
                       </div>
-                    ))}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-32 overflow-y-auto pr-2">
+                        {selectedPrompt.variables.map((variable, index) => (
+                          <div key={`${variable.id || variable.name}-${index}`} className="flex flex-col">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              {variable.name}
+                            </label>
+                            <div className="flex w-full">
+                              <input
+                                type="text"
+                                value={variableValues[variable.name] || ''}
+                                onChange={(e) => handleVariableChange(variable.name, e.target.value)}
+                                onBlur={(e) => handleVariableChange(variable.name, e.target.value)}
+                                placeholder={variable.default_value || `${variable.name} 값 입력`}
+                                className="flex-1 px-2 py-1 text-sm border rounded-l-md focus:outline-none focus:ring-1 focus:ring-blue-300 focus:border-blue-300"
+                              />
+                              {/* 긴 텍스트 편집 버튼 */}
+                              <button
+                                onClick={() => openTextEditor(variable)}
+                                title="텍스트 에디터에서 편집"
+                                className="px-2 py-1 border-y border-r rounded-r-md hover:bg-gray-100 group"
+                              >
+                                <span className="text-gray-500 group-hover:text-gray-700">📝</span>
+                              </button>
+                              {/* 저장 버튼 */}
+                              {savingStates[variable.name] === 'idle' ? (
+                                <button
+                                  onClick={() => handleSaveVariableDefaultValue(variable.name)}
+                                  title="기본값으로 저장"
+                                  className="ml-1 px-2 py-1 border rounded-md hover:bg-blue-50 group"
+                                >
+                                  <span className="text-gray-500 group-hover:text-blue-500">💾</span>
+                                </button>
+                              ) : savingStates[variable.name] === 'saving' ? (
+                                <button disabled className="ml-1 px-2 py-1 border rounded-md bg-gray-50">
+                                  <span className="text-blue-500 animate-pulse">⏳</span>
+                                </button>
+                              ) : savingStates[variable.name] === 'saved' ? (
+                                <button disabled className="ml-1 px-2 py-1 border rounded-md bg-green-50">
+                                  <span className="text-green-500">✓</span>
+                                </button>
+                              ) : (
+                                <button disabled className="ml-1 px-2 py-1 border rounded-md bg-red-50">
+                                  <span className="text-red-500">✕</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* 변수 입력 하단의 내용 영역 (상하 분할: 원본/적용 영역 + 메모) */}
+                <PanelGroup direction="vertical" onLayout={handleVPanelResize} className="flex-1 min-h-0">
+                  {/* 상단: 원본 | 변수 적용 영역 */}
+                  <Panel defaultSizePercentage={vPanelSizes[0]} minSizePercentage={30}>
+                    <div className="h-full p-3 overflow-y-auto">
+                      {/* 원본/변수 적용 내용 영역 - 수평 분할 */}
+                      <PanelGroup direction="horizontal" onLayout={handleHPanelResize} className="h-full">
+                        {/* 원본 프롬프트 */}
+                        <Panel defaultSizePercentage={hPanelSizes[0]} minSizePercentage={30}>
+                          <div className="h-full flex flex-col">
+                            <div className="flex items-center justify-between mb-1">
+                              <h3 className="font-medium text-gray-800">원본 프롬프트</h3>
+                            </div>
+                            <div className="flex-1 bg-gray-50 p-2 rounded-lg border text-base whitespace-pre-wrap overflow-y-auto">
+                              {selectedPrompt.content}
+                            </div>
+                          </div>
+                        </Panel>
+
+                        {/* 수직 리사이즈 핸들 */}
+                        <PanelResizeHandle className="w-2 mx-2 flex items-center justify-center cursor-col-resize">
+                          <div className="w-1 h-10 bg-gray-300 rounded hover:bg-blue-400 transition-colors flex items-center justify-center">
+                            <GripVertical size={12} className="text-gray-500 rotate-90" />
+                          </div>
+                        </PanelResizeHandle>
+
+                        {/* 변수 적용된 프롬프트 */}
+                        <Panel defaultSizePercentage={hPanelSizes[1]} minSizePercentage={30}>
+                          <div className="h-full flex flex-col">
+                            <div className="flex items-center justify-between mb-1">
+                              <h3 className="font-medium text-gray-800">변수가 적용된 프롬프트</h3>
+                              {/* 복사 버튼 */}
+                              <button
+                                onClick={handleCopyToClipboard}
+                                disabled={copyStatus === 'copying'}
+                                className={`px-2 py-0.5 rounded flex items-center text-xs
+                                  ${copyStatus === 'copied' ? 'bg-green-50 text-green-600' :
+                                    copyStatus === 'error' ? 'bg-red-50 text-red-600' :
+                                    'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                                  }`}
+                              >
+                                <span className="mr-1">📋</span>
+                                {copyStatus === 'copying' ? '복사 중...' :
+                                 copyStatus === 'copied' ? '복사됨!' :
+                                 copyStatus === 'error' ? '복사 실패' :
+                                 '클립보드에 복사'}
+                              </button>
+                            </div>
+                            <div className="flex-1 bg-gray-50 p-2 rounded-lg border overflow-y-auto">
+                              <HighlightedContent
+                                content={selectedPrompt.content}
+                                variableValues={variableValues}
+                              />
+                            </div>
+                          </div>
+                        </Panel>
+                      </PanelGroup>
+                    </div>
+                  </Panel>
+
+                  {/* 수평 리사이즈 핸들 */}
+                  <PanelResizeHandle className="h-2 my-1 flex items-center justify-center cursor-row-resize">
+                    <div className="h-1 w-16 bg-gray-300 rounded hover:bg-blue-400 transition-colors flex items-center justify-center">
+                      <GripVertical size={12} className="text-gray-500" />
+                    </div>
+                  </PanelResizeHandle>
+
+                  {/* 하단: 메모 영역 */}
+                  <Panel defaultSizePercentage={vPanelSizes[1]} minSizePercentage={15}>
+                    <div className="w-full h-full p-3 flex flex-col">
+                      <div className="flex items-center justify-between mb-1">
+                        <h3 className="font-medium text-gray-800 flex items-center">
+                          <span className="mr-2">📝</span>
+                          메모
+                        </h3>
+                        {savingMemo && (
+                          <span className="text-xs text-blue-500">저장 중...</span>
+                        )}
+                      </div>
+                      <textarea
+                        value={memo}
+                        onChange={handleMemoChange}
+                        onBlur={() => {
+                          if (memoTimerRef.current) {
+                            clearTimeout(memoTimerRef.current);
+                            memoTimerRef.current = null;
+                          }
+                          autoSaveMemo(memo);
+                        }}
+                        className="w-full flex-1 resize-none border rounded-lg p-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        placeholder="메모를 입력하세요..."
+                      />
+                    </div>
+                  </Panel>
+                </PanelGroup>
+              </div>
+            </Panel>
+
+            {/* 수직 리사이즈 핸들 (좌우 분할) */}
+            <PanelResizeHandle className="w-2 mx-1 flex items-center justify-center cursor-col-resize">
+              <div className="w-1 h-20 bg-gray-300 rounded hover:bg-blue-400 transition-colors flex items-center justify-center">
+                <GripVertical size={12} className="text-gray-500 rotate-90" />
+              </div>
+            </PanelResizeHandle>
+
+            {/* 우측 사이드바 */}
+            <Panel defaultSizePercentage={mainSizes[1]} minSizePercentage={20}>
+              <div className="h-full border-l overflow-hidden">
+                <PromptPanel
+                  selectedPromptId={selectedPrompt?.id}
+                  onPromptSelect={(prompt) => {
+                    openOverlayModal(prompt);
+                  }}
+                  onClose={() => {}}
+                />
+              </div>
+            </Panel>
+          </PanelGroup>
+
+          {/* 하단 유사 프롬프트 섹션 */}
+          <div className="flex-shrink-0 border-t p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-gray-700">유사한 프롬프트</h3>
+              {similarPrompts.length > 0 && (
+                <span className="text-xs text-gray-500">옆으로 스크롤하여 더 보기</span>
+              )}
+            </div>
+            {isLoadingSimilar ? (
+              <div className="text-center text-gray-500 py-3">로딩 중...</div>
+            ) : similarError ? (
+              <div className="text-center text-red-500 py-3">{similarError}</div>
+            ) : similarPrompts.length === 0 ? (
+              <div className="text-center text-gray-500 py-3">유사한 프롬프트가 없습니다.</div>
+            ) : (
+              <div className="flex overflow-x-auto space-x-3 pb-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 snap-x overflow-y-hidden" style={{ scrollbarWidth: 'thin', scrollBehavior: 'smooth' }}>
+                {similarPrompts.map(prompt => (
+                  <div key={prompt.id} className="flex-shrink-0 w-80 snap-start">
+                    <PromptItemCard 
+                      prompt={prompt}
+                      onClick={(p) => openOverlayModal(p)} 
+                      cardType="similar"
+                      onSwitchPrompt={handleSwitchToPrompt}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {/* 메타데이터 영역 - 다시 추가 */}
+            <div className="text-xs text-gray-600 mt-3 flex-shrink-0">
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {/* 폴더, 생성일, 사용횟수, 마지막 사용, 태그 정보 */}
+                <div className="flex items-center">
+                  <span className="mr-1">📁</span>
+                  <span>폴더: {selectedPrompt.folder || '없음'}</span>
+                </div>
+                <div className="flex items-center">
+                  <span className="mr-1">🕒</span>
+                  <span>생성일: {new Date(selectedPrompt.created_at).toLocaleDateString()}</span>
+                </div>
+                <div className="flex items-center">
+                  <span className="mr-1">👤</span>
+                  <span>사용 횟수: {selectedPrompt.use_count || 0}회</span>
+                </div>
+                {selectedPrompt.last_used_at && (
+                  <div className="flex items-center">
+                    <span className="mr-1">🕒</span>
+                    <span>마지막 사용: {selectedPrompt.last_used}</span>
+                  </div>
+                )}
+                <div className="flex items-center">
+                  <span className="mr-1">🏷️</span>
+                  <span>태그: </span>
+                  <div className="flex flex-wrap gap-1 ml-1">
+                    {selectedPrompt.tags && selectedPrompt.tags.length > 0 ? (
+                      selectedPrompt.tags.map(tag => (
+                        <span
+                          key={tag.id}
+                          className={`px-1.5 py-0.5 rounded-full text-xs ${getTagColorClasses(tag.color)}`}
+                        >
+                          {tag.name}
+                        </span>
+                      ))
+                    ) : (
+                      <span>없음</span>
+                    )}
                   </div>
                 </div>
               </div>
-            )}
-
-            {/* 내용, 메모, 메타데이터 스크롤 영역 */}
-            <div className="flex-1 flex flex-col p-3 overflow-y-auto">
-               {/* 원본/변수 적용 내용 영역 */}
-               <div className={`flex flex-col md:flex-row gap-3 ${selectedPrompt.variables && selectedPrompt.variables.length > 0 ? 'h-2/5' : 'h-3/5'}`}>
-                  {/* 원본 프롬프트 */}
-                  <div className="flex-1 flex flex-col">
-                    <div className="flex items-center justify-between mb-1">
-                      <h3 className="font-medium text-gray-800">원본 프롬프트</h3>
-                    </div>
-                    <div className="flex-1 bg-gray-50 p-2 rounded-lg border text-base whitespace-pre-wrap overflow-y-auto">
-                      {selectedPrompt.content}
-                    </div>
-                  </div>
-                  {/* 변수 적용된 프롬프트 */}
-                  <div className="flex-1 flex flex-col">
-                    <div className="flex items-center justify-between mb-1">
-                      <h3 className="font-medium text-gray-800">변수가 적용된 프롬프트</h3>
-                      {/* 복사 버튼 */}
-                      <button
-                        onClick={handleCopyToClipboard}
-                        disabled={copyStatus === 'copying'}
-                        className={`px-2 py-0.5 rounded flex items-center text-xs
-                          ${copyStatus === 'copied' ? 'bg-green-50 text-green-600' :
-                            copyStatus === 'error' ? 'bg-red-50 text-red-600' :
-                            'bg-blue-50 text-blue-600 hover:bg-blue-100'
-                          }`}
-                      >
-                        <span className="mr-1">📋</span>
-                        {copyStatus === 'copying' ? '복사 중...' :
-                         copyStatus === 'copied' ? '복사됨!' :
-                         copyStatus === 'error' ? '복사 실패' :
-                         '클립보드에 복사'}
-                      </button>
-                    </div>
-                    <div className="flex-1 bg-white border rounded-lg overflow-y-auto">
-                      <div className="p-2 text-base whitespace-pre-wrap">
-                        <HighlightedContent
-                          content={selectedPrompt.content}
-                          variableValues={variableValues}
-                        />
-                      </div>
-                    </div>
-                  </div>
-               </div>
-
-               {/* 메모 영역 */}
-               <div className="w-full mt-3 flex-1 flex flex-col">
-                 <div className="flex items-center justify-between mb-1">
-                   <h3 className="font-medium text-gray-800 flex items-center">
-                     <span className="mr-2">📝</span>
-                     메모
-                   </h3>
-                   {savingMemo && (
-                     <span className="text-xs text-blue-500">저장 중...</span>
-                   )}
-                 </div>
-                 <textarea
-                   value={memo}
-                   onChange={handleMemoChange}
-                   onBlur={() => {
-                     if (memoTimerRef.current) {
-                       clearTimeout(memoTimerRef.current);
-                       memoTimerRef.current = null;
-                     }
-                     autoSaveMemo(memo);
-                   }}
-                   className="flex-1 w-full p-2 border rounded-lg bg-gray-50 hover:bg-white focus:bg-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-300"
-                   placeholder="메모를 입력하세요..."
-                 />
-               </div>
-
-               {/* 메타데이터 영역 */}
-               <div className="text-xs text-gray-600 mt-2 flex-shrink-0">
-                 <div className="flex flex-wrap gap-x-4 gap-y-1">
-                   {/* 폴더, 생성일, 사용횟수, 마지막 사용, 태그 정보 */}
-                    <div className="flex items-center">
-                      <span className="mr-1">📁</span>
-                      <span>폴더: {selectedPrompt.folder || '없음'}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <span className="mr-1">🕒</span>
-                      <span>생성일: {new Date(selectedPrompt.created_at).toLocaleDateString()}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <span className="mr-1">👤</span>
-                      <span>사용 횟수: {selectedPrompt.use_count || 0}회</span>
-                    </div>
-                    {selectedPrompt.last_used_at && (
-                      <div className="flex items-center">
-                        <span className="mr-1">🕒</span>
-                        <span>마지막 사용: {selectedPrompt.last_used}</span>
-                      </div>
-                    )}
-                    <div className="flex items-center">
-                      <span className="mr-1">🏷️</span>
-                      <span>태그: </span>
-                      <div className="flex flex-wrap gap-1 ml-1">
-                        {selectedPrompt.tags.length > 0 ? (
-                          selectedPrompt.tags.map(tag => (
-                            <span
-                              key={tag.id}
-                              className={`px-1.5 py-0.5 rounded-full text-xs ${getTagColorClasses(tag.color)}`}
-                            >
-                              {tag.name}
-                            </span>
-                          ))
-                        ) : (
-                          <span>없음</span>
-                        )}
-                      </div>
-                    </div>
-                 </div>
-               </div>
-            </div> {/* End of Content/Memo/Meta Scrollable Area */}
-          </div> {/* End of Left Area */}
-
-          {/* 오른쪽 영역 - 프롬프트 패널 */}
-          <div className="w-4/12 border-l overflow-hidden" style={{ width: '33.333%', minWidth: '33.333%', maxWidth: '33.333%' }}>
-            <PromptPanel
-              selectedPromptId={selectedPrompt?.id}
-              onPromptSelect={(prompt) => {
-                openOverlayModal(prompt);
-              }}
-              onClose={() => {}}
-            />
-          </div>
-        </div> {/* End of Main Content Area */}
-
-        {/* 하단 유사 프롬프트 섹션 */}
-        <div className="flex-shrink-0 border-t p-3">
-          <h3 className="text-sm font-medium text-gray-700 mb-2">유사한 프롬프트</h3>
-          {isLoadingSimilar ? (
-            <div className="text-center text-gray-500 py-3">로딩 중...</div>
-          ) : similarError ? (
-            <div className="text-center text-red-500 py-3">{similarError}</div>
-          ) : similarPrompts.length === 0 ? (
-            <div className="text-center text-gray-500 py-3">유사한 프롬프트가 없습니다.</div>
-          ) : (
-            <div className="flex overflow-x-auto space-x-3 pb-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-              {similarPrompts.map(prompt => (
-                <div key={prompt.id} className="flex-shrink-0 w-80"> 
-                  <PromptItemCard 
-                    prompt={prompt} 
-                    onClick={(p) => openOverlayModal(p)} 
-                    cardType="similar"
-                    onSwitchPrompt={handleSwitchToPrompt}
-                  />
-                </div>
-              ))}
             </div>
-          )}
+          </div>
         </div>
-
-        {/* 텍스트 에디터 모달 */}
+        
+        {/* 텍스트 에디터 모달 - 다시 추가 */}
         {isTextEditorOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-60">
             <div ref={textEditorRef} className="bg-white rounded-lg shadow-xl w-2/3 max-w-2xl flex flex-col">
