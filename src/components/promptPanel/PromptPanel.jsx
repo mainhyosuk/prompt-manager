@@ -44,9 +44,9 @@ const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
         // 1. 현재 버전을 목록에 추가
         const currentVersion = {
           ...selectedPrompt,
-          title: `${selectedPrompt.title} (현재 버전)`,
+          title: selectedPrompt.title,
           is_current_version: true,
-          parent_id: selectedPrompt.id // 부모 ID 추가
+          parent_id: selectedPrompt.id
         };
         
         versionsList.push(currentVersion);
@@ -87,7 +87,7 @@ const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
       // 새 버전 생성을 위한 데이터 준비
       const newVersionData = {
         parent_id: selectedPrompt.id,
-        title: newVersionTitle.trim() || `${selectedPrompt.title} (복제본)`,
+        title: newVersionTitle.trim() || selectedPrompt.title,
         content: selectedPrompt.content,
         variables: selectedPrompt.variables || [],
         tags: selectedPrompt.tags || [],
@@ -95,6 +95,7 @@ const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
         folder: selectedPrompt.folder,
         memo: selectedPrompt.memo || '',
         is_version: true,
+        is_replica: true,
         is_favorite: false,
         created_at: new Date().toISOString()
       };
