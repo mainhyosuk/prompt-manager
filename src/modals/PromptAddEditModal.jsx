@@ -167,9 +167,9 @@ const PromptAddEditModal = () => {
   
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div ref={modalRef} className="bg-white rounded-lg shadow-xl w-3/4 max-w-4xl max-h-screen flex flex-col">
+      <div ref={modalRef} className="bg-white rounded-lg shadow-xl w-3/4 max-w-4xl h-[85vh] flex flex-col">
         {/* 모달 헤더 */}
-        <div className="flex justify-between items-center border-b px-6 py-4">
+        <div className="flex justify-between items-center border-b px-6 py-4 flex-shrink-0">
           <h2 className="text-xl font-semibold">
             {editMode ? '프롬프트 편집' : '새 프롬프트 추가'}
           </h2>
@@ -216,8 +216,8 @@ const PromptAddEditModal = () => {
                 id="content"
                 value={content}
                 onChange={(e) => handleContentChange(e.target.value)}
-                rows={8}
-                className={`w-full px-3 py-2 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-300 ${
+                rows={10}
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 ${
                   errors.content ? 'border-red-500' : 'border-gray-300'
                 }`}
                 placeholder="프롬프트 내용을 입력하세요. {변수명} 형태로 변수를 추가할 수 있습니다."
