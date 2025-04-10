@@ -1,3 +1,5 @@
+// 사용자 추가 프롬프트를 일반 프롬프트로 가져오기(Import) 위한 모달
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Search, X } from 'lucide-react';

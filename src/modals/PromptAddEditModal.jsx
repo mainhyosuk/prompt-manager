@@ -1,3 +1,5 @@
+// 새로운 프롬프트를 추가하거나 기존 프롬프트를 편집하는 모달 (메인 프롬프트 목록에서 사용)
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { X, AlertTriangle } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';

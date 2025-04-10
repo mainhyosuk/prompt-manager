@@ -1,3 +1,5 @@
+// 일반 프롬프트의 상세 정보를 표시하는 오버레이 모달 (AppContext에서 관리)
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { applyVariables, extractVariables, splitContentByVariables } from '../utils/variableParser';

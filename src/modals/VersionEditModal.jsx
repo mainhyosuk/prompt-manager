@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+// 버전 관리 탭에서 특정 버전 프롬프트를 편집하는 모달
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { X, AlertTriangle } from 'lucide-react';
 import VariableList from '../components/variables/VariableList';

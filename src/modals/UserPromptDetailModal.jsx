@@ -1,3 +1,5 @@
+// 사용자 추가 프롬프트의 상세 정보 및 간단한 편집을 위한 모달 (AppContext에서 관리)
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { applyVariables, extractVariables, splitContentByVariables } from '../utils/variableParser';

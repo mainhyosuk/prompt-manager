@@ -1,3 +1,5 @@
+// 특정 프롬프트를 하나 이상의 컬렉션에 추가하는 모달
+
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Search, Plus, Check, Loader } from 'lucide-react';
 import { getPrompts } from '../api/promptApi';

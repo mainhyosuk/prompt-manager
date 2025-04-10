@@ -1,3 +1,5 @@
+// 사용자 추가 프롬프트를 편집하는 모달
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { X, AlertTriangle } from 'lucide-react';
