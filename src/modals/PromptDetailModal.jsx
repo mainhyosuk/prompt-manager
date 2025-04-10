@@ -1,4 +1,4 @@
-// 일반 프롬프트의 상세 정보 및 편집을 위한 메인 모달
+// 일반 프롬프트의 상세 정보 확인을 위한 메인 모달
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppContext } from '../context/AppContext';

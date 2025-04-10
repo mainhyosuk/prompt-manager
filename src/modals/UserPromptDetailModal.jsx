@@ -1,9 +1,11 @@
-// 사용자 추가 프롬프트의 상세 정보 및 간단한 편집을 위한 모달 (AppContext에서 관리)
+// 사용자 추가 프롬프트의 상세 정보 확인을 위한 모달 (AppContext에서 관리)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { applyVariables, extractVariables, splitContentByVariables } from '../utils/variableParser';
 import { copyToClipboard } from '../utils/clipboard';
+import { Maximize2 } from 'lucide-react';
+import PromptExpandView from '../components/common/PromptExpandView';
 
 // 변수가 적용된 내용을 하이라이트하는 컴포넌트
 const HighlightedContent = ({ content, variableValues }) => {
@@ -70,6 +72,11 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
   // 변수 저장 상태 추가
   const [savingStates, setSavingStates] = useState({});
 
+  // 확대 보기 관련 상태 추가
+  const [isExpandViewOpen, setIsExpandViewOpen] = useState(false);
+  const [expandViewContent, setExpandViewContent] = useState('');
+  const [expandViewTitle, setExpandViewTitle] = useState('');
+
   // 모달 열릴 때 savingStates 초기화 추가
   useEffect(() => {
     if (isOpen && prompt) {
@@ -84,13 +91,17 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
         });
         setVariableValues(initialValues);
         setSavingStates(initialSavingStates);
+        // 모달 열릴 때 확대 보기 상태 초기화
+        setIsExpandViewOpen(false);
       } else {
         setVariableValues({});
         setSavingStates({});
+        setIsExpandViewOpen(false); // 모달 닫힐 때도 초기화
       }
     } else {
       setVariableValues({});
       setSavingStates({});
+      setIsExpandViewOpen(false); // 모달 닫힐 때도 초기화
     }
   }, [isOpen, prompt]);
 
@@ -98,10 +109,12 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
   useEffect(() => {
     const handleEscKey = (event) => {
       if (isOpen && event.key === 'Escape') {
-        if (isTextEditorOpen) {
+        if (isExpandViewOpen) {
+          handleCloseExpandView(); // 확대 보기 먼저 닫기
+        } else if (isTextEditorOpen) {
           closeTextEditor();
         } else {
-          onClose();
+          onClose(); // 기본 모달 닫기
         }
       }
     };
@@ -112,7 +125,7 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
     return () => {
       document.removeEventListener('keydown', handleEscKey);
     };
-  }, [isOpen, onClose, isTextEditorOpen]);
+  }, [isOpen, onClose, isTextEditorOpen, isExpandViewOpen]);
 
   // 텍스트 에디터 외부 클릭 감지 추가
   useEffect(() => {
@@ -275,6 +288,20 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
     Array.isArray(prompt.variables) && 
     prompt.variables.length > 0;
 
+  // 변수 적용된 내용 계산 (확대 보기 전달용)
+  const processedContent = hasVariables ? applyVariables(prompt.content, variableValues) : prompt.content;
+
+  // 확대 보기 핸들러 추가
+  const handleOpenExpandView = (content, title) => {
+    setExpandViewContent(content);
+    setExpandViewTitle(title);
+    setIsExpandViewOpen(true);
+  };
+
+  const handleCloseExpandView = () => {
+    setIsExpandViewOpen(false);
+  };
+
   if (!isOpen || !prompt) return null;
 
   return (
@@ -283,7 +310,8 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
       data-id="user-prompt-detail-modal"
       data-modal="user-prompt-detail"
       onClick={(e) => {
-        if (e.target === e.currentTarget) {
+        // 확대 보기가 열려있을 때는 외부 클릭 무시 (PromptExpandView가 처리하도록)
+        if (!isExpandViewOpen && e.target === e.currentTarget) {
           onClose();
         }
         e.stopPropagation();
@@ -390,31 +418,40 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="text-sm font-medium text-gray-700">원본 프롬프트</h3>
                 </div>
-                <div className="border rounded-md p-2 bg-gray-50 whitespace-pre-wrap text-xs h-44 overflow-y-auto">
+                <div className="relative border rounded-md p-2 bg-gray-50 whitespace-pre-wrap text-xs h-44 overflow-y-auto">
                   {prompt.content || '내용이 없습니다.'}
+                  <button
+                    onClick={() => handleOpenExpandView(prompt.content, '원본 프롬프트')}
+                    className="absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500"
+                    title="확대 보기"
+                  >
+                    <Maximize2 size={16} />
+                  </button>
                 </div>
               </div>
               
               <div className="border rounded-lg p-3">
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="text-sm font-medium text-gray-700">변수가 적용된 프롬프트</h3>
-                  <button
-                    onClick={handleCopyToClipboard}
-                    className={`px-2 py-1 rounded text-xs transition ${
-                      copyStatus === 'idle' ? 'bg-blue-500 text-white' :
-                      copyStatus === 'copying' ? 'bg-blue-600 text-white' :
-                      copyStatus === 'copied' ? 'bg-green-500 text-white' :
-                      'bg-red-500 text-white'
-                    }`}
-                    disabled={copyStatus !== 'idle'}
-                  >
-                    {copyStatus === 'idle' ? '복사하기' :
-                     copyStatus === 'copying' ? '복사 중...' :
-                     copyStatus === 'copied' ? '복사됨!' :
-                     '오류 발생'}
-                  </button>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={handleCopyToClipboard}
+                      className={`px-2 py-1 rounded text-xs transition ${
+                        copyStatus === 'idle' ? 'bg-blue-500 text-white' :
+                        copyStatus === 'copying' ? 'bg-blue-600 text-white' :
+                        copyStatus === 'copied' ? 'bg-green-500 text-white' :
+                        'bg-red-500 text-white'
+                      }`}
+                      disabled={copyStatus !== 'idle'}
+                    >
+                      {copyStatus === 'idle' ? '복사하기' :
+                       copyStatus === 'copying' ? '복사 중...' :
+                       copyStatus === 'copied' ? '복사됨!' :
+                       '오류 발생'}
+                    </button>
+                  </div>
                 </div>
-                <div className="border rounded-md p-2 bg-gray-50 text-xs h-44 overflow-y-auto">
+                <div className="relative border rounded-md p-2 bg-gray-50 text-xs h-44 overflow-y-auto">
                   {hasVariables ? (
                     <HighlightedContent 
                       content={prompt.content} 
@@ -423,6 +460,13 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
                   ) : (
                     <div className="whitespace-pre-wrap">{prompt.content || '내용이 없습니다.'}</div>
                   )}
+                  <button
+                    onClick={() => handleOpenExpandView(processedContent, '변수가 적용된 프롬프트')}
+                    className="absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500"
+                    title="확대 보기"
+                  >
+                    <Maximize2 size={16} />
+                  </button>
                 </div>
               </div>
             </div>
@@ -508,6 +552,13 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
             </div>
           </div>
         )}
+
+        <PromptExpandView
+          isOpen={isExpandViewOpen}
+          onClose={handleCloseExpandView}
+          title={expandViewTitle}
+          content={expandViewContent}
+        />
       </div>
     </div>
   );
