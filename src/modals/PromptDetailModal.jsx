@@ -6,8 +6,9 @@ import { updatePromptMemo } from '../api/promptApi';
 import { getSimilarPrompts } from '../api/collectionApi';
 import PromptPanel from '../components/promptPanel/PromptPanel';
 import PromptItemCard from '../components/promptPanel/PromptItemCard';
-import { ChevronLeft, GripVertical } from 'lucide-react';
+import { ChevronLeft, GripVertical, Maximize2 } from 'lucide-react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import PromptExpandView from '../components/common/PromptExpandView';
 
 // 변수가 적용된 내용을 하이라이트하는 컴포넌트
 const HighlightedContent = ({ content, variableValues }) => {
@@ -467,6 +468,25 @@ const PromptDetailModal = () => {
     loadSimilar();
   }, [selectedPrompt]); // selectedPrompt가 바뀔 때마다 로드
   
+  // 확대 보기 관련 상태 추가
+  const [expandViewOpen, setExpandViewOpen] = useState(false);
+  const [expandViewContent, setExpandViewContent] = useState('');
+  const [expandViewTitle, setExpandViewTitle] = useState('');
+  const [expandViewIsOriginal, setExpandViewIsOriginal] = useState(false);
+  
+  // 프롬프트 확대 보기 열기 함수 수정
+  const handleOpenExpandView = (content, title, isOriginal = false) => {
+    setExpandViewContent(content);
+    setExpandViewTitle(title);
+    setExpandViewIsOriginal(isOriginal);
+    setExpandViewOpen(true);
+  };
+  
+  // 프롬프트 확대 보기 닫기
+  const handleCloseExpandView = () => {
+    setExpandViewOpen(false);
+  };
+  
   if (!selectedPrompt) return null;
   
   // 변수값 업데이트
@@ -829,8 +849,21 @@ const PromptDetailModal = () => {
                               <div className="flex items-center justify-between mb-1">
                                 <h3 className="font-medium text-gray-800">원본 프롬프트</h3>
                               </div>
-                              <div className="flex-1 bg-gray-50 p-2 rounded-lg border text-base whitespace-pre-wrap overflow-y-auto">
+                              <div className="flex-1 bg-gray-50 p-2 rounded-lg border text-base whitespace-pre-wrap overflow-y-auto relative">
                                 {selectedPrompt.content}
+                                
+                                {/* 확대 보기 버튼 */}
+                                <button
+                                  onClick={() => handleOpenExpandView(
+                                    selectedPrompt.content,
+                                    '원본 프롬프트',
+                                    true
+                                  )}
+                                  className="absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500"
+                                  title="확대 보기"
+                                >
+                                  <Maximize2 size={16} />
+                                </button>
                               </div>
                             </div>
                           </Panel>
@@ -867,11 +900,23 @@ const PromptDetailModal = () => {
                                    '클립보드에 복사'}
                                 </button>
                               </div>
-                              <div className="flex-1 bg-gray-50 p-2 rounded-lg border overflow-y-auto">
+                              <div className="flex-1 bg-gray-50 p-2 rounded-lg border overflow-y-auto relative">
                                 <HighlightedContent
                                   content={selectedPrompt.content}
                                   variableValues={variableValues}
                                 />
+                                
+                                {/* 확대 보기 버튼 */}
+                                <button
+                                  onClick={() => handleOpenExpandView(
+                                    processedContent,
+                                    '변수가 적용된 프롬프트'
+                                  )}
+                                  className="absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500"
+                                  title="확대 보기"
+                                >
+                                  <Maximize2 size={16} />
+                                </button>
                               </div>
                             </div>
                           </Panel>
@@ -1075,6 +1120,21 @@ const PromptDetailModal = () => {
             </div>
           </div>
         )}
+
+        {/* 프롬프트 확대 보기 컴포넌트 */}
+        <PromptExpandView
+          isOpen={expandViewOpen}
+          onClose={handleCloseExpandView}
+          title={expandViewTitle}
+          content={expandViewContent}
+          highlightedContent={
+            <HighlightedContent
+              content={selectedPrompt?.content}
+              variableValues={variableValues}
+            />
+          }
+          useHighlightedContent={!expandViewIsOriginal}
+        />
       </div>
     </div>
   );

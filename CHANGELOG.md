@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.43] - 2025-04-10
+
+### Added
+- 프롬프트 모달에서 보여지는 프롬프트 결과 확대 기능 추가
+
+### Improved
+- 프롬프트 상세 모달 영역별 위치 조정 기능 강화
+
 ## [v1.42] - 2024-04-11
 
 ### Added
