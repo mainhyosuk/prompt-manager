@@ -11,6 +11,7 @@ import PromptItemCard from '../components/promptPanel/PromptItemCard';
 import { ChevronLeft, GripVertical, Maximize2 } from 'lucide-react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import PromptExpandView from '../components/common/PromptExpandView';
+import MemoExpandModal from '../components/common/MemoExpandModal';
 
 // 변수가 적용된 내용을 하이라이트하는 컴포넌트
 const HighlightedContent = ({ content, variableValues }) => {
@@ -117,6 +118,7 @@ const PromptDetailModal = () => {
   const [savingMemo, setSavingMemo] = useState(false);
   const memoTimerRef = useRef(null);
   const autoSaveDelay = 1000; // 1초 후 자동 저장
+  const [isMemoExpanded, setIsMemoExpanded] = useState(false); // 메모 확장 모달 상태 추가
   
   // 유사 프롬프트 관련 상태 추가
   const [similarPrompts, setSimilarPrompts] = useState([]);
@@ -718,7 +720,58 @@ const PromptDetailModal = () => {
   const handleCloseExpandView = () => {
     setExpandViewOpen(false);
   };
-  
+
+  // 메모 자동 저장 로직 (기존 함수)
+  const triggerMemoSave = useCallback(async (currentMemo) => {
+    if (!selectedPrompt) return;
+    setSavingMemo(true);
+    try {
+      await updatePromptMemo(selectedPrompt.id, currentMemo);
+      // AppContext의 prompts 상태 업데이트
+      updatePromptItem(selectedPrompt.id, { memo: currentMemo });
+      // console.log('메모 자동 저장 완료');
+    } catch (error) {
+      console.error('메모 저장 실패:', error);
+      // 사용자에게 에러 알림 (예: toast 메시지)
+    } finally {
+      setSavingMemo(false);
+    }
+  }, [selectedPrompt, updatePromptItem]);
+
+  // 메모 내용 변경 핸들러 (기존 함수, 확장 모달에서도 사용)
+  const handleMemoChange = useCallback((value) => {
+    setMemo(value);
+    if (memoTimerRef.current) {
+      clearTimeout(memoTimerRef.current);
+    }
+    memoTimerRef.current = setTimeout(() => {
+      triggerMemoSave(value);
+    }, autoSaveDelay);
+  }, [triggerMemoSave, autoSaveDelay]);
+
+  // 모달 닫힐 때 타이머 클리어 (기존 useEffect)
+  useEffect(() => {
+    return () => {
+      if (memoTimerRef.current) {
+        clearTimeout(memoTimerRef.current);
+      }
+    };
+  }, []);
+
+  // 선택된 프롬프트가 변경되면 메모 로드 (기존 useEffect)
+  useEffect(() => {
+    if (selectedPrompt) {
+      setMemo(selectedPrompt.memo || '');
+      // ... (다른 초기화 로직)
+    } else {
+      setMemo('');
+    }
+    // 프롬프트 변경 시 이전 자동 저장 타이머 클리어
+    if (memoTimerRef.current) {
+      clearTimeout(memoTimerRef.current);
+    }
+  }, [selectedPrompt]);
+
   if (!selectedPrompt) return null;
   
   // 클립보드 복사
@@ -746,50 +799,16 @@ const PromptDetailModal = () => {
     }
   };
   
-  // 메모 업데이트 처리
-  const handleMemoChange = (e) => {
-    const newMemo = e.target.value;
-    setMemo(newMemo);
-    
-    // 이전 타이머가 있으면 취소
-    if (memoTimerRef.current) {
-      clearTimeout(memoTimerRef.current);
-    }
-    
-    // 새 타이머 설정 - 입력 완료 1초 후 자동 저장
-    memoTimerRef.current = setTimeout(() => {
-      autoSaveMemo(newMemo);
-    }, autoSaveDelay);
+  // 메모 확장 모달 열기 핸들러
+  const handleOpenMemoExpand = () => {
+    setIsMemoExpanded(true);
   };
-  
-  // 자동 저장 함수
-  const autoSaveMemo = async (memoToSave) => {
-    if (!selectedPrompt) return;
-    if (memoToSave === selectedPrompt.memo) return; // 변경사항이 없으면 저장하지 않음
-    
-    setSavingMemo(true);
-    try {
-      await updatePromptMemo(selectedPrompt.id, memoToSave);
-      
-      // 프롬프트 객체 업데이트 (로컬 상태)
-      updatePromptItem(selectedPrompt.id, { ...selectedPrompt, memo: memoToSave });
-      
-    } catch (error) {
-      console.error('메모 자동 저장 오류:', error);
-    } finally {
-      setSavingMemo(false);
-    }
+
+  // 메모 확장 모달 닫기 핸들러
+  const handleCloseMemoExpand = () => {
+    setIsMemoExpanded(false);
   };
-  
-  // 컴포넌트 언마운트 시 타이머 정리
-  useEffect(() => {
-    return () => {
-      if (memoTimerRef.current) {
-        clearTimeout(memoTimerRef.current);
-      }
-    };
-  }, []);
-  
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
       <div
@@ -1050,8 +1069,8 @@ const PromptDetailModal = () => {
                     </PanelResizeHandle>
 
                     {/* 하단: 메모 영역 */}
-                    <Panel 
-                      defaultSizePercentage={vPanelSizes[1]} 
+                    <Panel
+                      defaultSizePercentage={vPanelSizes[1]}
                       minSizePercentage={10}
                     >
                       <div className="w-full h-full p-3 flex flex-col">
@@ -1064,19 +1083,33 @@ const PromptDetailModal = () => {
                             <span className="text-xs text-blue-500">저장 중...</span>
                           )}
                         </div>
-                        <textarea
-                          value={memo}
-                          onChange={handleMemoChange}
-                          onBlur={() => {
-                            if (memoTimerRef.current) {
-                              clearTimeout(memoTimerRef.current);
-                              memoTimerRef.current = null;
-                            }
-                            autoSaveMemo(memo);
-                          }}
-                          className="w-full flex-1 resize-none border rounded-lg p-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          placeholder="메모를 입력하세요..."
-                        />
+                        {/* 메모 textarea 감싸는 div 추가 및 relative 설정 */}
+                        <div className="flex-1 relative">
+                          <textarea
+                            value={memo}
+                            onChange={(e) => handleMemoChange(e.target.value)}
+                            onBlur={() => { // 포커스 잃었을 때 최종 저장
+                              if (memoTimerRef.current) {
+                                clearTimeout(memoTimerRef.current);
+                                memoTimerRef.current = null;
+                              }
+                              // selectedPrompt가 유효할 때만 저장 시도
+                              if (selectedPrompt) {
+                                 triggerMemoSave(memo);
+                              }
+                            }}
+                            className="w-full h-full resize-none border rounded-lg p-2 pr-10 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" // 오른쪽 패딩 추가(pr-10)
+                            placeholder="메모를 입력하세요..."
+                          />
+                          {/* 메모 확장 버튼 추가 */}
+                          <button
+                            onClick={handleOpenMemoExpand}
+                            className="absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500"
+                            title="메모 확장"
+                          >
+                            <Maximize2 size={16} />
+                          </button>
+                        </div>
                       </div>
                     </Panel>
                   </PanelGroup>
@@ -1253,6 +1286,18 @@ const PromptDetailModal = () => {
           }
           useHighlightedContent={!expandViewIsOriginal}
         />
+
+        {/* MemoExpandModal 추가 */} 
+        {isMemoExpanded && (
+          <MemoExpandModal
+            title="메모 편집"
+            memo={memo}
+            isOpen={isMemoExpanded}
+            onClose={handleCloseMemoExpand}
+            onMemoChange={handleMemoChange} // 기존 메모 핸들러 전달
+            readOnly={false} // 편집 가능하도록 설정
+          />
+        )}
       </div>
     </div>
   );

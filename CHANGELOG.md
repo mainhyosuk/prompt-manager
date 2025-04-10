@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.446] - 2025-04-10
+
+### Added
+- 메인 프롬프트 모달에서 메모 확대 보기 기능 추가
+
 ## [v1.445] - 2025-04-10
 
 ### Added
