@@ -130,39 +130,89 @@ const PromptDetailModal = () => {
   const V_PANEL_SPLIT_KEY = 'promptDetailVSplit'; // 상단 영역/메모 분할 (세로)
   const MAIN_SPLIT_KEY = 'promptDetailMainSplit'; // 주요 영역/사이드바 분할 (가로)
   
-  // 가로 분할 (원본/적용된 프롬프트) - 기본값 50/50
-  const [hPanelSizes, setHPanelSizes] = useState(() => {
-    const saved = localStorage.getItem(H_PANEL_SPLIT_KEY);
-    return saved ? JSON.parse(saved) : [50, 50];
-  });
+  // 패널 렌더링 준비 상태
+  const [panelsReady, setPanelsReady] = useState(false);
   
-  // 세로 분할 (상단 영역/메모) - 기본값 70/30
-  const [vPanelSizes, setVPanelSizes] = useState(() => {
-    const saved = localStorage.getItem(V_PANEL_SPLIT_KEY);
-    return saved ? JSON.parse(saved) : [70, 30];
-  });
+  // 기본값 하드코딩
+  const DEFAULT_H_PANEL_SIZES = [50, 50]; // 원본 프롬프트 / 변수 적용 프롬프트
+  const DEFAULT_V_PANEL_SIZES = [65, 35]; // 상단 영역 / 메모 영역
+  const DEFAULT_MAIN_SIZES = [65, 35]; // 좌측 영역 / 우측 사이드바
   
-  // 메인 분할 (주요 영역/사이드바) - 기본값 70/30
-  const [mainSizes, setMainSizes] = useState(() => {
-    const saved = localStorage.getItem(MAIN_SPLIT_KEY);
-    return saved ? JSON.parse(saved) : [70, 30];
-  });
+  // 가로 분할 (원본/적용된 프롬프트)
+  const [hPanelSizes, setHPanelSizes] = useState(DEFAULT_H_PANEL_SIZES);
+  
+  // 세로 분할 (상단 영역/메모)
+  const [vPanelSizes, setVPanelSizes] = useState(DEFAULT_V_PANEL_SIZES);
+  
+  // 메인 분할 (주요 영역/사이드바)
+  const [mainSizes, setMainSizes] = useState(DEFAULT_MAIN_SIZES);
+  
+  // 패널 그룹 레퍼런스
+  const mainPanelGroupRef = useRef(null);
+  const vPanelGroupRef = useRef(null);
+  const hPanelGroupRef = useRef(null);
   
   // 리사이징 핸들러 함수들
-  const handleHPanelResize = (sizes) => {
+  const handleHPanelResize = useCallback((sizes) => {
     setHPanelSizes(sizes);
     localStorage.setItem(H_PANEL_SPLIT_KEY, JSON.stringify(sizes));
-  };
+  }, []);
   
-  const handleVPanelResize = (sizes) => {
+  const handleVPanelResize = useCallback((sizes) => {
     setVPanelSizes(sizes);
     localStorage.setItem(V_PANEL_SPLIT_KEY, JSON.stringify(sizes));
-  };
+  }, []);
   
-  const handleMainResize = (sizes) => {
+  const handleMainResize = useCallback((sizes) => {
     setMainSizes(sizes);
     localStorage.setItem(MAIN_SPLIT_KEY, JSON.stringify(sizes));
-  };
+  }, []);
+  
+  // localStorage 강제 초기화 및 패널 크기 설정
+  const initializePanelSizes = useCallback(() => {
+    console.log('[Panel Init] 패널 초기화 시작');
+    
+    // 먼저 localStorage 값을 강제로 설정
+    localStorage.setItem(H_PANEL_SPLIT_KEY, JSON.stringify(DEFAULT_H_PANEL_SIZES));
+    localStorage.setItem(V_PANEL_SPLIT_KEY, JSON.stringify(DEFAULT_V_PANEL_SIZES));
+    localStorage.setItem(MAIN_SPLIT_KEY, JSON.stringify(DEFAULT_MAIN_SIZES));
+    
+    // 상태 업데이트
+    setHPanelSizes(DEFAULT_H_PANEL_SIZES);
+    setVPanelSizes(DEFAULT_V_PANEL_SIZES);
+    setMainSizes(DEFAULT_MAIN_SIZES);
+    
+    // 약간의 지연 후 패널 준비 상태 설정
+    setTimeout(() => {
+      setPanelsReady(true);
+      console.log('[Panel Init] 패널 준비 완료');
+      
+      // 패널 그룹이 마운트된 후에 사이즈 강제 설정
+      setTimeout(() => {
+        if (mainPanelGroupRef.current) {
+          console.log('[Panel Init] 메인 패널 크기 수동 설정', DEFAULT_MAIN_SIZES);
+          mainPanelGroupRef.current.setLayout(DEFAULT_MAIN_SIZES);
+        }
+        if (vPanelGroupRef.current) {
+          console.log('[Panel Init] 세로 패널 크기 수동 설정', DEFAULT_V_PANEL_SIZES);
+          vPanelGroupRef.current.setLayout(DEFAULT_V_PANEL_SIZES);
+        }
+        if (hPanelGroupRef.current) {
+          console.log('[Panel Init] 가로 패널 크기 수동 설정', DEFAULT_H_PANEL_SIZES);
+          hPanelGroupRef.current.setLayout(DEFAULT_H_PANEL_SIZES);
+        }
+      }, 100);
+    }, 50);
+  }, []);
+  
+  // 모달이 열릴 때 패널 초기화
+  useEffect(() => {
+    if (isDetailModalOpen) {
+      console.log('[Modal] 모달 열림 - 패널 초기화 시작');
+      setPanelsReady(false);
+      initializePanelSizes();
+    }
+  }, [isDetailModalOpen, initializePanelSizes]);
   
   // 변수 기본값 설정
   useEffect(() => {
@@ -603,12 +653,14 @@ const PromptDetailModal = () => {
   }, []);
   
   return (
-    // 배경 div
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      {/* 모달 컨테이너 (높이 조정됨) */}
-      <div ref={modalRef} className="bg-white rounded-lg shadow-xl w-10/12 max-w-7xl h-[85vh] flex flex-col">
-        {/* 모달 헤더 */}
-        <div className="flex justify-between items-center border-b px-5 py-2 flex-shrink-0">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+      <div
+        ref={modalRef}
+        className="bg-white rounded-lg shadow-xl w-11/12 max-h-90vh max-w-screen-xl flex flex-col relative"
+        style={{ height: '90vh' }}
+        data-id="prompt-detail-modal"
+      >
+        <div className="border-b p-4 flex items-center justify-between">
           {isEditingTitle ? (
             <input
               ref={titleInputRef}
@@ -673,190 +725,232 @@ const PromptDetailModal = () => {
         )}
 
         {/* 메인 콘텐츠 영역 */}
-        <div className="flex-1 min-h-0 flex flex-col"> {/* min-h-0 추가 */}
+        <div className="flex-1 min-h-0 flex flex-col">
           {/* 좌측 넓은 영역 + 우측 사이드바 */}
-          <PanelGroup direction="horizontal" onLayout={handleMainResize} className="flex-1 min-h-0">
-            {/* 좌측 넓은 영역 */}
-            <Panel defaultSizePercentage={mainSizes[0]} minSizePercentage={50}>
-              <div className="h-full flex flex-col">
-                {/* 변수 입력 영역 (있을 경우) */}
-                {selectedPrompt.variables && selectedPrompt.variables.length > 0 && (
-                  <div className="flex-shrink-0 border-b">
-                    <div className="p-2">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-medium text-gray-800 mb-1">변수 입력</h3>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-32 overflow-y-auto pr-2">
-                        {selectedPrompt.variables.map((variable, index) => (
-                          <div key={`${variable.id || variable.name}-${index}`} className="flex flex-col">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              {variable.name}
-                            </label>
-                            <div className="flex w-full">
-                              <input
-                                type="text"
-                                value={variableValues[variable.name] || ''}
-                                onChange={(e) => handleVariableChange(variable.name, e.target.value)}
-                                onBlur={(e) => handleVariableChange(variable.name, e.target.value)}
-                                placeholder={variable.default_value || `${variable.name} 값 입력`}
-                                className="flex-1 px-2 py-1 text-sm border rounded-l-md focus:outline-none focus:ring-1 focus:ring-blue-300 focus:border-blue-300"
-                              />
-                              {/* 긴 텍스트 편집 버튼 */}
-                              <button
-                                onClick={() => openTextEditor(variable)}
-                                title="텍스트 에디터에서 편집"
-                                className="px-2 py-1 border-y border-r rounded-r-md hover:bg-gray-100 group"
-                              >
-                                <span className="text-gray-500 group-hover:text-gray-700">📝</span>
-                              </button>
-                              {/* 저장 버튼 */}
-                              {savingStates[variable.name] === 'idle' ? (
+          {panelsReady && (
+            <PanelGroup 
+              ref={mainPanelGroupRef}
+              direction="horizontal" 
+              onLayout={handleMainResize} 
+              className="flex-1 min-h-0"
+            >
+              {/* 좌측 넓은 영역 */}
+              <Panel 
+                defaultSizePercentage={mainSizes[0]} 
+                minSizePercentage={50}
+              >
+                <div className="h-full flex flex-col">
+                  {/* 변수 입력 영역 (있을 경우) */}
+                  {selectedPrompt.variables && selectedPrompt.variables.length > 0 && (
+                    <div className="flex-shrink-0 border-b">
+                      <div className="p-2">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-medium text-gray-800 mb-1">변수 입력</h3>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-32 overflow-y-auto pr-2">
+                          {selectedPrompt.variables.map((variable, index) => (
+                            <div key={`${variable.id || variable.name}-${index}`} className="flex flex-col">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {variable.name}
+                              </label>
+                              <div className="flex w-full">
+                                <input
+                                  type="text"
+                                  value={variableValues[variable.name] || ''}
+                                  onChange={(e) => handleVariableChange(variable.name, e.target.value)}
+                                  onBlur={(e) => handleVariableChange(variable.name, e.target.value)}
+                                  placeholder={variable.default_value || `${variable.name} 값 입력`}
+                                  className="flex-1 px-2 py-1 text-sm border rounded-l-md focus:outline-none focus:ring-1 focus:ring-blue-300 focus:border-blue-300"
+                                />
+                                {/* 긴 텍스트 편집 버튼 */}
                                 <button
-                                  onClick={() => handleSaveVariableDefaultValue(variable.name)}
-                                  title="기본값으로 저장"
-                                  className="ml-1 px-2 py-1 border rounded-md hover:bg-blue-50 group"
+                                  onClick={() => openTextEditor(variable)}
+                                  title="텍스트 에디터에서 편집"
+                                  className="px-2 py-1 border-y border-r rounded-r-md hover:bg-gray-100 group"
                                 >
-                                  <span className="text-gray-500 group-hover:text-blue-500">💾</span>
+                                  <span className="text-gray-500 group-hover:text-gray-700">📝</span>
                                 </button>
-                              ) : savingStates[variable.name] === 'saving' ? (
-                                <button disabled className="ml-1 px-2 py-1 border rounded-md bg-gray-50">
-                                  <span className="text-blue-500 animate-pulse">⏳</span>
-                                </button>
-                              ) : savingStates[variable.name] === 'saved' ? (
-                                <button disabled className="ml-1 px-2 py-1 border rounded-md bg-green-50">
-                                  <span className="text-green-500">✓</span>
-                                </button>
-                              ) : (
-                                <button disabled className="ml-1 px-2 py-1 border rounded-md bg-red-50">
-                                  <span className="text-red-500">✕</span>
-                                </button>
-                              )}
+                                {/* 저장 버튼 */}
+                                {savingStates[variable.name] === 'idle' ? (
+                                  <button
+                                    onClick={() => handleSaveVariableDefaultValue(variable.name)}
+                                    title="기본값으로 저장"
+                                    className="ml-1 px-2 py-1 border rounded-md hover:bg-blue-50 group"
+                                  >
+                                    <span className="text-gray-500 group-hover:text-blue-500">💾</span>
+                                  </button>
+                                ) : savingStates[variable.name] === 'saving' ? (
+                                  <button disabled className="ml-1 px-2 py-1 border rounded-md bg-gray-50">
+                                    <span className="text-blue-500 animate-pulse">⏳</span>
+                                  </button>
+                                ) : savingStates[variable.name] === 'saved' ? (
+                                  <button disabled className="ml-1 px-2 py-1 border rounded-md bg-green-50">
+                                    <span className="text-green-500">✓</span>
+                                  </button>
+                                ) : (
+                                  <button disabled className="ml-1 px-2 py-1 border rounded-md bg-red-50">
+                                    <span className="text-red-500">✕</span>
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
-                
-                {/* 변수 입력 하단의 내용 영역 (상하 분할: 원본/적용 영역 + 메모) */}
-                <PanelGroup direction="vertical" onLayout={handleVPanelResize} className="flex-1 min-h-0">
-                  {/* 상단: 원본 | 변수 적용 영역 */}
-                  <Panel defaultSizePercentage={vPanelSizes[0]} minSizePercentage={30}>
-                    <div className="h-full p-3 overflow-y-auto">
-                      {/* 원본/변수 적용 내용 영역 - 수평 분할 */}
-                      <PanelGroup direction="horizontal" onLayout={handleHPanelResize} className="h-full">
-                        {/* 원본 프롬프트 */}
-                        <Panel defaultSizePercentage={hPanelSizes[0]} minSizePercentage={30}>
-                          <div className="h-full flex flex-col">
-                            <div className="flex items-center justify-between mb-1">
-                              <h3 className="font-medium text-gray-800">원본 프롬프트</h3>
+                  )}
+                  
+                  {/* 변수 입력 하단의 내용 영역 (상하 분할: 원본/적용 영역 + 메모) */}
+                  <PanelGroup 
+                    ref={vPanelGroupRef}
+                    direction="vertical" 
+                    onLayout={handleVPanelResize} 
+                    className="flex-1 min-h-0"
+                  >
+                    {/* 상단: 원본 | 변수 적용 영역 */}
+                    <Panel 
+                      defaultSizePercentage={vPanelSizes[0]} 
+                      minSizePercentage={50}
+                    >
+                      <div className="h-full p-3 overflow-y-auto">
+                        {/* 원본/변수 적용 내용 영역 - 수평 분할 */}
+                        <PanelGroup 
+                          ref={hPanelGroupRef}
+                          direction="horizontal" 
+                          onLayout={handleHPanelResize} 
+                          className="h-full"
+                        >
+                          {/* 원본 프롬프트 */}
+                          <Panel 
+                            defaultSizePercentage={hPanelSizes[0]} 
+                            minSizePercentage={30}
+                          >
+                            <div className="h-full flex flex-col">
+                              <div className="flex items-center justify-between mb-1">
+                                <h3 className="font-medium text-gray-800">원본 프롬프트</h3>
+                              </div>
+                              <div className="flex-1 bg-gray-50 p-2 rounded-lg border text-base whitespace-pre-wrap overflow-y-auto">
+                                {selectedPrompt.content}
+                              </div>
                             </div>
-                            <div className="flex-1 bg-gray-50 p-2 rounded-lg border text-base whitespace-pre-wrap overflow-y-auto">
-                              {selectedPrompt.content}
+                          </Panel>
+
+                          {/* 수직 리사이즈 핸들 */}
+                          <PanelResizeHandle className="w-2 mx-2 flex items-center justify-center cursor-col-resize">
+                            <div className="w-1 h-10 bg-gray-300 rounded hover:bg-blue-400 transition-colors flex items-center justify-center">
+                              <GripVertical size={12} className="text-gray-500 rotate-90" />
                             </div>
-                          </div>
-                        </Panel>
+                          </PanelResizeHandle>
 
-                        {/* 수직 리사이즈 핸들 */}
-                        <PanelResizeHandle className="w-2 mx-2 flex items-center justify-center cursor-col-resize">
-                          <div className="w-1 h-10 bg-gray-300 rounded hover:bg-blue-400 transition-colors flex items-center justify-center">
-                            <GripVertical size={12} className="text-gray-500 rotate-90" />
-                          </div>
-                        </PanelResizeHandle>
-
-                        {/* 변수 적용된 프롬프트 */}
-                        <Panel defaultSizePercentage={hPanelSizes[1]} minSizePercentage={30}>
-                          <div className="h-full flex flex-col">
-                            <div className="flex items-center justify-between mb-1">
-                              <h3 className="font-medium text-gray-800">변수가 적용된 프롬프트</h3>
-                              {/* 복사 버튼 */}
-                              <button
-                                onClick={handleCopyToClipboard}
-                                disabled={copyStatus === 'copying'}
-                                className={`px-2 py-0.5 rounded flex items-center text-xs
-                                  ${copyStatus === 'copied' ? 'bg-green-50 text-green-600' :
-                                    copyStatus === 'error' ? 'bg-red-50 text-red-600' :
-                                    'bg-blue-50 text-blue-600 hover:bg-blue-100'
-                                  }`}
-                              >
-                                <span className="mr-1">📋</span>
-                                {copyStatus === 'copying' ? '복사 중...' :
-                                 copyStatus === 'copied' ? '복사됨!' :
-                                 copyStatus === 'error' ? '복사 실패' :
-                                 '클립보드에 복사'}
-                              </button>
+                          {/* 변수 적용된 프롬프트 */}
+                          <Panel 
+                            defaultSizePercentage={hPanelSizes[1]} 
+                            minSizePercentage={30}
+                          >
+                            <div className="h-full flex flex-col">
+                              <div className="flex items-center justify-between mb-1">
+                                <h3 className="font-medium text-gray-800">변수가 적용된 프롬프트</h3>
+                                {/* 복사 버튼 */}
+                                <button
+                                  onClick={handleCopyToClipboard}
+                                  disabled={copyStatus === 'copying'}
+                                  className={`px-2 py-0.5 rounded flex items-center text-xs
+                                    ${copyStatus === 'copied' ? 'bg-green-50 text-green-600' :
+                                      copyStatus === 'error' ? 'bg-red-50 text-red-600' :
+                                      'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                                    }`}
+                                >
+                                  <span className="mr-1">📋</span>
+                                  {copyStatus === 'copying' ? '복사 중...' :
+                                   copyStatus === 'copied' ? '복사됨!' :
+                                   copyStatus === 'error' ? '복사 실패' :
+                                   '클립보드에 복사'}
+                                </button>
+                              </div>
+                              <div className="flex-1 bg-gray-50 p-2 rounded-lg border overflow-y-auto">
+                                <HighlightedContent
+                                  content={selectedPrompt.content}
+                                  variableValues={variableValues}
+                                />
+                              </div>
                             </div>
-                            <div className="flex-1 bg-gray-50 p-2 rounded-lg border overflow-y-auto">
-                              <HighlightedContent
-                                content={selectedPrompt.content}
-                                variableValues={variableValues}
-                              />
-                            </div>
-                          </div>
-                        </Panel>
-                      </PanelGroup>
-                    </div>
-                  </Panel>
-
-                  {/* 수평 리사이즈 핸들 */}
-                  <PanelResizeHandle className="h-2 my-1 flex items-center justify-center cursor-row-resize">
-                    <div className="h-1 w-16 bg-gray-300 rounded hover:bg-blue-400 transition-colors flex items-center justify-center">
-                      <GripVertical size={12} className="text-gray-500" />
-                    </div>
-                  </PanelResizeHandle>
-
-                  {/* 하단: 메모 영역 */}
-                  <Panel defaultSizePercentage={vPanelSizes[1]} minSizePercentage={15}>
-                    <div className="w-full h-full p-3 flex flex-col">
-                      <div className="flex items-center justify-between mb-1">
-                        <h3 className="font-medium text-gray-800 flex items-center">
-                          <span className="mr-2">📝</span>
-                          메모
-                        </h3>
-                        {savingMemo && (
-                          <span className="text-xs text-blue-500">저장 중...</span>
-                        )}
+                          </Panel>
+                        </PanelGroup>
                       </div>
-                      <textarea
-                        value={memo}
-                        onChange={handleMemoChange}
-                        onBlur={() => {
-                          if (memoTimerRef.current) {
-                            clearTimeout(memoTimerRef.current);
-                            memoTimerRef.current = null;
-                          }
-                          autoSaveMemo(memo);
-                        }}
-                        className="w-full flex-1 resize-none border rounded-lg p-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        placeholder="메모를 입력하세요..."
-                      />
-                    </div>
-                  </Panel>
-                </PanelGroup>
-              </div>
-            </Panel>
+                    </Panel>
 
-            {/* 수직 리사이즈 핸들 (좌우 분할) */}
-            <PanelResizeHandle className="w-2 mx-1 flex items-center justify-center cursor-col-resize">
-              <div className="w-1 h-20 bg-gray-300 rounded hover:bg-blue-400 transition-colors flex items-center justify-center">
-                <GripVertical size={12} className="text-gray-500 rotate-90" />
-              </div>
-            </PanelResizeHandle>
+                    {/* 수평 리사이즈 핸들 */}
+                    <PanelResizeHandle className="h-2 my-1 flex items-center justify-center cursor-row-resize">
+                      <div className="h-1 w-16 bg-gray-300 rounded hover:bg-blue-400 transition-colors flex items-center justify-center">
+                        <GripVertical size={12} className="text-gray-500" />
+                      </div>
+                    </PanelResizeHandle>
 
-            {/* 우측 사이드바 */}
-            <Panel defaultSizePercentage={mainSizes[1]} minSizePercentage={20}>
-              <div className="h-full border-l overflow-hidden">
-                <PromptPanel
-                  selectedPromptId={selectedPrompt?.id}
-                  onPromptSelect={(prompt) => {
-                    openOverlayModal(prompt);
-                  }}
-                  onClose={() => {}}
-                />
-              </div>
-            </Panel>
-          </PanelGroup>
+                    {/* 하단: 메모 영역 */}
+                    <Panel 
+                      defaultSizePercentage={vPanelSizes[1]} 
+                      minSizePercentage={10}
+                    >
+                      <div className="w-full h-full p-3 flex flex-col">
+                        <div className="flex items-center justify-between mb-1">
+                          <h3 className="font-medium text-gray-800 flex items-center">
+                            <span className="mr-2">📝</span>
+                            메모
+                          </h3>
+                          {savingMemo && (
+                            <span className="text-xs text-blue-500">저장 중...</span>
+                          )}
+                        </div>
+                        <textarea
+                          value={memo}
+                          onChange={handleMemoChange}
+                          onBlur={() => {
+                            if (memoTimerRef.current) {
+                              clearTimeout(memoTimerRef.current);
+                              memoTimerRef.current = null;
+                            }
+                            autoSaveMemo(memo);
+                          }}
+                          className="w-full flex-1 resize-none border rounded-lg p-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          placeholder="메모를 입력하세요..."
+                        />
+                      </div>
+                    </Panel>
+                  </PanelGroup>
+                </div>
+              </Panel>
+
+              {/* 수직 리사이즈 핸들 (좌우 분할) */}
+              <PanelResizeHandle className="w-2 mx-1 flex items-center justify-center cursor-col-resize">
+                <div className="w-1 h-20 bg-gray-300 rounded hover:bg-blue-400 transition-colors flex items-center justify-center">
+                  <GripVertical size={12} className="text-gray-500 rotate-90" />
+                </div>
+              </PanelResizeHandle>
+
+              {/* 우측 사이드바 */}
+              <Panel 
+                defaultSizePercentage={mainSizes[1]} 
+                minSizePercentage={15}
+              >
+                <div className="h-full border-l overflow-hidden">
+                  <PromptPanel
+                    selectedPromptId={selectedPrompt?.id}
+                    onPromptSelect={(prompt) => {
+                      openOverlayModal(prompt);
+                    }}
+                    onClose={() => {}}
+                  />
+                </div>
+              </Panel>
+            </PanelGroup>
+          )}
+
+          {/* 패널이 준비되지 않았을 때 로딩 표시 */}
+          {!panelsReady && (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="animate-pulse text-gray-400">로딩 중...</div>
+            </div>
+          )}
 
           {/* 하단 유사 프롬프트 섹션 */}
           <div className="flex-shrink-0 border-t p-3">
@@ -981,8 +1075,8 @@ const PromptDetailModal = () => {
             </div>
           </div>
         )}
-      </div> {/* End of Modal Container */}
-    </div> // End of Background
+      </div>
+    </div>
   );
 };
 
