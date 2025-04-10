@@ -7,6 +7,7 @@ import { copyToClipboard } from '../utils/clipboard';
 import { Maximize2 } from 'lucide-react';
 import PromptExpandView from '../components/common/PromptExpandView';
 import { updatePromptMemo } from '../api/promptApi';
+import MemoExpandModal from '../components/common/MemoExpandModal';
 
 // 변수가 적용된 내용을 하이라이트하는 컴포넌트
 const HighlightedContent = ({ content, variableValues }) => {
@@ -78,6 +79,7 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
   const [isExpandViewOpen, setIsExpandViewOpen] = useState(false);
   const [expandViewContent, setExpandViewContent] = useState('');
   const [expandViewTitle, setExpandViewTitle] = useState('');
+  const [isMemoExpanded, setIsMemoExpanded] = useState(false);
 
   // 메모 관련 상태 추가
   const [memo, setMemo] = useState('');
@@ -366,8 +368,8 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
   const processedContent = hasVariables ? applyVariables(prompt.content, variableValues) : prompt.content;
 
   // 메모 변경 핸들러
-  const handleMemoChange = (e) => {
-    setMemo(e.target.value);
+  const handleMemoChange = (value) => {
+    setMemo(value);
     
     // 이전 타이머가 있으면 취소
     if (memoTimerRef.current) {
@@ -376,7 +378,7 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
     
     // 새 타이머 설정
     memoTimerRef.current = setTimeout(() => {
-      autoSaveMemo(e.target.value);
+      autoSaveMemo(value);
     }, autoSaveDelay);
   };
   
@@ -408,6 +410,16 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
 
   const handleCloseExpandView = () => {
     setIsExpandViewOpen(false);
+  };
+
+  // 메모 확장 핸들러 추가
+  const handleOpenMemoExpand = () => {
+    setIsMemoExpanded(true);
+  };
+
+  // 메모 확장 닫기 핸들러 추가
+  const handleCloseMemoExpand = () => {
+    setIsMemoExpanded(false);
   };
 
   if (!isOpen || !prompt) return null;
@@ -579,28 +591,35 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
               </div>
             </div>
             
-            <div className="border rounded-lg p-3">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-gray-700">메모</h3>
+            <div className="border rounded-lg p-3 flex flex-col">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-medium text-gray-700 flex items-center">
+                  <span className="mr-2">📝</span>
+                  메모
+                </h3>
                 {savingMemo && (
                   <span className="text-xs text-blue-500">저장 중...</span>
                 )}
               </div>
-              <textarea
-                value={memo}
-                onChange={handleMemoChange}
-                onBlur={(e) => {
-                  e.stopPropagation();
-                  if (memoTimerRef.current) {
-                    clearTimeout(memoTimerRef.current);
-                    memoTimerRef.current = null;
-                  }
-                  autoSaveMemo(memo);
-                }}
-                className="w-full h-32 p-2 border rounded-md bg-gray-50 hover:bg-white focus:bg-white text-xs resize-y focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="이 프롬프트에 대한 메모를 입력하세요..."
-                disabled={savingMemo}
-              />
+              <div className="flex-1 relative min-h-[120px] h-full">
+                <textarea
+                  value={memo}
+                  onChange={(e) => handleMemoChange(e.target.value)}
+                  onBlur={() => {
+                    if (memoTimerRef.current) clearTimeout(memoTimerRef.current);
+                    autoSaveMemo(memo);
+                  }}
+                  placeholder="프롬프트 관련 메모를 입력하세요..."
+                  className="w-full h-full min-h-[120px] resize-none border rounded-md p-2 pr-10 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                <button
+                  onClick={handleOpenMemoExpand}
+                  className="absolute bottom-4 right-3 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500"
+                  title="메모 확장"
+                >
+                  <Maximize2 size={16} />
+                </button>
+              </div>
             </div>
             
             <div className="border rounded-lg p-3">
@@ -684,6 +703,18 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
           title={expandViewTitle}
           content={expandViewContent}
         />
+
+        {/* 메모 확장 모달 추가 */}
+        {isMemoExpanded && (
+          <MemoExpandModal
+            title="메모 편집"
+            memo={memo}
+            isOpen={isMemoExpanded}
+            onClose={handleCloseMemoExpand}
+            onMemoChange={handleMemoChange}
+            readOnly={false}
+          />
+        )}
       </div>
     </div>
   );

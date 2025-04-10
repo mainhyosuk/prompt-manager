@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.447] - 2025-04-10
+
+### Added
+- 사용자 추가 탭 메모 확장 아이콘 및 기능 추가
+
 ## [v1.446] - 2025-04-10
 
 ### Added
