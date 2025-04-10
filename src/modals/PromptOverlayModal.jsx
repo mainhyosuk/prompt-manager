@@ -213,7 +213,7 @@ const PromptOverlayModal = ({ isOpen, onClose, prompt }) => {
   // ESC 키 입력 감지 - 마찬가지로 캡처링 단계에서 처리
   useEffect(() => {
     const handleEscKey = async (event) => {
-      if (event.key === 'Escape' && isOpen && !isTextEditorOpen) {
+      if (event.key === 'Escape' && isOpen) {
         // 이벤트를 여기서 중지해서 외부로 전파되지 않도록 함
         event.preventDefault();
         event.stopPropagation();
@@ -221,6 +221,20 @@ const PromptOverlayModal = ({ isOpen, onClose, prompt }) => {
           event.nativeEvent.stopImmediatePropagation();
         }
         
+        // 우선순위 처리: 확장 뷰 -> 텍스트 에디터 -> 모달
+        if (isExpandViewOpen) {
+          // 확장 뷰가 열려있으면 확장 뷰만 닫음
+          handleCloseExpandView();
+          return;
+        }
+        
+        if (isTextEditorOpen) {
+          // 텍스트 에디터가 열려있으면 텍스트 에디터만 닫음
+          closeTextEditor();
+          return;
+        }
+        
+        // 위 조건에 해당하지 않을 때만 모달 닫기 처리
         // 모달을 닫기 전에 메모가 저장되도록 함
         if (memoTimerRef.current) {
           clearTimeout(memoTimerRef.current);
@@ -249,7 +263,7 @@ const PromptOverlayModal = ({ isOpen, onClose, prompt }) => {
     return () => {
       document.removeEventListener('keydown', handleEscKey, true);
     };
-  }, [isOpen, isTextEditorOpen, onClose, memo, prompt, updatePromptItem]);
+  }, [isOpen, isTextEditorOpen, isExpandViewOpen, onClose, memo, prompt, updatePromptItem]);
 
   // 클립보드에 복사
   const handleCopyToClipboard = async () => {
@@ -613,8 +627,18 @@ const PromptOverlayModal = ({ isOpen, onClose, prompt }) => {
                 <div className="flex items-center justify-between mb-1">
                   <h3 className="font-medium text-gray-800">원본 프롬프트</h3>
                 </div>
-                <div className="flex-1 bg-gray-50 p-2 rounded-lg border text-base whitespace-pre-wrap overflow-y-auto">
+                <div className="flex-1 bg-gray-50 p-2 rounded-lg border text-base whitespace-pre-wrap overflow-y-auto relative">
                   {prompt?.content}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenExpandView(prompt?.content, '원본 프롬프트');
+                    }}
+                    className="absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500"
+                    title="확대 보기"
+                  >
+                    <Maximize2 size={16} />
+                  </button>
                 </div>
               </div>
               
@@ -646,13 +670,23 @@ const PromptOverlayModal = ({ isOpen, onClose, prompt }) => {
                       : '클립보드에 복사'}
                   </button>
                 </div>
-                <div className="flex-1 bg-white border rounded-lg overflow-y-auto">
+                <div className="flex-1 bg-white border rounded-lg overflow-y-auto relative">
                   <div className="p-2 text-base whitespace-pre-wrap">
                     <HighlightedContent 
                       content={prompt?.content}
                       variableValues={variableValues}
                     />
                   </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenExpandView(processedContent, '변수가 적용된 프롬프트');
+                    }}
+                    className="absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500"
+                    title="확대 보기"
+                  >
+                    <Maximize2 size={16} />
+                  </button>
                 </div>
               </div>
             </div>
