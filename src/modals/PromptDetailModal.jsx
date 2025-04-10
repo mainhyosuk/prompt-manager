@@ -475,50 +475,35 @@ const PromptDetailModal = () => {
         const clickedInsideTextEditor = isTextEditorOpen && textEditorRef.current && textEditorRef.current.contains(event.target);
         if (clickedInsideTextEditor) return;
         
-        // 2. 오버레이 모달 내부 클릭 확인 (모든 오버레이 모달 체크)
-        const overlayModalElements = document.querySelectorAll('.fixed.inset-0.bg-black.bg-opacity-50, .fixed.inset-0.bg-black.bg-opacity-60');
-        let clickedInsideOverlayModal = false;
+        // 2. 오버레이 모달이 열려있는지 확인 (존재하는지만 확인)
+        const overlayModalOpen = !!document.querySelector('[data-modal="prompt-overlay"], [data-modal="user-prompt-detail"]');
         
-        overlayModalElements.forEach(overlay => {
-          // 오버레이 모달이 열려있고 클릭된 대상이 오버레이 안에 있으면
-          if (overlay && overlay.contains(event.target)) {
-            clickedInsideOverlayModal = true;
-          }
-        });
-        
-        // 3. UserPromptDetailModal 내부 클릭 확인
-        const userPromptDetailModalElement = document.querySelector('[data-modal="user-prompt-detail"]');
-        const clickedInsideUserPromptModal = userPromptDetailModalElement && userPromptDetailModalElement.contains(event.target);
-        
-        // 4. PromptOverlayModal 내부 클릭 확인
-        const promptOverlayModalElement = document.querySelector('[data-modal="prompt-overlay"]');
-        const clickedInsidePromptOverlayModal = promptOverlayModalElement && promptOverlayModalElement.contains(event.target);
-        
-        // 어느 자식 모달에도 속하지 않을 때만 부모 모달 닫기
-        if (!clickedInsideTextEditor && 
-            !clickedInsideOverlayModal && 
-            !clickedInsideUserPromptModal && 
-            !clickedInsidePromptOverlayModal) {
-          
-          // 모달을 닫기 전에 메모가 저장되도록 함
-          if (memoTimerRef.current) {
-            clearTimeout(memoTimerRef.current);
-            memoTimerRef.current = null;
-          }
-          
-          // 메모에 변경 사항이 있으면 저장
-          if (selectedPrompt && memo !== selectedPrompt.memo) {
-            try {
-              await updatePromptMemo(selectedPrompt.id, memo);
-              updatePromptItem(selectedPrompt.id, { ...selectedPrompt, memo });
-            } catch (error) {
-              console.error('모달 닫기 전 메모 저장 오류:', error);
-            }
-          }
-          
-          // 모달 닫기
-          setIsDetailModalOpen(false);
+        // 오버레이 모달이 열려있으면 부모 모달이 닫히지 않도록 함
+        if (overlayModalOpen) {
+          // 이벤트 핸들링 중지
+          event.stopPropagation();
+          return;
         }
+        
+        // 3. 위의 조건에 해당하지 않으면 부모 모달 닫기
+        // 모달을 닫기 전에 메모가 저장되도록 함
+        if (memoTimerRef.current) {
+          clearTimeout(memoTimerRef.current);
+          memoTimerRef.current = null;
+        }
+        
+        // 메모에 변경 사항이 있으면 저장
+        if (selectedPrompt && memo !== selectedPrompt.memo) {
+          try {
+            await updatePromptMemo(selectedPrompt.id, memo);
+            updatePromptItem(selectedPrompt.id, { ...selectedPrompt, memo });
+          } catch (error) {
+            console.error('모달 닫기 전 메모 저장 오류:', error);
+          }
+        }
+        
+        // 모달 닫기
+        setIsDetailModalOpen(false);
       }
     };
     
@@ -556,20 +541,17 @@ const PromptDetailModal = () => {
           return;
         }
         
-        // 2. 오버레이 모달이 열려있는지 확인
-        const overlayElements = document.querySelectorAll('.fixed.inset-0.bg-black.bg-opacity-50, .fixed.inset-0.bg-black.bg-opacity-60');
-        for (const overlay of overlayElements) {
-          // 오버레이 모달이 표시되어 있고, data-modal 속성이 있으면 (자식 모달)
-          if (overlay.style.display !== 'none' && 
-              (overlay.getAttribute('data-modal') === 'prompt-overlay' || 
-               overlay.getAttribute('data-modal') === 'user-prompt-detail')) {
-            // ESC 키 이벤트 처리를 여기서 중단 (부모 모달이 닫히지 않도록)
-            event.stopPropagation();
-            return;
-          }
+        // 2. 오버레이 모달이 열려있는지 확인 (존재하는지만 확인)
+        const overlayModalOpen = !!document.querySelector('[data-modal="prompt-overlay"], [data-modal="user-prompt-detail"]');
+        
+        // 오버레이 모달이 열려있으면 부모 모달이 닫히지 않도록 함
+        if (overlayModalOpen) {
+          // 이벤트 핸들링 중지
+          event.stopPropagation();
+          return;
         }
         
-        // 3. 오버레이 모달이 없을 때만 부모 모달 닫기
+        // 3. 위의 조건에 해당하지 않으면 부모 모달 닫기
         // 모달을 닫기 전에 메모가 저장되도록 함
         if (memoTimerRef.current) {
           clearTimeout(memoTimerRef.current);

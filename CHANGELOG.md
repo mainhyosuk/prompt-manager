@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.441] - 2025-04-10
+
+### Fixed
+- 부모 프롬프트 모달 바깥쪽 클릭시 종료되지 않는 문제 해결
+
 ## [v1.44] - 2025-04-10
 
 ### Fixed
