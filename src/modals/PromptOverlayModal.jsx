@@ -1,10 +1,13 @@
 // 일반 프롬프트의 상세 정보를 표시하는 오버레이 모달 (AppContext에서 관리)
 
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { applyVariables, extractVariables, splitContentByVariables } from '../utils/variableParser';
 import { copyToClipboard } from '../utils/clipboard';
 import { updatePromptMemo } from '../api/promptApi';
+import { Maximize2 } from 'lucide-react';
+import PromptExpandView from '../components/common/PromptExpandView';
 
 // 변수가 적용된 내용을 하이라이트하는 컴포넌트
 const HighlightedContent = ({ content, variableValues }) => {
@@ -23,7 +26,7 @@ const HighlightedContent = ({ content, variableValues }) => {
   const parts = splitContentByVariables(content);
   
   return (
-    <div className="">
+    <div className="whitespace-pre-wrap">
       {parts.map((part, index) => {
         if (part.type === 'variable') {
           // 매칭되는 사용자 변수 찾기 (변수 파서와 동일한 로직)
@@ -105,6 +108,11 @@ const PromptOverlayModal = ({ isOpen, onClose, prompt }) => {
   const memoTimerRef = useRef(null);
   const autoSaveDelay = 1000; // 1초 후 자동 저장
 
+  // 확대 보기 관련 상태
+  const [isExpandViewOpen, setIsExpandViewOpen] = useState(false);
+  const [expandViewContent, setExpandViewContent] = useState('');
+  const [expandViewTitle, setExpandViewTitle] = useState('');
+
   // 모달이 열릴 때 prompt에서 데이터 초기화
   useEffect(() => {
     if (isOpen && prompt) {
@@ -139,12 +147,14 @@ const PromptOverlayModal = ({ isOpen, onClose, prompt }) => {
         setVariableValues({});
         setSavingStates({});
       }
+      setIsExpandViewOpen(false); // 모달 열릴 때 초기화
     } else {
       // 모달이 닫히거나 prompt가 없는 경우 상태 초기화
       setMemo('');
       setProcessedContent('');
       setVariableValues({});
       setSavingStates({});
+      setIsExpandViewOpen(false); // 모달 닫힐 때 초기화
     }
   }, [isOpen, prompt]);
   
@@ -412,6 +422,17 @@ const PromptOverlayModal = ({ isOpen, onClose, prompt }) => {
     await handleSaveVariableDefaultValue(editingVariable.name);
     
     closeTextEditor();
+  };
+
+  // 확대 보기 핸들러
+  const handleOpenExpandView = (content, title) => {
+    setExpandViewContent(content);
+    setExpandViewTitle(title);
+    setIsExpandViewOpen(true);
+  };
+
+  const handleCloseExpandView = () => {
+    setIsExpandViewOpen(false);
   };
 
   if (!isOpen || !prompt) return null;
@@ -793,6 +814,14 @@ const PromptOverlayModal = ({ isOpen, onClose, prompt }) => {
             </div>
           </div>
         )}
+
+        {/* 확대 보기 모달 렌더링 */}
+        <PromptExpandView
+          isOpen={isExpandViewOpen}
+          onClose={handleCloseExpandView}
+          title={expandViewTitle}
+          content={expandViewContent}
+        />
       </div>
     </div>
   );
