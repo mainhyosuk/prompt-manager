@@ -422,6 +422,7 @@ const PromptOverlayModal = ({ isOpen, onClose, prompt }) => {
   return (
     <div 
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      data-modal="prompt-overlay"
       onClick={(e) => {
         // 배경 클릭 시 이벤트 전파 중지 및 닫기
         if (e.target === e.currentTarget) {
@@ -436,8 +437,11 @@ const PromptOverlayModal = ({ isOpen, onClose, prompt }) => {
         ref={modalRef} 
         className="bg-white rounded-lg shadow-xl w-10/12 max-w-5xl h-[70vh] flex flex-col"
         onClick={(e) => {
+          // 이벤트 전파 중지를 강화하여 부모 모달까지 이벤트가 전파되지 않도록 함
           e.preventDefault();
           e.stopPropagation();
+          // 네이티브 이벤트의 즉시 전파 중지 (더 강력한 전파 방지)
+          e.nativeEvent.stopImmediatePropagation();
         }}
       >
         {/* 모달 헤더 */}

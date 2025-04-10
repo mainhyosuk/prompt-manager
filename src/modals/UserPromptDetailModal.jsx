@@ -276,28 +276,28 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
   if (!isOpen || !prompt) return null;
 
   return (
-    // 배경 div: mousedown 이벤트 처리 수정
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-      onMouseDown={(e) => {
-        // 클릭 대상이 배경 div 자신일 경우 자식 모달 닫기
+      className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
+      data-id="user-prompt-detail-modal"
+      data-modal="user-prompt-detail"
+      onClick={(e) => {
         if (e.target === e.currentTarget) {
-          // console.log('[Child Modal] Background directly clicked. Closing child modal and stopping propagation.');
-          onClose(); 
+          onClose();
         }
-        // 배경 또는 그 내부에서 시작된 mousedown 이벤트는 항상 전파 중단
         e.stopPropagation();
       }}
     >
       <div
         ref={modalRef}
         className="bg-white rounded-lg shadow-xl w-10/12 max-w-5xl h-[67vh] flex flex-col"
-        // 이벤트 버블링을 막기 위해 onClick 핸들러 추가 (Click 이벤트 용도, mousedown과 별개)
-        onClick={(e) => e.stopPropagation()}
-        // 자식 모달 식별을 위한 data-id 추가
-        data-id="user-prompt-detail-modal"
+        onClick={(e) => {
+          // 이벤트 전파 중지를 강화하여 부모 모달까지 이벤트가 전파되지 않도록 함
+          e.preventDefault();
+          e.stopPropagation();
+          // 네이티브 이벤트의 즉시 전파 중지 (더 강력한 전파 방지)
+          e.nativeEvent.stopImmediatePropagation();
+        }}
       >
-        {/* 모달 헤더 */}
         <div className="flex justify-between items-center border-b px-5 py-3 flex-shrink-0">
           <h2 className="text-lg font-semibold">
             {prompt.title} {prompt.is_user_added && <span className="text-blue-500 text-sm">(사용자 추가)</span>}
@@ -318,8 +318,8 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
               <span>✎</span>
             </button>
             <button 
-              onClick={(e) => { // 이벤트 객체 e를 받도록 수정
-                e.stopPropagation(); // 이벤트 전파 중단 추가
+              onClick={(e) => {
+                e.stopPropagation();
                 onClose();
               }}
               className="text-gray-400 hover:text-gray-600"
@@ -330,10 +330,8 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
           </div>
         </div>
         
-        {/* 모달 콘텐츠 - 스크롤 가능한 영역 */}
         <div className="flex-1 overflow-y-auto p-4">
           <div className="space-y-4">
-            {/* 변수 입력 영역 수정 */}
             {hasVariables && (
               <div className="border rounded-lg p-3 bg-gray-50">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">변수 입력</h3>
@@ -342,7 +340,6 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
                     <div key={`${variable.id || variable.name}-${index}`} className="border rounded-md p-2 bg-white">
                       <label className="block text-xs font-medium text-gray-700 mb-1">
                         {variable.name}
-                        {/* required 표시가 필요하면 추가 */}
                       </label>
                       <div className="flex w-full">
                         <input
@@ -354,7 +351,7 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
                         />
                         <button
                           type="button"
-                          onClick={() => handleSaveVariableValue(variable.name)} // 저장 함수 연결
+                          onClick={() => handleSaveVariableValue(variable.name)}
                           className={`px-2 py-1 border border-l-0 rounded-none text-xs 
                             ${savingStates[variable.name] === 'saved' ? 'bg-green-50 text-green-600' : 
                               savingStates[variable.name] === 'error' ? 'bg-red-50 text-red-600' : 
@@ -363,7 +360,6 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
                           title="현재 값 저장"
                           disabled={savingStates[variable.name] === 'saving'}
                         >
-                          {/* 아이콘 및 상태 표시 */} 
                           {savingStates[variable.name] === 'saved' ? (
                             <span>✓</span>
                           ) : savingStates[variable.name] === 'saving' ? (
@@ -374,7 +370,7 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
                         </button>
                         <button
                           type="button"
-                          onClick={() => openTextEditor(variable)} // 에디터 열기 함수 연결
+                          onClick={() => openTextEditor(variable)}
                           className="px-2 py-1 border border-l-0 rounded-r-md bg-gray-50 hover:bg-gray-100 text-gray-600 text-xs"
                           title="텍스트 에디터 열기"
                         >
@@ -387,9 +383,7 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
               </div>
             )}
             
-            {/* 원본 프롬프트와 변수가 적용된 프롬프트 - 2열 레이아웃 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* 원본 프롬프트 */}
               <div className="border rounded-lg p-3">
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="text-sm font-medium text-gray-700">원본 프롬프트</h3>
@@ -399,7 +393,6 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
                 </div>
               </div>
               
-              {/* 변수가 적용된 프롬프트 */}
               <div className="border rounded-lg p-3">
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="text-sm font-medium text-gray-700">변수가 적용된 프롬프트</h3>
@@ -432,7 +425,6 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
               </div>
             </div>
             
-            {/* 메모 영역 */}
             <div className="border rounded-lg p-3">
               <h3 className="text-sm font-medium text-gray-700 mb-2">메모</h3>
               <div className="border rounded-md p-2 bg-gray-50 text-xs whitespace-pre-wrap h-32 overflow-y-auto">
@@ -440,10 +432,8 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
               </div>
             </div>
             
-            {/* 메타 정보 - 한 줄로 표시 */}
             <div className="border rounded-lg p-3">
               <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
-                {/* 부모 프롬프트 */}
                 <div className="flex items-center">
                   <span className="text-gray-500 mr-1">원본 프롬프트:</span>
                   <span className="text-blue-600">
@@ -451,7 +441,6 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
                   </span>
                 </div>
                 
-                {/* 생성 일자 */}
                 <div className="flex items-center">
                   <span className="text-gray-500 mr-1">생성일:</span>
                   <span>
@@ -459,7 +448,6 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
                   </span>
                 </div>
                 
-                {/* 마지막 수정일 */}
                 <div className="flex items-center">
                   <span className="text-gray-500 mr-1">마지막 수정일:</span>
                   <span>
@@ -471,9 +459,8 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
           </div>
         </div>
         
-        {/* 텍스트 에디터 모달 추가 */} 
         {isTextEditorOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-60"> {/* z-index 상향 조정 */} 
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-60">
             <div ref={textEditorRef} className="bg-white rounded-lg shadow-xl w-2/3 max-w-2xl flex flex-col">
               <div className="flex justify-between items-center border-b px-4 py-2">
                 <h3 className="font-medium">
@@ -504,7 +491,7 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
                   취소
                 </button>
                 <button
-                  onClick={saveTextEditorValueAndStore} // 저장 후 스토리지 업데이트
+                  onClick={saveTextEditorValueAndStore}
                   className="px-3 py-1.5 border rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100"
                 >
                   저장

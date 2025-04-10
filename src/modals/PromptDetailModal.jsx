@@ -250,245 +250,6 @@ const PromptDetailModal = () => {
     updateProcessedContent();
   }, [updateProcessedContent]);
   
-  // 외부 클릭 감지
-  useEffect(() => {
-    const handleOutsideClick = async (event) => {
-      // console.log('[Parent Modal] handleOutsideClick triggered. Target:', event.target);
-      // 클릭된 대상이 자식 모달(UserPromptDetailModal) 내부인지 확인
-      const clickedInsideChildModal = event.target.closest('[data-id="user-prompt-detail-modal"]');
-      const isParentModalContent = modalRef.current && modalRef.current.contains(event.target);
-
-      // console.log(`[Parent Modal] Conditions: isParentModalContent=${isParentModalContent}, clickedInsideChildModal=${!!clickedInsideChildModal}`);
-      
-      // 부모 모달(PromptDetailModal)의 참조가 있고,
-      // 클릭된 대상이 부모 모달 외부에 있으며,
-      // 클릭된 대상이 자식 모달 내부도 아닐 때만 부모 모달 닫기
-      if (modalRef.current && 
-          !isParentModalContent && // 변수 사용
-          !clickedInsideChildModal)
-      {
-        // console.log('[Parent Modal] Conditions met. Closing parent modal.');
-        // 모달을 닫기 전에 메모가 저장되도록 함
-        if (memoTimerRef.current) {
-          clearTimeout(memoTimerRef.current);
-          memoTimerRef.current = null;
-        }
-        
-        // 메모에 변경 사항이 있으면 저장
-        if (selectedPrompt && memo !== selectedPrompt.memo) {
-          try {
-            await updatePromptMemo(selectedPrompt.id, memo);
-            updatePromptItem(selectedPrompt.id, { ...selectedPrompt, memo });
-          } catch (error) {
-            console.error('모달 닫기 전 메모 저장 오류:', error);
-          }
-        }
-        
-        // 모달 닫기
-        // console.log('[Parent Modal] Calling setIsDetailModalOpen(false).');
-        setIsDetailModalOpen(false);
-      }
-    };
-    
-    document.addEventListener('mousedown', handleOutsideClick);
-    
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-    };
-  }, [setIsDetailModalOpen, memo, selectedPrompt, updatePromptItem]);
-
-  // 텍스트 에디터 외부 클릭 감지
-  useEffect(() => {
-    const handleTextEditorOutsideClick = (event) => {
-      if (isTextEditorOpen && textEditorRef.current && !textEditorRef.current.contains(event.target)) {
-        closeTextEditor();
-      }
-    };
-    
-    if (isTextEditorOpen) {
-      document.addEventListener('mousedown', handleTextEditorOutsideClick);
-    }
-    
-    return () => {
-      document.removeEventListener('mousedown', handleTextEditorOutsideClick);
-    };
-  }, [isTextEditorOpen]);
-
-  // ESC 키 입력 감지
-  useEffect(() => {
-    const handleEscKey = async (event) => {
-      if (event.key === 'Escape') {
-        if (isTextEditorOpen) {
-          closeTextEditor();
-        } else {
-          // 모달을 닫기 전에 메모가 저장되도록 함
-          if (memoTimerRef.current) {
-            clearTimeout(memoTimerRef.current);
-            memoTimerRef.current = null;
-          }
-          
-          // 메모에 변경 사항이 있으면 저장
-          if (selectedPrompt && memo !== selectedPrompt.memo) {
-            try {
-              await updatePromptMemo(selectedPrompt.id, memo);
-              updatePromptItem(selectedPrompt.id, { ...selectedPrompt, memo });
-            } catch (error) {
-              console.error('모달 닫기 전 메모 저장 오류:', error);
-            }
-          }
-          
-          // 모달 닫기
-          setIsDetailModalOpen(false);
-        }
-      }
-    };
-    
-    document.addEventListener('keydown', handleEscKey);
-    
-    return () => {
-      document.removeEventListener('keydown', handleEscKey);
-    };
-  }, [setIsDetailModalOpen, isTextEditorOpen, memo, selectedPrompt, updatePromptItem]);
-  
-  // 선택된 프롬프트가 변경될 때 메모 값 초기화
-  useEffect(() => {
-    if (selectedPrompt) {
-      setMemo(selectedPrompt.memo || '');
-      setEditableTitle(selectedPrompt.title || ''); // editableTitle 초기화
-      setIsEditingTitle(false); // 편집 모드 해제
-    }
-  }, [selectedPrompt]);
-  
-  // 제목 편집 모드 활성화 시 input에 포커스
-  useEffect(() => {
-    if (isEditingTitle && titleInputRef.current) {
-      titleInputRef.current.focus();
-      titleInputRef.current.select(); // 텍스트 전체 선택
-    }
-  }, [isEditingTitle]);
-  
-  // 제목 클릭 핸들러
-  const handleTitleClick = () => {
-    setEditableTitle(selectedPrompt.title || ''); // 현재 제목으로 초기화
-    setIsEditingTitle(true);
-  };
-
-  // 제목 수정 완료 핸들러 (Enter 또는 Blur)
-  const handleTitleChangeComplete = async () => {
-    if (!isEditingTitle) return;
-
-    const trimmedTitle = editableTitle.trim();
-    // 제목이 변경되었고 비어있지 않으면 저장
-    if (selectedPrompt && trimmedTitle !== selectedPrompt.title && trimmedTitle !== '') {
-      try {
-        await handleUpdatePromptTitle(selectedPrompt.id, trimmedTitle);
-        // 상태 업데이트는 AppContext의 updatePromptItem에서 처리됨
-      } catch (error) { 
-        // 에러 처리 (예: 원래 제목으로 되돌리기)
-        setEditableTitle(selectedPrompt.title || '');
-      }
-    } else {
-      // 변경되지 않았거나 빈 제목이면 원래 제목으로 복구
-      setEditableTitle(selectedPrompt.title || '');
-    }
-    setIsEditingTitle(false);
-  };
-
-  // 제목 입력 변경 핸들러
-  const handleTitleInputChange = (e) => {
-    setEditableTitle(e.target.value);
-  };
-
-  // 제목 입력 KeyDown 핸들러 (Enter, Escape)
-  const handleTitleInputKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      handleTitleChangeComplete();
-    } else if (e.key === 'Escape') {
-      setEditableTitle(selectedPrompt.title || ''); // 원래 제목으로 복구
-      setIsEditingTitle(false);
-    }
-  };
-  
-  // 모달 닫기 전 메모 저장 처리
-  const handleCloseModal = async () => {
-    // 메모 자동 저장 타이머가 있으면 취소
-    if (memoTimerRef.current) {
-      clearTimeout(memoTimerRef.current);
-      memoTimerRef.current = null;
-    }
-    
-    // 메모에 변경 사항이 있으면 저장
-    if (selectedPrompt && memo !== selectedPrompt.memo) {
-      try {
-        await updatePromptMemo(selectedPrompt.id, memo);
-        updatePromptItem(selectedPrompt.id, { ...selectedPrompt, memo });
-      } catch (error) {
-        console.error('모달 닫기 전 메모 저장 오류:', error);
-      }
-    }
-    
-    // 모달 닫기
-    setIsDetailModalOpen(false);
-  };
-  
-  // 유사 프롬프트로 전환 핸들러
-  const handleSwitchToPrompt = (prompt) => {
-    switchToPrompt(prompt);
-  };
-  
-  // 유사한 프롬프트 상세 보기를 위한 오버레이 모달 핸들러
-  const handleViewSimilarPrompt = (prompt) => {
-    if (openOverlayModal) {
-      openOverlayModal(prompt);
-    }
-  };
-  
-  // 유사 프롬프트 로드 useEffect 추가
-  useEffect(() => {
-    const loadSimilar = async () => {
-      if (!selectedPrompt?.id) {
-        setSimilarPrompts([]); // 선택된 프롬프트 없으면 비우기
-        return;
-      }
-      
-      setIsLoadingSimilar(true);
-      setSimilarError(null);
-      try {
-        const data = await getSimilarPrompts(selectedPrompt.id);
-        // 자기 자신은 제외하고 최대 10개만 가져오기 (선택사항)
-        setSimilarPrompts(data.filter(p => p.id !== selectedPrompt.id).slice(0, 10)); 
-      } catch (err) {
-        console.error('유사 프롬프트 로드 오류:', err);
-        setSimilarError('유사한 프롬프트를 불러오는데 실패했습니다.');
-      } finally {
-        setIsLoadingSimilar(false);
-      }
-    };
-
-    loadSimilar();
-  }, [selectedPrompt]); // selectedPrompt가 바뀔 때마다 로드
-  
-  // 확대 보기 관련 상태 추가
-  const [expandViewOpen, setExpandViewOpen] = useState(false);
-  const [expandViewContent, setExpandViewContent] = useState('');
-  const [expandViewTitle, setExpandViewTitle] = useState('');
-  const [expandViewIsOriginal, setExpandViewIsOriginal] = useState(false);
-  
-  // 프롬프트 확대 보기 열기 함수 수정
-  const handleOpenExpandView = (content, title, isOriginal = false) => {
-    setExpandViewContent(content);
-    setExpandViewTitle(title);
-    setExpandViewIsOriginal(isOriginal);
-    setExpandViewOpen(true);
-  };
-  
-  // 프롬프트 확대 보기 닫기
-  const handleCloseExpandView = () => {
-    setExpandViewOpen(false);
-  };
-  
-  if (!selectedPrompt) return null;
-  
   // 변수값 업데이트
   const handleVariableChange = (name, value) => {
     setVariableValues(prev => {
@@ -580,7 +341,32 @@ const PromptDetailModal = () => {
   // 텍스트 에디터 저장
   const saveTextEditorValue = () => {
     if (editingVariable) {
-      handleVariableChange(editingVariable.name, textEditorValue);
+      // handleVariableChange 함수 인라인 정의
+      const updateVariableValue = (name, value) => {
+        setVariableValues(prev => {
+          const newValues = {
+            ...prev,
+            [name]: value
+          };
+          
+          // 즉시 프롬프트 내용 업데이트 (selectedPrompt가 있을 경우만)
+          if (selectedPrompt && selectedPrompt.content) {
+            const processed = applyVariables(selectedPrompt.content, newValues);
+            setProcessedContent(processed);
+          }
+          
+          return newValues;
+        });
+        
+        // 값이 변경되면 해당 변수의 저장 상태를 idle로 설정
+        setSavingStates(prev => ({
+          ...prev,
+          [name]: 'idle'
+        }));
+      };
+      
+      // 인라인 정의한 함수 호출
+      updateVariableValue(editingVariable.name, textEditorValue);
     }
     closeTextEditor();
   };
@@ -590,11 +376,87 @@ const PromptDetailModal = () => {
     if (!editingVariable || !selectedPrompt) return;
     
     try {
+      // handleVariableChange 함수 인라인 정의
+      const updateVariableValue = (name, value) => {
+        setVariableValues(prev => {
+          const newValues = {
+            ...prev,
+            [name]: value
+          };
+          
+          // 즉시 프롬프트 내용 업데이트
+          if (selectedPrompt && selectedPrompt.content) {
+            const processed = applyVariables(selectedPrompt.content, newValues);
+            setProcessedContent(processed);
+          }
+          
+          return newValues;
+        });
+        
+        // 값이 변경되면 해당 변수의 저장 상태를 idle로 설정
+        setSavingStates(prev => ({
+          ...prev,
+          [name]: 'idle'
+        }));
+      };
+      
       // 변수 값을 업데이트
-      handleVariableChange(editingVariable.name, textEditorValue);
+      updateVariableValue(editingVariable.name, textEditorValue);
+      
+      // handleSaveVariableDefaultValue 함수 인라인 정의
+      const saveVariableDefaultValue = async (variableName) => {
+        if (!selectedPrompt) return;
+        
+        // 저장 상태를 'saving'으로 변경
+        setSavingStates(prev => ({
+          ...prev,
+          [variableName]: 'saving'
+        }));
+        
+        try {
+          const currentValue = variableValues[variableName] || '';
+          
+          // API 호출하여 변수 기본값 업데이트
+          await handleUpdateVariableDefaultValue(
+            selectedPrompt.id,
+            variableName,
+            currentValue
+          );
+          
+          // 저장 성공 시 상태를 'saved'로 변경
+          setSavingStates(prev => ({
+            ...prev,
+            [variableName]: 'saved'
+          }));
+          
+          // 3초 후에 'idle' 상태로 되돌림
+          setTimeout(() => {
+            setSavingStates(prev => ({
+              ...prev,
+              [variableName]: 'idle'
+            }));
+          }, 3000);
+        } catch (error) {
+          console.error('변수 기본값 저장 오류:', error);
+          
+          // 저장 실패 시 상태를 'error'로 변경
+          setSavingStates(prev => ({
+            ...prev,
+            [variableName]: 'error'
+          }));
+          
+          // 3초 후에 'idle' 상태로 되돌림
+          setTimeout(() => {
+            setSavingStates(prev => ({
+              ...prev,
+              [variableName]: 'idle'
+            }));
+          }, 3000);
+        }
+      };
       
       // 저장 프로세스 시작
-      await handleSaveVariableDefaultValue(editingVariable.name);
+      await saveVariableDefaultValue(editingVariable.name);
       
       // 에디터 닫기
       closeTextEditor();
@@ -602,6 +464,278 @@ const PromptDetailModal = () => {
       console.error('텍스트 에디터에서 변수 저장 오류:', error);
     }
   };
+  
+  // 외부 클릭 감지
+  useEffect(() => {
+    const handleOutsideClick = async (event) => {
+      // 부모 모달(PromptDetailModal)의 참조가 있고 클릭된 대상이 부모 모달 내부가 아닐 때
+      if (modalRef.current && !modalRef.current.contains(event.target)) {
+        
+        // 1. 텍스트 에디터 모달 내부 클릭 확인
+        const clickedInsideTextEditor = isTextEditorOpen && textEditorRef.current && textEditorRef.current.contains(event.target);
+        if (clickedInsideTextEditor) return;
+        
+        // 2. 오버레이 모달 내부 클릭 확인 (모든 오버레이 모달 체크)
+        const overlayModalElements = document.querySelectorAll('.fixed.inset-0.bg-black.bg-opacity-50, .fixed.inset-0.bg-black.bg-opacity-60');
+        let clickedInsideOverlayModal = false;
+        
+        overlayModalElements.forEach(overlay => {
+          // 오버레이 모달이 열려있고 클릭된 대상이 오버레이 안에 있으면
+          if (overlay && overlay.contains(event.target)) {
+            clickedInsideOverlayModal = true;
+          }
+        });
+        
+        // 3. UserPromptDetailModal 내부 클릭 확인
+        const userPromptDetailModalElement = document.querySelector('[data-modal="user-prompt-detail"]');
+        const clickedInsideUserPromptModal = userPromptDetailModalElement && userPromptDetailModalElement.contains(event.target);
+        
+        // 4. PromptOverlayModal 내부 클릭 확인
+        const promptOverlayModalElement = document.querySelector('[data-modal="prompt-overlay"]');
+        const clickedInsidePromptOverlayModal = promptOverlayModalElement && promptOverlayModalElement.contains(event.target);
+        
+        // 어느 자식 모달에도 속하지 않을 때만 부모 모달 닫기
+        if (!clickedInsideTextEditor && 
+            !clickedInsideOverlayModal && 
+            !clickedInsideUserPromptModal && 
+            !clickedInsidePromptOverlayModal) {
+          
+          // 모달을 닫기 전에 메모가 저장되도록 함
+          if (memoTimerRef.current) {
+            clearTimeout(memoTimerRef.current);
+            memoTimerRef.current = null;
+          }
+          
+          // 메모에 변경 사항이 있으면 저장
+          if (selectedPrompt && memo !== selectedPrompt.memo) {
+            try {
+              await updatePromptMemo(selectedPrompt.id, memo);
+              updatePromptItem(selectedPrompt.id, { ...selectedPrompt, memo });
+            } catch (error) {
+              console.error('모달 닫기 전 메모 저장 오류:', error);
+            }
+          }
+          
+          // 모달 닫기
+          setIsDetailModalOpen(false);
+        }
+      }
+    };
+    
+    document.addEventListener('mousedown', handleOutsideClick);
+    
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [setIsDetailModalOpen, memo, selectedPrompt, updatePromptItem, isTextEditorOpen]);
+  
+  // 텍스트 에디터 외부 클릭 감지
+  useEffect(() => {
+    const handleTextEditorOutsideClick = (event) => {
+      if (isTextEditorOpen && textEditorRef.current && !textEditorRef.current.contains(event.target)) {
+        closeTextEditor();
+      }
+    };
+    
+    if (isTextEditorOpen) {
+      document.addEventListener('mousedown', handleTextEditorOutsideClick);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleTextEditorOutsideClick);
+    };
+  }, [isTextEditorOpen]);
+
+  // ESC 키 입력 감지
+  useEffect(() => {
+    const handleEscKey = async (event) => {
+      if (event.key === 'Escape') {
+        // 1. 텍스트 에디터가 열려있으면 텍스트 에디터만 닫기
+        if (isTextEditorOpen) {
+          closeTextEditor();
+          return;
+        }
+        
+        // 2. 오버레이 모달이 열려있는지 확인
+        const overlayElements = document.querySelectorAll('.fixed.inset-0.bg-black.bg-opacity-50, .fixed.inset-0.bg-black.bg-opacity-60');
+        for (const overlay of overlayElements) {
+          // 오버레이 모달이 표시되어 있고, data-modal 속성이 있으면 (자식 모달)
+          if (overlay.style.display !== 'none' && 
+              (overlay.getAttribute('data-modal') === 'prompt-overlay' || 
+               overlay.getAttribute('data-modal') === 'user-prompt-detail')) {
+            // ESC 키 이벤트 처리를 여기서 중단 (부모 모달이 닫히지 않도록)
+            event.stopPropagation();
+            return;
+          }
+        }
+        
+        // 3. 오버레이 모달이 없을 때만 부모 모달 닫기
+        // 모달을 닫기 전에 메모가 저장되도록 함
+        if (memoTimerRef.current) {
+          clearTimeout(memoTimerRef.current);
+          memoTimerRef.current = null;
+        }
+        
+        // 메모에 변경 사항이 있으면 저장
+        if (selectedPrompt && memo !== selectedPrompt.memo) {
+          try {
+            await updatePromptMemo(selectedPrompt.id, memo);
+            updatePromptItem(selectedPrompt.id, { ...selectedPrompt, memo });
+          } catch (error) {
+            console.error('모달 닫기 전 메모 저장 오류:', error);
+          }
+        }
+        
+        // 모달 닫기
+        setIsDetailModalOpen(false);
+      }
+    };
+    
+    document.addEventListener('keydown', handleEscKey);
+    
+    return () => {
+      document.removeEventListener('keydown', handleEscKey);
+    };
+  }, [setIsDetailModalOpen, isTextEditorOpen, memo, selectedPrompt, updatePromptItem]);
+  
+  // 모달 닫기 전 메모 저장 처리
+  const handleCloseModal = async () => {
+    // 메모 자동 저장 타이머가 있으면 취소
+    if (memoTimerRef.current) {
+      clearTimeout(memoTimerRef.current);
+      memoTimerRef.current = null;
+    }
+    
+    // 메모에 변경 사항이 있으면 저장
+    if (selectedPrompt && memo !== selectedPrompt.memo) {
+      try {
+        await updatePromptMemo(selectedPrompt.id, memo);
+        updatePromptItem(selectedPrompt.id, { ...selectedPrompt, memo });
+      } catch (error) {
+        console.error('모달 닫기 전 메모 저장 오류:', error);
+      }
+    }
+    
+    // 모달 닫기
+    setIsDetailModalOpen(false);
+  };
+  
+  // 선택된 프롬프트가 변경될 때 메모 값 초기화
+  useEffect(() => {
+    if (selectedPrompt) {
+      setMemo(selectedPrompt.memo || '');
+      setEditableTitle(selectedPrompt.title || ''); // editableTitle 초기화
+      setIsEditingTitle(false); // 편집 모드 해제
+    }
+  }, [selectedPrompt]);
+  
+  // 제목 편집 모드 활성화 시 input에 포커스
+  useEffect(() => {
+    if (isEditingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select(); // 텍스트 전체 선택
+    }
+  }, [isEditingTitle]);
+  
+  // 제목 클릭 핸들러
+  const handleTitleClick = () => {
+    setEditableTitle(selectedPrompt.title || ''); // 현재 제목으로 초기화
+    setIsEditingTitle(true);
+  };
+
+  // 제목 수정 완료 핸들러 (Enter 또는 Blur)
+  const handleTitleChangeComplete = async () => {
+    if (!isEditingTitle) return;
+
+    const trimmedTitle = editableTitle.trim();
+    // 제목이 변경되었고 비어있지 않으면 저장
+    if (selectedPrompt && trimmedTitle !== selectedPrompt.title && trimmedTitle !== '') {
+      try {
+        await handleUpdatePromptTitle(selectedPrompt.id, trimmedTitle);
+        // 상태 업데이트는 AppContext의 updatePromptItem에서 처리됨
+      } catch (error) { 
+        // 에러 처리 (예: 원래 제목으로 되돌리기)
+        setEditableTitle(selectedPrompt.title || '');
+      }
+    } else {
+      // 변경되지 않았거나 빈 제목이면 원래 제목으로 복구
+      setEditableTitle(selectedPrompt.title || '');
+    }
+    setIsEditingTitle(false);
+  };
+
+  // 제목 입력 변경 핸들러
+  const handleTitleInputChange = (e) => {
+    setEditableTitle(e.target.value);
+  };
+
+  // 제목 입력 KeyDown 핸들러 (Enter, Escape)
+  const handleTitleInputKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleTitleChangeComplete();
+    } else if (e.key === 'Escape') {
+      setEditableTitle(selectedPrompt.title || ''); // 원래 제목으로 복구
+      setIsEditingTitle(false);
+    }
+  };
+  
+  // 유사 프롬프트로 전환 핸들러
+  const handleSwitchToPrompt = (prompt) => {
+    switchToPrompt(prompt);
+  };
+  
+  // 유사한 프롬프트 상세 보기를 위한 오버레이 모달 핸들러
+  const handleViewSimilarPrompt = (prompt) => {
+    if (openOverlayModal) {
+      openOverlayModal(prompt);
+    }
+  };
+  
+  // 유사 프롬프트 로드 useEffect 추가
+  useEffect(() => {
+    const loadSimilar = async () => {
+      if (!selectedPrompt?.id) {
+        setSimilarPrompts([]); // 선택된 프롬프트 없으면 비우기
+        return;
+      }
+      
+      setIsLoadingSimilar(true);
+      setSimilarError(null);
+      try {
+        const data = await getSimilarPrompts(selectedPrompt.id);
+        // 자기 자신은 제외하고 최대 10개만 가져오기 (선택사항)
+        setSimilarPrompts(data.filter(p => p.id !== selectedPrompt.id).slice(0, 10)); 
+      } catch (err) {
+        console.error('유사 프롬프트 로드 오류:', err);
+        setSimilarError('유사한 프롬프트를 불러오는데 실패했습니다.');
+      } finally {
+        setIsLoadingSimilar(false);
+      }
+    };
+
+    loadSimilar();
+  }, [selectedPrompt]); // selectedPrompt가 바뀔 때마다 로드
+  
+  // 확대 보기 관련 상태 추가
+  const [expandViewOpen, setExpandViewOpen] = useState(false);
+  const [expandViewContent, setExpandViewContent] = useState('');
+  const [expandViewTitle, setExpandViewTitle] = useState('');
+  const [expandViewIsOriginal, setExpandViewIsOriginal] = useState(false);
+  
+  // 프롬프트 확대 보기 열기 함수 수정
+  const handleOpenExpandView = (content, title, isOriginal = false) => {
+    setExpandViewContent(content);
+    setExpandViewTitle(title);
+    setExpandViewIsOriginal(isOriginal);
+    setExpandViewOpen(true);
+  };
+  
+  // 프롬프트 확대 보기 닫기
+  const handleCloseExpandView = () => {
+    setExpandViewOpen(false);
+  };
+  
+  if (!selectedPrompt) return null;
   
   // 클립보드 복사
   const handleCopyToClipboard = async () => {
