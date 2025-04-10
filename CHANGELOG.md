@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.42] - 2024-04-11
+
+### Added
+- 프롬프트 상세 모달에서 위치 조정바 추가
+- 사용자 추가 탭 카드 순서 이동 기능 추가
+
+### Improved
+- 폴더 드래그앤드롭 사용성 개선
+- 사용자 추가 불러오기 폴더 누락 해결
+
 ## [v1.41] - 2024-04-09
 
 ### Fixed
