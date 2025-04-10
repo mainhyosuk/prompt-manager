@@ -171,7 +171,7 @@ const PromptDetailModal = () => {
   
   // localStorage 강제 초기화 및 패널 크기 설정
   const initializePanelSizes = useCallback(() => {
-    console.log('[Panel Init] 패널 초기화 시작');
+    // console.log('[Panel Init] 패널 초기화 시작');
     
     // 먼저 localStorage 값을 강제로 설정
     localStorage.setItem(H_PANEL_SPLIT_KEY, JSON.stringify(DEFAULT_H_PANEL_SIZES));
@@ -186,20 +186,20 @@ const PromptDetailModal = () => {
     // 약간의 지연 후 패널 준비 상태 설정
     setTimeout(() => {
       setPanelsReady(true);
-      console.log('[Panel Init] 패널 준비 완료');
+      // console.log('[Panel Init] 패널 준비 완료');
       
       // 패널 그룹이 마운트된 후에 사이즈 강제 설정
       setTimeout(() => {
         if (mainPanelGroupRef.current) {
-          console.log('[Panel Init] 메인 패널 크기 수동 설정', DEFAULT_MAIN_SIZES);
+          // console.log('[Panel Init] 메인 패널 크기 수동 설정', DEFAULT_MAIN_SIZES);
           mainPanelGroupRef.current.setLayout(DEFAULT_MAIN_SIZES);
         }
         if (vPanelGroupRef.current) {
-          console.log('[Panel Init] 세로 패널 크기 수동 설정', DEFAULT_V_PANEL_SIZES);
+          // console.log('[Panel Init] 세로 패널 크기 수동 설정', DEFAULT_V_PANEL_SIZES);
           vPanelGroupRef.current.setLayout(DEFAULT_V_PANEL_SIZES);
         }
         if (hPanelGroupRef.current) {
-          console.log('[Panel Init] 가로 패널 크기 수동 설정', DEFAULT_H_PANEL_SIZES);
+          // console.log('[Panel Init] 가로 패널 크기 수동 설정', DEFAULT_H_PANEL_SIZES);
           hPanelGroupRef.current.setLayout(DEFAULT_H_PANEL_SIZES);
         }
       }, 100);
@@ -209,7 +209,7 @@ const PromptDetailModal = () => {
   // 모달이 열릴 때 패널 초기화
   useEffect(() => {
     if (isDetailModalOpen) {
-      console.log('[Modal] 모달 열림 - 패널 초기화 시작');
+      // console.log('[Modal] 모달 열림 - 패널 초기화 시작');
       setPanelsReady(false);
       initializePanelSizes();
     }
