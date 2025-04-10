@@ -108,6 +108,15 @@ const VersionDetailModal = ({ isOpen, onClose, prompt }) => {
   useEffect(() => {
     const handleEscKey = (event) => {
       if (isOpen && event.key === 'Escape') {
+        // 이벤트 전파 방지
+        event.preventDefault();
+        event.stopPropagation();
+        
+        // nativeEvent가 존재하는 경우에만 stopImmediatePropagation 호출
+        if (event.nativeEvent) {
+          event.nativeEvent.stopImmediatePropagation();
+        }
+        
         if (isTextEditorOpen) {
           closeTextEditor();
         } else {

@@ -205,7 +205,9 @@ const PromptOverlayModal = ({ isOpen, onClose, prompt }) => {
         // 이벤트를 여기서 중지해서 외부로 전파되지 않도록 함
         event.preventDefault();
         event.stopPropagation();
-        event.nativeEvent.stopImmediatePropagation();
+        if (event.nativeEvent) {
+          event.nativeEvent.stopImmediatePropagation();
+        }
         
         // 모달을 닫기 전에 메모가 저장되도록 함
         if (memoTimerRef.current) {

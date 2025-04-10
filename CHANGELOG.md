@@ -2,12 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.443] - 2025-04-10
+
+### Improved
+- 오버레이 모달 종료 방식 개선
+
 ## [v1.442] - 2025-04-10
 
 ### Added
 - 프롬프트 편집창에서 상하 조절 도구 추가
-
-## [v1.441] - 2025-04-10
 
 ### Fixed
 - 부모 프롬프트 모달 바깥쪽 클릭시 종료되지 않는 문제 해결

@@ -52,14 +52,21 @@ const PromptExpandView = ({
     
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
+        // 이벤트 전파 방지
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.nativeEvent) {
+          e.nativeEvent.stopImmediatePropagation();
+        }
         onClose();
       }
     };
     
-    document.addEventListener('keydown', handleKeyDown);
+    // 캡처링 단계에서 이벤트 처리 (true 옵션)
+    document.addEventListener('keydown', handleKeyDown, true);
     
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keydown', handleKeyDown, true);
     };
   }, [isOpen, onClose]);
 
