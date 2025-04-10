@@ -6,6 +6,7 @@ import { applyVariables, extractVariables, splitContentByVariables } from '../ut
 import { copyToClipboard } from '../utils/clipboard';
 import { Maximize2 } from 'lucide-react';
 import PromptExpandView from '../components/common/PromptExpandView';
+import { updatePromptMemo } from '../api/promptApi';
 
 // 변수가 적용된 내용을 하이라이트하는 컴포넌트
 const HighlightedContent = ({ content, variableValues }) => {
@@ -56,7 +57,8 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
     handleToggleFavorite,
     handleEditPrompt,
     handleRecordUsage,
-    handleUpdateUserAddedPrompt
+    handleUpdateUserAddedPrompt,
+    updatePromptItem
   } = useAppContext();
   
   const [variableValues, setVariableValues] = useState({});
@@ -77,9 +79,18 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
   const [expandViewContent, setExpandViewContent] = useState('');
   const [expandViewTitle, setExpandViewTitle] = useState('');
 
+  // 메모 관련 상태 추가
+  const [memo, setMemo] = useState('');
+  const [savingMemo, setSavingMemo] = useState(false);
+  const memoTimerRef = useRef(null);
+  const autoSaveDelay = 1000; // 1초 후 자동 저장
+
   // 모달 열릴 때 savingStates 초기화 추가
   useEffect(() => {
     if (isOpen && prompt) {
+      // 메모 설정
+      setMemo(prompt.memo || '');
+      
       if (prompt.variables && Array.isArray(prompt.variables) && prompt.variables.length > 0) {
         const initialValues = {};
         const initialSavingStates = {};
@@ -102,30 +113,57 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
       setVariableValues({});
       setSavingStates({});
       setIsExpandViewOpen(false); // 모달 닫힐 때도 초기화
+      setMemo(''); // 모달 닫힐 때 메모 초기화
     }
   }, [isOpen, prompt]);
 
   // ESC 키 입력 감지 (텍스트 에디터 닫기 로직 추가)
   useEffect(() => {
-    const handleEscKey = (event) => {
+    const handleEscKey = async (event) => {
       if (isOpen && event.key === 'Escape') {
+        // 이벤트 전파 방지
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.nativeEvent) {
+          event.nativeEvent.stopImmediatePropagation();
+        }
+        
+        // 우선순위 처리: 확대 뷰 > 텍스트 에디터 > 모달
         if (isExpandViewOpen) {
           handleCloseExpandView(); // 확대 보기 먼저 닫기
+          return;
         } else if (isTextEditorOpen) {
           closeTextEditor();
+          return;
         } else {
+          // 모달 닫기 전에 메모가 저장되도록 함
+          if (memoTimerRef.current) {
+            clearTimeout(memoTimerRef.current);
+            memoTimerRef.current = null;
+          }
+          
+          // 메모에 변경 사항이 있으면 저장
+          if (prompt && memo !== prompt.memo) {
+            try {
+              await updatePromptMemo(prompt.id, memo);
+              updatePromptItem(prompt.id, { ...prompt, memo });
+            } catch (error) {
+              console.error('모달 닫기 전 메모 저장 오류:', error);
+            }
+          }
+          
           onClose(); // 기본 모달 닫기
         }
       }
     };
     if (isOpen) {
-      document.addEventListener('keydown', handleEscKey);
+      document.addEventListener('keydown', handleEscKey, true);
     }
     
     return () => {
-      document.removeEventListener('keydown', handleEscKey);
+      document.removeEventListener('keydown', handleEscKey, true);
     };
-  }, [isOpen, onClose, isTextEditorOpen, isExpandViewOpen]);
+  }, [isOpen, onClose, isTextEditorOpen, isExpandViewOpen, memo, prompt, updatePromptItem]);
 
   // 텍스트 에디터 외부 클릭 감지 추가
   useEffect(() => {
@@ -143,6 +181,42 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
       document.removeEventListener('mousedown', handleTextEditorOutsideClick);
     };
   }, [isTextEditorOpen]);
+
+  // 외부 클릭 감지 추가
+  useEffect(() => {
+    const handleOutsideClick = async (event) => {
+      if (isOpen && !isTextEditorOpen && modalRef.current && !modalRef.current.contains(event.target)) {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        // 모달을 닫기 전에 메모가 저장되도록 함
+        if (memoTimerRef.current) {
+          clearTimeout(memoTimerRef.current);
+          memoTimerRef.current = null;
+        }
+        
+        // 메모에 변경 사항이 있으면 저장
+        if (prompt && memo !== prompt.memo) {
+          try {
+            await updatePromptMemo(prompt.id, memo);
+            updatePromptItem(prompt.id, { ...prompt, memo });
+          } catch (error) {
+            console.error('모달 닫기 전 메모 저장 오류:', error);
+          }
+        }
+        
+        onClose();
+      }
+    };
+    
+    if (isOpen) {
+      document.addEventListener('mousedown', handleOutsideClick, true);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick, true);
+    };
+  }, [isOpen, isTextEditorOpen, onClose, memo, prompt, updatePromptItem]);
 
   // 클립보드 복사 핸들러
   const handleCopyToClipboard = async () => {
@@ -290,6 +364,40 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
 
   // 변수 적용된 내용 계산 (확대 보기 전달용)
   const processedContent = hasVariables ? applyVariables(prompt.content, variableValues) : prompt.content;
+
+  // 메모 변경 핸들러
+  const handleMemoChange = (e) => {
+    setMemo(e.target.value);
+    
+    // 이전 타이머가 있으면 취소
+    if (memoTimerRef.current) {
+      clearTimeout(memoTimerRef.current);
+    }
+    
+    // 새 타이머 설정
+    memoTimerRef.current = setTimeout(() => {
+      autoSaveMemo(e.target.value);
+    }, autoSaveDelay);
+  };
+  
+  // 메모 자동 저장
+  const autoSaveMemo = async (memoText) => {
+    if (!prompt) return;
+    
+    // 변경사항이 없으면 저장하지 않음
+    if (memoText === prompt.memo) return;
+    
+    setSavingMemo(true);
+    
+    try {
+      await updatePromptMemo(prompt.id, memoText);
+      updatePromptItem(prompt.id, { ...prompt, memo: memoText });
+    } catch (error) {
+      console.error('메모 저장 오류:', error);
+    } finally {
+      setSavingMemo(false);
+    }
+  };
 
   // 확대 보기 핸들러 추가
   const handleOpenExpandView = (content, title) => {
@@ -472,10 +580,27 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
             </div>
             
             <div className="border rounded-lg p-3">
-              <h3 className="text-sm font-medium text-gray-700 mb-2">메모</h3>
-              <div className="border rounded-md p-2 bg-gray-50 text-xs whitespace-pre-wrap h-32 overflow-y-auto">
-                {prompt.memo || '이 프롬프트에 대한 메모가 없습니다.'}
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-gray-700">메모</h3>
+                {savingMemo && (
+                  <span className="text-xs text-blue-500">저장 중...</span>
+                )}
               </div>
+              <textarea
+                value={memo}
+                onChange={handleMemoChange}
+                onBlur={(e) => {
+                  e.stopPropagation();
+                  if (memoTimerRef.current) {
+                    clearTimeout(memoTimerRef.current);
+                    memoTimerRef.current = null;
+                  }
+                  autoSaveMemo(memo);
+                }}
+                className="w-full h-32 p-2 border rounded-md bg-gray-50 hover:bg-white focus:bg-white text-xs resize-y focus:outline-none focus:ring-1 focus:ring-blue-500"
+                placeholder="이 프롬프트에 대한 메모를 입력하세요..."
+                disabled={savingMemo}
+              />
             </div>
             
             <div className="border rounded-lg p-3">

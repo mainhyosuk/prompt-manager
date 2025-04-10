@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.445] - 2025-04-10
+
+### Added
+- 사용자 추가 탭에서 메모 작성 기능 추가
+  - 메모 입력 및 편집 UI 구현
+  - 자동 저장 기능 추가
+  - 저장 상태 표시 개선
+
 ## [v1.444] - 2025-04-10
 
 ### Added
