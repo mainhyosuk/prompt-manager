@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.444] - 2025-04-10
+
+### Added
+- 프롬프트 내용 확대 보기 기능 확장
+  - 유사한 프롬프트 섹션에 확대 보기 기능 추가
+  - 버전 관리 탭에 확대 보기 기능 추가
+  - 사용자 추가 탭에 확대 보기 기능 추가
+
 ## [v1.443] - 2025-04-10
 
 ### Improved
