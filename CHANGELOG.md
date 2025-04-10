@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.44] - 2025-04-10
+
+### Fixed
+- 최근 사용 탭, 유사한 프롬프트 섹션에서 프롬프트 상세 내용 오버레이 모달 내부 클릭시 부모 프롬프트 모달 종료되는 오류 해결
+
 ## [v1.43] - 2025-04-10
 
 ### Added
