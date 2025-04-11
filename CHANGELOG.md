@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.4471] - 2025-04-11
+
+### Fixed
+- 프롬프트 사용 기록 API 경로 오류 수정
+  - 클립보드에 복사 기능 사용 시 사용 기록이 업데이트되지 않는 문제 해결
+  - 클라이언트에서 잘못된 API 경로 호출 수정 (/record-usage → /use)
+
 ## [v1.447] - 2025-04-10
 
 ### Added

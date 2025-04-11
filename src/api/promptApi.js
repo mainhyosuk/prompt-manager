@@ -111,7 +111,7 @@ export const toggleFavorite = async (id) => {
 // 프롬프트 사용 기록
 export const recordPromptUsage = async (id) => {
   try {
-    const response = await fetch(`${BASE_URL}/prompts/${id}/record-usage`, {
+    const response = await fetch(`${BASE_URL}/prompts/${id}/use`, {
       ...API_FETCH_OPTIONS,
       method: 'POST',
     });
