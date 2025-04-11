@@ -68,6 +68,7 @@ export const AppProvider = ({ children }) => {
   const [prompts, setPrompts] = useState(initialState.prompts);
   const [folders, setFolders] = useState(initialState.folders);
   const [tags, setTags] = useState(initialState.tags);
+  const [userAddedPrompts, setUserAddedPrompts] = useState([]);
   
   // 누락된 상태 선언 추가
   const [favoritePrompts, setFavoritePrompts] = useState([]);
@@ -147,16 +148,16 @@ export const AppProvider = ({ children }) => {
         allUserAddedPrompts = allUserAddedPrompts.concat(markedPrompts);
       }
 
-      // 3. 서버 데이터와 로컬 데이터 병합 (ID 기준, 서버 데이터 우선)
+      // 사용자 추가 프롬프트를 별도의 상태로 관리
+      setUserAddedPrompts(allUserAddedPrompts);
+
+      // 3. 서버 데이터만 prompts 상태에 설정 (사용자 추가 프롬프트 제외)
       const combinedPromptsMap = new Map();
       // 서버 프롬프트 추가 (is_user_added: false 명시적 추가)
       serverPrompts.forEach(p => combinedPromptsMap.set(p.id, { ...p, is_user_added: false }));
-      // 로컬 프롬프트 추가 (서버 목록에 없는 경우만)
-      allUserAddedPrompts.forEach(p => {
-        if (!combinedPromptsMap.has(p.id)) {
-          combinedPromptsMap.set(p.id, p); // is_user_added는 이미 true로 설정됨
-        }
-      });
+      
+      // 사용자 추가 프롬프트는 더 이상 combinedPrompts에 포함하지 않음
+      
       const combinedPrompts = Array.from(combinedPromptsMap.values());
 
       setPrompts(combinedPrompts); // 통합된 상태 업데이트
@@ -615,7 +616,7 @@ export const AppProvider = ({ children }) => {
     setCurrentScreen('main');
   }, []);
 
-  // 프롬프트 아이템 업데이트 함수 (내부 상태 업데이트용) - userPrompts 업데이트 제거
+  // 프롬프트 아이템 업데이트 함수 (내부 상태 업데이트용)
   const updatePromptItem = useCallback((promptId, updatedData) => {
     const updateItem = (items) => items.map(item => {
       if (item.id === promptId) {
@@ -631,6 +632,7 @@ export const AppProvider = ({ children }) => {
     });
 
     setPrompts(prev => updateItem(prev));
+    setUserAddedPrompts(prev => updateItem(prev)); // userAddedPrompts 상태 업데이트 추가
     setFavoritePrompts(prev => updateItem(prev)); // 즐겨찾기 목록도 업데이트 (필요시 is_user_added 확인 로직 추가)
     setSearchResults(prev => updateItem(prev)); // 검색 결과도 업데이트
 
@@ -694,21 +696,26 @@ export const AppProvider = ({ children }) => {
         return;
     }
 
-    // 통합된 prompts 상태에서 최신 데이터 찾기
-    const latestPrompt = prompts.find(p => p.id === promptToOpen.id);
-
-    if (!latestPrompt) {
-      // 통합 상태에서도 못 찾으면 오류
-      // 이 경우는 거의 없어야 하지만, 디버깅을 위해 로그 남김
-      console.error('[AppContext] 프롬프트를 통합 목록에서 찾을 수 없습니다:', promptToOpen.id);
-      // 혹시 모르니 전달된 객체로 시도
-      // setUserPrompt 또는 setOverlayPrompt 직접 호출?
-      // --> 안전하게 여기서 중단하는 것이 나을 수 있음
-      return;
+    // 먼저 사용자 추가 프롬프트 상태에서 찾기
+    let latestPrompt = null;
+    const isUserAddedPromptId = typeof promptToOpen.id === 'string' && promptToOpen.id.startsWith('user-added-');
+    
+    if (isUserAddedPromptId) {
+      // 사용자 추가 프롬프트 목록에서 찾기
+      latestPrompt = userAddedPrompts.find(p => p.id === promptToOpen.id);
+    } else {
+      // 일반 프롬프트 목록에서 찾기
+      latestPrompt = prompts.find(p => p.id === promptToOpen.id);
     }
 
-    // 사용자 추가 프롬프트인지 확인 (is_user_added 플래그 사용)
-    if (latestPrompt.is_user_added) {
+    if (!latestPrompt) {
+      // 양쪽 모두에서 찾을 수 없는 경우, 전달된 객체 사용
+      console.warn('[AppContext] 프롬프트를 목록에서 찾을 수 없습니다. 전달된 객체 사용:', promptToOpen.id);
+      latestPrompt = promptToOpen; // 전달된 객체 그대로 사용
+    }
+
+    // 사용자 추가 프롬프트인지 확인 (id 기준 또는 is_user_added 플래그 사용)
+    if (isUserAddedPromptId || latestPrompt.is_user_added) {
       // 사용자 추가 프롬프트 모달 상태 설정
       setUserPrompt(latestPrompt);
       setTimeout(() => setIsUserPromptModalOpen(true), 10);
@@ -717,7 +724,7 @@ export const AppProvider = ({ children }) => {
       setOverlayPrompt(latestPrompt);
       setTimeout(() => setIsOverlayModalOpen(true), 10);
     }
-  }, [prompts]); // 의존성 배열에 prompts 추가
+  }, [prompts, userAddedPrompts]); // 의존성 배열에 prompts와 userAddedPrompts 추가
 
   // 폴더 생성 모달 상태 초기화 함수
   const resetFolderModalState = useCallback(() => {
@@ -791,6 +798,7 @@ export const AppProvider = ({ children }) => {
     userPrompt,
     userPromptUpdateTimestamp,
     previousPrompt,
+    userAddedPrompts,
     
     // 데이터 접근 함수
     getFilteredPrompts,
