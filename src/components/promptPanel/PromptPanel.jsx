@@ -478,8 +478,11 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
       // API를 통해 새 프롬프트 생성 및 저장
       const createdPrompt = await createUserAddedPrompt(newPromptData);
       
-      // 응답 받은 프롬프트를 목록에 추가
+      // 응답 받은 프롬프트를 로컬 목록에 추가
       setUserPrompts(prev => [createdPrompt, ...prev]);
+      
+      // 로컬 스토리지 업데이트 후 컨텍스트의 loadData 호출하여 전역 상태 업데이트
+      loadData();
       
       // 입력 필드 초기화
       setNewPromptTitle('');
@@ -503,8 +506,11 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
         // API를 통해 프롬프트 삭제
         await deleteUserAddedPrompt(prompt.id);
         
-        // 로컬 프롬프트 목록에서 해당 프롬프트 제거
+        // 프롬프트 목록에서 해당 프롬프트 제거
         setUserPrompts(prev => prev.filter(p => p.id !== prompt.id));
+        
+        // 로컬 스토리지 업데이트 후 컨텍스트의 loadData 호출하여 전역 상태 업데이트
+        loadData();
         
         // 편집 모달이 열려있고, 삭제한 프롬프트와 같은 프롬프트이면 모달 닫기
         if (isEditModalOpen && editingPrompt && editingPrompt.id === prompt.id) {
@@ -533,11 +539,15 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
           prompt.id === updatedData.id ? updatedData : prompt
         )
       );
+      
+      // 로컬 스토리지 업데이트 후 컨텍스트의 loadData 호출하여 전역 상태 업데이트
+      loadData();
+      
     } catch (error) {
       console.error('프롬프트 업데이트 오류:', error);
       alert('프롬프트 업데이트에 실패했습니다.');
     }
-  }, []);
+  }, [loadData]);
   
   // 프롬프트 편집 핸들러
   const handlePromptEdit = useCallback((prompt, e) => {
@@ -589,9 +599,12 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
       };
 
       // 2. createUserAddedPrompt API 호출하여 저장
-      await createUserAddedPrompt(newPromptData);
+      const createdPrompt = await createUserAddedPrompt(newPromptData);
+      
+      // 3. 로컬 스토리지 업데이트 후 컨텍스트의 loadData 호출하여 전역 상태 업데이트
+      loadData();
 
-      // 3. 타임스탬프 업데이트하여 목록 새로고침
+      // 4. 타임스탬프 업데이트하여 목록 새로고침
       setUserPromptUpdateTimestamp(Date.now());
 
       setIsImportModalOpen(false); // 모달 닫기
