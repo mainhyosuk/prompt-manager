@@ -880,7 +880,11 @@ const PromptDetailModal = () => {
                                 <h3 className="font-medium text-gray-800">원본 프롬프트</h3>
                               </div>
                               <div className="flex-1 bg-gray-50 p-2 rounded-lg border text-base whitespace-pre-wrap overflow-y-auto relative">
-                                {selectedPrompt.content}
+                                {/* 원본 변수 하이라이트 */}
+                                <HighlightedContent 
+                                  content={selectedPrompt.content}
+                                  variableValues={{}} // 빈 객체 전달하여 변수값은 적용하지 않고 원본 텍스트만 유지
+                                />
                                 
                                 {/* 확대 보기 버튼 */}
                                 <button
@@ -1173,10 +1177,10 @@ const PromptDetailModal = () => {
           highlightedContent={
             <HighlightedContent
               content={selectedPrompt?.content}
-              variableValues={variableValues}
+              variableValues={expandViewIsOriginal ? {} : variableValues}
             />
           }
-          useHighlightedContent={!expandViewIsOriginal}
+          useHighlightedContent={true}
         />
 
         {/* MemoExpandModal 추가 */} 
