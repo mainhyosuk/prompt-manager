@@ -6,8 +6,8 @@ import { applyVariables, extractVariables, splitContentByVariables } from '../ut
 import { copyToClipboard } from '../utils/clipboard';
 import { Maximize2 } from 'lucide-react';
 import PromptExpandView from '../components/common/PromptExpandView';
-import { updatePromptMemo } from '../api/promptApi';
 import MemoExpandModal from '../components/common/MemoExpandModal';
+import { updateUserAddedPrompt } from '../api/userPromptApi';
 
 // 변수가 적용된 내용을 하이라이트하는 컴포넌트
 const HighlightedContent = ({ content, variableValues }) => {
@@ -58,7 +58,6 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
     handleToggleFavorite,
     handleEditPrompt,
     handleRecordUsage,
-    handleUpdateUserAddedPrompt,
     updatePromptItem
   } = useAppContext();
   
@@ -147,7 +146,7 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
           // 메모에 변경 사항이 있으면 저장
           if (prompt && memo !== prompt.memo) {
             try {
-              await updatePromptMemo(prompt.id, memo);
+              await updateUserAddedPrompt(prompt.id, { memo: memo });
               updatePromptItem(prompt.id, { ...prompt, memo });
             } catch (error) {
               console.error('모달 닫기 전 메모 저장 오류:', error);
@@ -200,7 +199,7 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
         // 메모에 변경 사항이 있으면 저장
         if (prompt && memo !== prompt.memo) {
           try {
-            await updatePromptMemo(prompt.id, memo);
+            await updateUserAddedPrompt(prompt.id, { memo: memo });
             updatePromptItem(prompt.id, { ...prompt, memo });
           } catch (error) {
             console.error('모달 닫기 전 메모 저장 오류:', error);
@@ -267,50 +266,58 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
   };
   
   // 변수 값 저장 핸들러 (사용자 추가 프롬프트용)
-  const handleSaveVariableValue = async (variableName) => {
-    if (!prompt?.id || !variableName) return;
+  const handleSaveVariableValue = useCallback(async (variableName) => {
+    if (!prompt?.id || !variableName || !prompt.variables) {
+      console.error('저장에 필요한 정보 부족');
+      return;
+    }
 
-    setSavingStates(prev => ({ ...prev, [variableName]: 'saving' }));
+    const variableIndex = prompt.variables.findIndex(v => v.name === variableName);
+    if (variableIndex === -1) {
+      console.error(`변수 '${variableName}'을 찾을 수 없습니다.`);
+      return;
+    }
 
-    try {
-      // 현재 프롬프트 데이터 복사
-      const updatedPromptData = { ...prompt };
-      
-      // 변수 배열 업데이트 시도
-      if (!updatedPromptData.variables) {
-        updatedPromptData.variables = [];
+    const newValue = variableValues[variableName] || '';
+
+    // 변경된 경우에만 업데이트
+    if (newValue !== prompt.variables[variableIndex].default_value) {
+      setSavingStates(prev => ({ ...prev, [variableName]: 'saving' }));
+      try {
+        // 1. 업데이트된 변수 배열 생성
+        const updatedVariables = prompt.variables.map((v, index) => {
+          if (index === variableIndex) {
+            return { ...v, default_value: newValue };
+          }
+          return v;
+        });
+
+        // 2. API 호출하여 로컬 스토리지 업데이트 (userPromptApi 사용)
+        await updateUserAddedPrompt(prompt.id, { variables: updatedVariables });
+
+        // 3. AppContext 상태 업데이트
+        updatePromptItem(prompt.id, { variables: updatedVariables });
+
+        setSavingStates(prev => ({ ...prev, [variableName]: 'saved' }));
+        setTimeout(() => {
+          setSavingStates(prev => ({ ...prev, [variableName]: 'idle' }));
+        }, 2000);
+
+      } catch (error) {
+        console.error('사용자 추가 프롬프트 변수 값 저장 오류:', error);
+        setSavingStates(prev => ({ ...prev, [variableName]: 'error' }));
+        setTimeout(() => {
+          setSavingStates(prev => ({ ...prev, [variableName]: 'idle' }));
+        }, 3000);
       }
-      
-      const variableIndex = updatedPromptData.variables.findIndex(v => v.name === variableName);
-      const currentValue = variableValues[variableName] || '';
-
-      if (variableIndex > -1) {
-        // 기존 변수 업데이트 (default_value 대신 현재 값을 저장하는 개념)
-        updatedPromptData.variables[variableIndex] = {
-           ...updatedPromptData.variables[variableIndex],
-           default_value: currentValue // default_value 필드를 업데이트 
-        };
-      } else {
-        // 새 변수 추가 (실제로는 이 경우는 거의 없음)
-        updatedPromptData.variables.push({ name: variableName, default_value: currentValue });
-      }
-
-      // API 호출하여 업데이트
-      await handleUpdateUserAddedPrompt(prompt.id, { variables: updatedPromptData.variables });
-
+    } else {
+      // 이미 기본값과 동일함
       setSavingStates(prev => ({ ...prev, [variableName]: 'saved' }));
       setTimeout(() => {
         setSavingStates(prev => ({ ...prev, [variableName]: 'idle' }));
-      }, 3000);
-
-    } catch (error) {
-      console.error('사용자 추가 프롬프트 변수 값 저장 오류:', error);
-      setSavingStates(prev => ({ ...prev, [variableName]: 'error' }));
-      setTimeout(() => {
-        setSavingStates(prev => ({ ...prev, [variableName]: 'idle' }));
-      }, 3000);
+      }, 1500);
     }
-  };
+  }, [prompt, variableValues, updatePromptItem]);
 
   // 텍스트 에디터 관련 함수 추가
   const openTextEditor = (variable) => {
@@ -332,15 +339,18 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
     closeTextEditor();
   };
   
-  // 텍스트 에디터에서 값 저장 버튼 핸들러
+  // 텍스트 에디터에서 값 저장 버튼 핸들러 (내부에서 handleSaveVariableValue 호출)
   const saveTextEditorValueAndStore = async () => {
     if (!editingVariable || !prompt) return;
     try {
+      // 1. 현재 변수 값 업데이트 (로컬 state)
       handleVariableChange(editingVariable.name, textEditorValue);
+      // 2. 업데이트된 값을 기본값으로 저장 (위에서 수정한 핸들러 호출)
       await handleSaveVariableValue(editingVariable.name);
       closeTextEditor();
     } catch (error) {
       console.error('텍스트 에디터에서 변수 저장 오류:', error);
+      // 오류 처리는 handleSaveVariableValue 내부에서 이미 수행됨
     }
   };
   
@@ -382,18 +392,16 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
     }, autoSaveDelay);
   };
   
-  // 메모 자동 저장
+  // 메모 자동 저장 (updatePromptMemo 직접 사용)
   const autoSaveMemo = async (memoText) => {
     if (!prompt) return;
-    
-    // 변경사항이 없으면 저장하지 않음
     if (memoText === prompt.memo) return;
-    
     setSavingMemo(true);
-    
     try {
-      await updatePromptMemo(prompt.id, memoText);
-      updatePromptItem(prompt.id, { ...prompt, memo: memoText });
+      // API 직접 호출
+      await updateUserAddedPrompt(prompt.id, { memo: memoText });
+      // AppContext 상태 업데이트
+      updatePromptItem(prompt.id, { memo: memoText });
     } catch (error) {
       console.error('메모 저장 오류:', error);
     } finally {
