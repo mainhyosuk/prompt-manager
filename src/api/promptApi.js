@@ -1,5 +1,7 @@
 // src/api/promptApi.js
 
+import { updateUserAddedPrompt } from './userPromptApi'; // 사용자 추가 프롬프트 업데이트 함수 임포트
+
 // API 요청 기본 옵션 (필요시 환경변수 등으로 관리)
 const API_FETCH_OPTIONS = {
   headers: {
@@ -10,6 +12,8 @@ const API_FETCH_OPTIONS = {
 };
 
 const BASE_URL = '/api'; // API 기본 경로
+
+const USER_PROMPTS_STORAGE_KEY = 'user_added_prompts';
 
 // 모든 프롬프트 가져오기
 export const getPrompts = async () => {
@@ -164,21 +168,36 @@ export const updateVariableDefaultValue = async (promptId, variableName, default
   }
 };
 
-// 프롬프트 메모 업데이트 (PUT /api/prompts/{id}/memo 사용)
+// 프롬프트 메모 업데이트 (서버 API 또는 로컬 스토리지 업데이트)
 export const updatePromptMemo = async (promptId, memo) => {
-  try {
-    const response = await fetch(`${BASE_URL}/prompts/${promptId}/memo`, {
-      ...API_FETCH_OPTIONS,
-      method: 'PUT',
-      body: JSON.stringify({ memo }),
-    });
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || '프롬프트 메모 업데이트에 실패했습니다.');
+  // 사용자 추가 프롬프트 ID 형식인지 확인 ('user-added-' 접두사)
+  if (typeof promptId === 'string' && promptId.startsWith('user-added-')) {
+    // 사용자 추가 프롬프트는 userPromptApi의 업데이트 함수 호출
+    try {
+      // updateUserAddedPrompt는 전체 프롬프트 객체를 반환하므로 memo만 업데이트
+      // userPromptApi.js의 updateUserAddedPrompt 함수는 업데이트할 데이터만 전달받음
+      const updatedPrompt = await updateUserAddedPrompt(promptId, { memo });
+      return updatedPrompt; // 업데이트된 전체 프롬프트 객체 반환
+    } catch (error) {
+      console.error('로컬 프롬프트 메모 업데이트 오류 (userPromptApi):', error);
+      throw error; // 오류를 다시 던져서 호출 측에서 처리하도록 함
     }
-    return await response.json(); // 업데이트된 프롬프트 정보 반환 기대
-  } catch (error) {
-    console.error('프롬프트 메모 업데이트 오류:', error);
-    throw error;
+  } else {
+    // 일반 프롬프트는 기존 API 호출
+    try {
+      const response = await fetch(`${BASE_URL}/prompts/${promptId}/memo`, {
+        ...API_FETCH_OPTIONS,
+        method: 'PUT',
+        body: JSON.stringify({ memo }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || '프롬프트 메모 업데이트에 실패했습니다.');
+      }
+      return await response.json(); // 업데이트된 프롬프트 정보 반환 기대
+    } catch (error) {
+      console.error('프롬프트 메모 업데이트 오류:', error);
+      throw error;
+    }
   }
 }; 

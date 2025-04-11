@@ -4,7 +4,7 @@
 const USER_PROMPTS_STORAGE_KEY = 'user_added_prompts';
 
 // 사용자 추가 프롬프트 데이터를 로컬 스토리지에서 가져오는 헬퍼 함수
-const getUserPromptsFromStorage = () => {
+export const getUserPromptsFromStorage = () => {
   try {
     const data = localStorage.getItem(USER_PROMPTS_STORAGE_KEY);
     return data ? JSON.parse(data) : {};
@@ -86,7 +86,7 @@ export const createUserAddedPrompt = async (promptData) => {
           }
         }
       } catch (err) {
-        console.warn('부모 프롬프트 제목 가져오기 실패:', err);
+        // console.warn('부모 프롬프트 제목 가져오기 실패:', err); // 제거
       }
     }
     
@@ -146,7 +146,7 @@ export const createUserAddedPrompt = async (promptData) => {
       // 로컬 스토리지에 저장
       saveUserPromptsToStorage(userPrompts);
     } else {
-      console.warn('중복된 프롬프트 생성 시도가 감지되어 무시되었습니다.');
+      // console.warn('중복된 프롬프트 생성 시도가 감지되어 무시되었습니다.'); // 제거
     }
     
     // 인위적인 지연을 줘서 비동기 호출을 시뮬레이션

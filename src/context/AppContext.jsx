@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { getPrompts, createPrompt, updatePrompt, deletePrompt, toggleFavorite, recordPromptUsage, duplicatePrompt, updateVariableDefaultValue, updatePromptMemo } from '../api/promptApi';
 import { getFolders, createFolder as createFolderApi } from '../api/folderApi';
 import { getTags } from '../api/tagApi';
-import { updateUserAddedPrompt as updateUserAddedPromptApi } from '../api/userPromptApi';
+import { getUserPromptsFromStorage, deleteUserAddedPrompt as deleteUserAddedPromptApi } from '../api/userPromptApi';
 import PromptOverlayModal from '../modals/PromptOverlayModal';
 import UserPromptDetailModal from '../modals/UserPromptDetailModal';
 
@@ -72,7 +72,6 @@ export const AppProvider = ({ children }) => {
   // 누락된 상태 선언 추가
   const [favoritePrompts, setFavoritePrompts] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
-  const [userPrompts, setUserPrompts] = useState([]); // 사용자 추가 프롬프트 *목록* 상태
 
   const [selectedPrompt, setSelectedPrompt] = useState(initialState.selectedPrompt);
   const [overlayPrompt, setOverlayPrompt] = useState(initialState.overlayPrompt);
@@ -124,19 +123,43 @@ export const AppProvider = ({ children }) => {
     }
   }, [changeTheme]);
 
-  // 데이터 로드 함수
+  // 데이터 로드 함수 수정 (서버 + 로컬 스토리지 통합)
   const loadData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      const [promptsData, foldersData, tagsData] = await Promise.all([
+      // 1. 서버 데이터 로드
+      const [serverPrompts, foldersData, tagsData] = await Promise.all([
         getPrompts(),
         getFolders(),
         getTags()
       ]);
-      
-      setPrompts(promptsData);
+
+      // 2. 로컬 스토리지 데이터 로드 (userPromptApi 헬퍼 사용)
+      const userAddedPromptsData = getUserPromptsFromStorage(); // { parentId: [prompts...] } 형태
+      let allUserAddedPrompts = [];
+      for (const parentId in userAddedPromptsData) {
+        // 각 사용자 추가 프롬프트에 is_user_added 플래그 추가 및 유효성 검사
+        const markedPrompts = userAddedPromptsData[parentId]
+          .filter(p => p && p.id) // 유효한 프롬프트 객체만 필터링
+          .map(p => ({ ...p, is_user_added: true }));
+        allUserAddedPrompts = allUserAddedPrompts.concat(markedPrompts);
+      }
+
+      // 3. 서버 데이터와 로컬 데이터 병합 (ID 기준, 서버 데이터 우선)
+      const combinedPromptsMap = new Map();
+      // 서버 프롬프트 추가 (is_user_added: false 명시적 추가)
+      serverPrompts.forEach(p => combinedPromptsMap.set(p.id, { ...p, is_user_added: false }));
+      // 로컬 프롬프트 추가 (서버 목록에 없는 경우만)
+      allUserAddedPrompts.forEach(p => {
+        if (!combinedPromptsMap.has(p.id)) {
+          combinedPromptsMap.set(p.id, p); // is_user_added는 이미 true로 설정됨
+        }
+      });
+      const combinedPrompts = Array.from(combinedPromptsMap.values());
+
+      setPrompts(combinedPrompts); // 통합된 상태 업데이트
       setFolders(foldersData);
       setTags(tagsData);
     } catch (err) {
@@ -433,33 +456,86 @@ export const AppProvider = ({ children }) => {
     }
   }, [editMode, selectedPrompt, loadData]);
 
-  // 프롬프트 삭제 핸들러
+  // 오버레이 모달 닫기
+  const closeOverlayModal = useCallback(() => {
+    // 현재 로직에서는 모달을 닫을 때
+    // AddEditModal과 DetailModal이 같이 닫히는 문제가 없도록 처리
+
+    // 우선 모달 상태부터 변경
+    setIsOverlayModalOpen(false);
+
+    // 모달이 닫힌 후 데이터 초기화 (애니메이션 완료 후)
+    setTimeout(() => {
+      setOverlayPrompt(null);
+    }, 300);
+  }, []);
+
+  // 사용자 추가 프롬프트 모달 닫기
+  const closeUserPromptModal = useCallback(() => {
+    // 우선 모달 상태부터 변경
+    setIsUserPromptModalOpen(false);
+
+    // 모달이 닫힌 후 데이터 초기화 (애니메이션 완료 후)
+    setTimeout(() => {
+      setUserPrompt(null);
+    }, 300);
+  }, []);
+
+  // 프롬프트 삭제 핸들러 수정 (사용자 추가 프롬프트 처리 추가)
   const handleDeletePrompt = useCallback(async (promptId) => {
-    if (!window.confirm('정말로 이 프롬프트를 삭제하시겠습니까?')) {
+    // ID 타입 확인
+    const isUserAdded = typeof promptId === 'string' && promptId.startsWith('user-added-');
+    const confirmMessage = isUserAdded
+      ? '정말로 이 사용자 추가 프롬프트를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.'
+      : '정말로 이 프롬프트를 삭제하시겠습니까?';
+
+    if (!window.confirm(confirmMessage)) {
       return;
     }
-    
+
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      await deletePrompt(promptId);
-      
+      if (isUserAdded) {
+        // 사용자 추가 프롬프트 삭제 (userPromptApi 사용)
+        await deleteUserAddedPromptApi(promptId);
+      } else {
+        // 일반 프롬프트 삭제 (기존 API 사용)
+        await deletePrompt(promptId);
+      }
+
+      // 로컬 상태 업데이트 (삭제된 항목 제거)
+      setPrompts(prev => prev.filter(p => p.id !== promptId));
+
+      // 현재 선택/편집 중인 프롬프트가 삭제된 프롬프트와 같다면 초기화
       if (selectedPrompt && selectedPrompt.id === promptId) {
         setIsDetailModalOpen(false);
-        setIsAddEditModalOpen(false);
         setSelectedPrompt(null);
       }
-      
-      await loadData(); // 데이터 전체 리로드
-      
+      if (editMode && selectedPrompt && selectedPrompt.id === promptId) {
+        setIsAddEditModalOpen(false);
+        setEditMode(false);
+        setSelectedPrompt(null);
+      }
+      // 오버레이 모달 관련 초기화 추가
+      if (overlayPrompt && overlayPrompt.id === promptId) {
+        closeOverlayModal(); // 이제 이 함수는 이전에 정의됨
+      }
+      if (userPrompt && userPrompt.id === promptId) {
+        closeUserPromptModal(); // 이제 이 함수는 이전에 정의됨
+      }
+
+      // 필요시 데이터 전체 리로드 대신 로컬 상태만 업데이트 (성능 개선)
+      // await loadData();
+
     } catch (err) {
-      console.error('[AppContext] 프롬프트 삭제 오류:', err);
+      console.error(`[AppContext] 프롬프트 삭제 오류 (ID: ${promptId}):`, err);
       setError('프롬프트를 삭제하는 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
-  }, [selectedPrompt, loadData]);
+  }, [selectedPrompt, editMode, overlayPrompt, userPrompt, closeOverlayModal, closeUserPromptModal]); // 의존성 배열 업데이트
 
   // 프롬프트 복제 핸들러
   const handleDuplicatePrompt = useCallback(async (promptId) => {
@@ -529,23 +605,6 @@ export const AppProvider = ({ children }) => {
     }
   }, [selectedPrompt]);
 
-  // 사용자 추가 프롬프트 업데이트 핸들러 추가
-  const handleUpdateUserAddedPrompt = useCallback(async (promptId, updatedData) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const updatedPrompt = await updateUserAddedPromptApi(promptId, updatedData);
-      setUserPromptUpdateTimestamp(Date.now()); // 성공 시 타임스탬프 업데이트
-      return updatedPrompt;
-    } catch (err) {
-      console.error('사용자 추가 프롬프트 업데이트 오류:', err);
-      setError('사용자 추가 프롬프트를 업데이트하는 중 오류가 발생했습니다.');
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
   // 설정 페이지로 이동
   const goToSettings = useCallback(() => {
     setCurrentScreen('settings');
@@ -556,19 +615,29 @@ export const AppProvider = ({ children }) => {
     setCurrentScreen('main');
   }, []);
 
-  // 프롬프트 아이템 업데이트 함수 (내부 상태 업데이트용)
+  // 프롬프트 아이템 업데이트 함수 (내부 상태 업데이트용) - userPrompts 업데이트 제거
   const updatePromptItem = useCallback((promptId, updatedData) => {
-    const updateItem = (items) => items.map(item => item.id === promptId ? { ...item, ...updatedData } : item);
+    const updateItem = (items) => items.map(item => {
+      if (item.id === promptId) {
+        // 업데이트된 데이터와 is_user_added 플래그 병합
+        const newItem = { ...item, ...updatedData };
+        // is_user_added 플래그가 누락되지 않도록 보장
+        if (typeof item.is_user_added !== 'undefined') {
+          newItem.is_user_added = item.is_user_added;
+        }
+        return newItem;
+      }
+      return item;
+    });
 
     setPrompts(prev => updateItem(prev));
-    setFavoritePrompts(prev => updateItem(prev)); // 즐겨찾기 목록도 업데이트
+    setFavoritePrompts(prev => updateItem(prev)); // 즐겨찾기 목록도 업데이트 (필요시 is_user_added 확인 로직 추가)
     setSearchResults(prev => updateItem(prev)); // 검색 결과도 업데이트
-    setUserPrompts(prev => updateItem(prev)); // 사용자 프롬프트 목록도 업데이트
-    
+
     // 현재 선택된 프롬프트도 업데이트
-    setSelectedPrompt(prev => (prev && prev.id === promptId) ? { ...prev, ...updatedData } : prev);
+    setSelectedPrompt(prev => (prev && prev.id === promptId) ? { ...prev, ...updatedData, is_user_added: prev.is_user_added } : prev);
     // 이전 프롬프트도 업데이트 (뒤로가기 시 반영되도록)
-    setPreviousPrompt(prev => (prev && prev.id === promptId) ? { ...prev, ...updatedData } : prev);
+    setPreviousPrompt(prev => (prev && prev.id === promptId) ? { ...prev, ...updatedData, is_user_added: prev.is_user_added } : prev);
   }, [setSelectedPrompt, setPreviousPrompt]);
 
   // 프롬프트 제목 업데이트 핸들러 (updatePrompt API 사용)
@@ -618,76 +687,37 @@ export const AppProvider = ({ children }) => {
     return colorMap[color] || 'bg-gray-100 text-gray-700 border-gray-200';
   }, []);
 
-  // 오버레이 모달 열기
-  const openOverlayModal = useCallback((prompt) => {
-    if (!prompt) return; // prompt가 없으면 실행하지 않음
-    
-    // 해당 프롬프트 ID로 최신 상태의 프롬프트 데이터 찾기
-    const latestPrompt = prompts.find(p => p.id === prompt.id);
-    
-    if (!latestPrompt) {
-      console.log('일반 프롬프트 목록에서 프롬프트를 찾을 수 없습니다. 사용자 추가 프롬프트에서 확인합니다:', prompt.id);
-      
-      // 직접 사용자 추가 프롬프트를 확인
-      if (prompt.is_user_added) {
-        // 사용자 추가 프롬프트 모달 상태 설정
-        setUserPrompt(prompt);
-        
-        // 약간의 딜레이 후 모달 표시 (이벤트 버블링 방지에 도움)
-        setTimeout(() => {
-          setIsUserPromptModalOpen(true);
-        }, 10);
+  // 오버레이 모달 열기 함수 수정 (통합 상태 사용)
+  const openOverlayModal = useCallback((promptToOpen) => {
+    if (!promptToOpen || !promptToOpen.id) {
+        console.warn("[AppContext] Invalid prompt object passed to openOverlayModal:", promptToOpen);
         return;
-      } else {
-        console.error('프롬프트를 찾을 수 없습니다:', prompt.id);
-        return;
-      }
     }
-    
-    // 사용자 추가 프롬프트인지 확인
+
+    // 통합된 prompts 상태에서 최신 데이터 찾기
+    const latestPrompt = prompts.find(p => p.id === promptToOpen.id);
+
+    if (!latestPrompt) {
+      // 통합 상태에서도 못 찾으면 오류
+      // 이 경우는 거의 없어야 하지만, 디버깅을 위해 로그 남김
+      console.error('[AppContext] 프롬프트를 통합 목록에서 찾을 수 없습니다:', promptToOpen.id);
+      // 혹시 모르니 전달된 객체로 시도
+      // setUserPrompt 또는 setOverlayPrompt 직접 호출?
+      // --> 안전하게 여기서 중단하는 것이 나을 수 있음
+      return;
+    }
+
+    // 사용자 추가 프롬프트인지 확인 (is_user_added 플래그 사용)
     if (latestPrompt.is_user_added) {
       // 사용자 추가 프롬프트 모달 상태 설정
       setUserPrompt(latestPrompt);
-      
-      // 약간의 딜레이 후 모달 표시 (이벤트 버블링 방지에 도움)
-      setTimeout(() => {
-        setIsUserPromptModalOpen(true);
-      }, 10);
+      setTimeout(() => setIsUserPromptModalOpen(true), 10);
     } else {
       // 일반 오버레이 모달 상태 설정
       setOverlayPrompt(latestPrompt);
-      
-      // 약간의 딜레이 후 모달 표시 (이벤트 버블링 방지에 도움)
-      setTimeout(() => {
-        setIsOverlayModalOpen(true);
-      }, 10);
+      setTimeout(() => setIsOverlayModalOpen(true), 10);
     }
-  }, [prompts]);
-
-  // 오버레이 모달 닫기
-  const closeOverlayModal = useCallback(() => {
-    // 현재 로직에서는 모달을 닫을 때 
-    // AddEditModal과 DetailModal이 같이 닫히는 문제가 없도록 처리
-
-    // 우선 모달 상태부터 변경
-    setIsOverlayModalOpen(false);
-    
-    // 모달이 닫힌 후 데이터 초기화 (애니메이션 완료 후)
-    setTimeout(() => {
-      setOverlayPrompt(null);
-    }, 300);
-  }, []);
-  
-  // 사용자 추가 프롬프트 모달 닫기
-  const closeUserPromptModal = useCallback(() => {
-    // 우선 모달 상태부터 변경
-    setIsUserPromptModalOpen(false);
-    
-    // 모달이 닫힌 후 데이터 초기화 (애니메이션 완료 후)
-    setTimeout(() => {
-      setUserPrompt(null);
-    }, 300);
-  }, []);
+  }, [prompts]); // 의존성 배열에 prompts 추가
 
   // 폴더 생성 모달 상태 초기화 함수
   const resetFolderModalState = useCallback(() => {
@@ -802,7 +832,6 @@ export const AppProvider = ({ children }) => {
     setOverlayPrompt,
     setIsUserPromptModalOpen,
     setUserPrompt,
-    handleUpdateUserAddedPrompt,
     setUserPromptUpdateTimestamp,
     switchToPrompt,
     handleGoBack,

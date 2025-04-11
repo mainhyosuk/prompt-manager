@@ -1,3 +1,66 @@
+## [v1.4473] - 2025-04-11
+
+### 주요 개선사항
+
+- 사용자 추가 탭 메모 저장 오류 해결:
+    - 사용자 추가 프롬프트 상세 모달에서 메모 자동 저장이 작동하지 않던 문제 해결
+    - 메모 내용이 로컬 스토리지에 정상적으로 업데이트되도록 기능 복구
+    - 일반 프롬프트와 사용자 추가 프롬프트 간 메모 저장 로직 통합 및 안정화
+
+### 문제 원인 분석
+
+- 메모 업데이트 로직 불일치:
+    - `updatePromptMemo` API 함수에서 사용자 추가 프롬프트('user-added-' ID) 분기 처리 미흡
+    - 모든 메모 업데이트 시 서버 API(/api/prompts/{id}/memo) 호출 시도
+    - 사용자 추가 프롬프트는 서버 API 대신 로컬 스토리지 업데이트 필요
+    - `AppContext` 상태 관리 로직에서 사용자 추가 프롬프트 목록(`userPrompts`) 누락
+
+### 코드 변경 사항
+
+- src/api/promptApi.js:
+    - `updatePromptMemo` 함수 개선:
+        - 프롬프트 ID 형식을 검사하여 사용자 추가 프롬프트 여부 판단
+        - 사용자 추가 프롬프트의 경우, `userPromptApi.js`의 `updateUserAddedPrompt` 함수 호출
+        - 일반 프롬프트는 기존 서버 API 호출 유지
+        - `updateUserAddedPrompt` 함수 임포트 추가
+
+- src/api/userPromptApi.js:
+    - `getUserPromptsFromStorage` 함수 export 추가 (AppContext에서 사용)
+    - 불필요한 콘솔 로그 제거
+
+- src/context/AppContext.jsx:
+    - 데이터 로드 로직 개선 (`loadData`):
+        - 서버 프롬프트와 로컬 스토리지의 사용자 추가 프롬프트 통합
+        - `is_user_added` 플래그 추가하여 프롬프트 타입 구분
+        - 통합된 `prompts` 상태 관리 방식으로 변경
+    - `userPrompts` 상태 및 관련 업데이트 로직 제거
+    - `updatePromptItem` 함수에서 `is_user_added` 플래그 유지 로직 추가
+    - 프롬프트 삭제 핸들러(`handleDeletePrompt`) 수정:
+        - 사용자 추가 프롬프트 삭제 시 `deleteUserAddedPromptApi` 호출
+        - 로컬 상태 업데이트 로직 통일
+    - 모달 열기 함수(`openOverlayModal`) 수정:
+        - 통합된 `prompts` 상태 기반으로 모달 대상 프롬프트 탐색
+        - `is_user_added` 플래그 기반으로 모달 타입(일반/사용자추가) 결정
+
+### 기술적 개선
+
+- 상태 관리 통합 및 효율화:
+    - 서버 프롬프트와 사용자 추가 프롬프트를 단일 상태(`prompts`)로 관리하여 코드 간결화
+    - `is_user_added` 플래그를 통한 명확한 데이터 구분
+    - 중복 상태 제거로 메모리 사용량 감소 및 성능 향상
+
+- 코드 일관성 및 유지보수성 향상:
+    - 메모 업데이트 로직을 프롬프트 타입에 맞게 분기 처리하여 명확성 증대
+    - API 함수 책임 분리 및 의존성 관리 개선
+    - 상태 업데이트 및 삭제 로직 표준화
+
+- 사용자 경험 향상:
+    - 사용자 추가 프롬프트에서도 메모 기능이 안정적으로 동작
+    - 데이터 저장 방식 차이에 따른 기능 오류 제거
+    - 일관된 메모 편집 경험 제공
+
+---
+
 ## [v1.4472] - 2025-04-11
 
 ### 주요 개선사항
