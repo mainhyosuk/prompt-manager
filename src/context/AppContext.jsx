@@ -148,15 +148,20 @@ export const AppProvider = ({ children }) => {
         allUserAddedPrompts = allUserAddedPrompts.concat(markedPrompts);
       }
 
-      // 사용자 추가 프롬프트를 별도의 상태로 관리
+      // 사용자 추가 프롬프트도 전역 상태에 저장
       setUserAddedPrompts(allUserAddedPrompts);
 
-      // 3. 서버 데이터만 prompts 상태에 설정 (사용자 추가 프롬프트 제외)
+      // 3. 서버 데이터와 로컬 데이터 병합 (ID 기준, 서버 데이터 우선)
       const combinedPromptsMap = new Map();
       // 서버 프롬프트 추가 (is_user_added: false 명시적 추가)
       serverPrompts.forEach(p => combinedPromptsMap.set(p.id, { ...p, is_user_added: false }));
       
-      // 사용자 추가 프롬프트는 더 이상 combinedPrompts에 포함하지 않음
+      // 로컬 프롬프트 추가 (서버 목록에 없는 경우만)
+      allUserAddedPrompts.forEach(p => {
+        if (!combinedPromptsMap.has(p.id)) {
+          combinedPromptsMap.set(p.id, p); // is_user_added는 이미 true로 설정됨
+        }
+      });
       
       const combinedPrompts = Array.from(combinedPromptsMap.values());
 
@@ -696,25 +701,19 @@ export const AppProvider = ({ children }) => {
         return;
     }
 
-    // 먼저 사용자 추가 프롬프트 상태에서 찾기
-    let latestPrompt = null;
+    // 프롬프트 ID 타입 확인
     const isUserAddedPromptId = typeof promptToOpen.id === 'string' && promptToOpen.id.startsWith('user-added-');
     
-    if (isUserAddedPromptId) {
-      // 사용자 추가 프롬프트 목록에서 찾기
-      latestPrompt = userAddedPrompts.find(p => p.id === promptToOpen.id);
-    } else {
-      // 일반 프롬프트 목록에서 찾기
-      latestPrompt = prompts.find(p => p.id === promptToOpen.id);
-    }
+    // prompts 상태에서 최신 프롬프트 찾기
+    let latestPrompt = prompts.find(p => p.id === promptToOpen.id);
 
     if (!latestPrompt) {
-      // 양쪽 모두에서 찾을 수 없는 경우, 전달된 객체 사용
-      console.warn('[AppContext] 프롬프트를 목록에서 찾을 수 없습니다. 전달된 객체 사용:', promptToOpen.id);
-      latestPrompt = promptToOpen; // 전달된 객체 그대로 사용
+      // prompts에서 찾지 못한 경우, 전달된 객체를 사용
+      console.warn('[AppContext] 프롬프트를 통합 목록에서 찾을 수 없습니다. 전달된 객체 사용:', promptToOpen.id);
+      latestPrompt = promptToOpen;
     }
 
-    // 사용자 추가 프롬프트인지 확인 (id 기준 또는 is_user_added 플래그 사용)
+    // 사용자 추가 프롬프트인지 확인 (is_user_added 플래그나 ID 기반으로)
     if (isUserAddedPromptId || latestPrompt.is_user_added) {
       // 사용자 추가 프롬프트 모달 상태 설정
       setUserPrompt(latestPrompt);
@@ -724,7 +723,7 @@ export const AppProvider = ({ children }) => {
       setOverlayPrompt(latestPrompt);
       setTimeout(() => setIsOverlayModalOpen(true), 10);
     }
-  }, [prompts, userAddedPrompts]); // 의존성 배열에 prompts와 userAddedPrompts 추가
+  }, [prompts]);
 
   // 폴더 생성 모달 상태 초기화 함수
   const resetFolderModalState = useCallback(() => {

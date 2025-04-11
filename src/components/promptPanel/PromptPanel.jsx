@@ -503,7 +503,7 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
         // API를 통해 프롬프트 삭제
         await deleteUserAddedPrompt(prompt.id);
         
-        // 프롬프트 목록에서 해당 프롬프트 제거
+        // 로컬 프롬프트 목록에서 해당 프롬프트 제거
         setUserPrompts(prev => prev.filter(p => p.id !== prompt.id));
         
         // 편집 모달이 열려있고, 삭제한 프롬프트와 같은 프롬프트이면 모달 닫기
@@ -1078,14 +1078,6 @@ const PromptPanel = ({
     setIsAddPromptModalOpen(true);
   };
   
-  // 프롬프트 추가 완료 후 콜백
-  const handlePromptAdded = () => {
-    // 컬렉션 프롬프트 다시 로드
-    if (selectedCollectionId) {
-      loadCollectionPrompts(selectedCollectionId);
-    }
-  };
-  
   // 프롬프트를 컬렉션에서 제거
   const handleRemovePromptFromCollection = async (promptId) => {
     if (!selectedCollectionId || !promptId) return;
@@ -1099,6 +1091,14 @@ const PromptPanel = ({
       }
     } catch (err) {
       alert('프롬프트를 컬렉션에서 제거하는데 실패했습니다.');
+    }
+  };
+  
+  // 프롬프트 추가 완료 후 콜백
+  const handlePromptAdded = () => {
+    // 컬렉션 프롬프트 다시 로드
+    if (selectedCollectionId) {
+      loadCollectionPrompts(selectedCollectionId);
     }
   };
   
