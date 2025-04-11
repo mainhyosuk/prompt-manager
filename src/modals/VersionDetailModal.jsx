@@ -6,6 +6,10 @@ import { applyVariables, extractVariables, splitContentByVariables } from '../ut
 import { copyToClipboard } from '../utils/clipboard';
 import { Maximize2 } from 'lucide-react';
 import PromptExpandView from '../components/common/PromptExpandView';
+// import VariableEditor from '../components/variables/VariableEditor';
+import { updateVariableDefaultValue, updatePromptMemo } from '../api/promptApi';
+// import { Link } from 'react-router-dom';
+// import MemoExpandModal from '../components/common/MemoExpandModal';
 
 // 변수가 적용된 내용을 하이라이트하는 컴포넌트
 const HighlightedContent = ({ content, variableValues }) => {
