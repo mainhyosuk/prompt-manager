@@ -540,8 +540,16 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
                   <h3 className="text-sm font-medium text-gray-700">원본 프롬프트</h3>
                 </div>
                 <div className="relative border rounded-md p-2 bg-gray-50 text-sm">
-                  <div className="h-80 overflow-y-auto whitespace-pre-wrap">
-                    {prompt.content || '내용이 없습니다.'}
+                  <div className="h-80 overflow-y-auto">
+                    {/* 원본 프롬프트에도 하이라이트 적용 */}
+                    {hasVariables ? (
+                      <HighlightedContent 
+                        content={prompt.content} 
+                        variableValues={{}} // 빈 객체 전달하여 변수값은 적용하지 않고 원본 변수만 하이라이트
+                      />
+                    ) : (
+                      <div className="whitespace-pre-wrap text-sm">{prompt.content || '내용이 없습니다.'}</div>
+                    )}
                   </div>
                   <button
                     onClick={() => handleOpenExpandView(prompt.content, '원본 프롬프트')}
@@ -702,11 +710,19 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
           </div>
         )}
 
+        {/* PromptExpandView 모달 */}
         <PromptExpandView
           isOpen={isExpandViewOpen}
           onClose={handleCloseExpandView}
           title={expandViewTitle}
           content={expandViewContent}
+          highlightedContent={
+            <HighlightedContent
+              content={prompt?.content}
+              variableValues={expandViewTitle === '원본 프롬프트' ? {} : variableValues}
+            />
+          }
+          useHighlightedContent={hasVariables ? true : false}
         />
 
         {/* 메모 확장 모달 추가 */}
