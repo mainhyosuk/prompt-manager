@@ -436,7 +436,7 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
     >
       <div
         ref={modalRef}
-        className="bg-white rounded-lg shadow-xl w-10/12 max-w-5xl h-[67vh] flex flex-col"
+        className="bg-white rounded-lg shadow-xl w-10/12 max-w-5xl max-h-[85vh] flex flex-col"
         onClick={(e) => {
           // 이벤트 전파 중지를 강화하여 부모 모달까지 이벤트가 전파되지 않도록 함
           e.preventDefault();
@@ -478,14 +478,14 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
         </div>
         
         <div className="flex-1 overflow-y-auto p-4">
-          <div className="space-y-4">
+          <div className="space-y-6">
             {hasVariables && (
-              <div className="border rounded-lg p-3 bg-gray-50">
+              <div className="">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">변수 입력</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {prompt.variables.map((variable, index) => (
-                    <div key={`${variable.id || variable.name}-${index}`} className="border rounded-md p-2 bg-white">
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                    <div key={`${variable.id || variable.name}-${index}`} className="mb-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
                         {variable.name}
                       </label>
                       <div className="flex w-full">
@@ -530,16 +530,22 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
               </div>
             )}
             
+            {hasVariables && (
+              <hr className="border-gray-200" />
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="border rounded-lg p-3">
+              <div className="">
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="text-sm font-medium text-gray-700">원본 프롬프트</h3>
                 </div>
-                <div className="relative border rounded-md p-2 bg-gray-50 whitespace-pre-wrap text-xs h-44 overflow-y-auto">
-                  {prompt.content || '내용이 없습니다.'}
+                <div className="relative border rounded-md p-2 bg-gray-50 text-sm">
+                  <div className="h-80 overflow-y-auto whitespace-pre-wrap">
+                    {prompt.content || '내용이 없습니다.'}
+                  </div>
                   <button
                     onClick={() => handleOpenExpandView(prompt.content, '원본 프롬프트')}
-                    className="absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500"
+                    className={`absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500 z-10 ${isExpandViewOpen ? 'hidden' : ''}`}
                     title="확대 보기"
                   >
                     <Maximize2 size={16} />
@@ -547,7 +553,7 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
                 </div>
               </div>
               
-              <div className="border rounded-lg p-3">
+              <div className="">
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="text-sm font-medium text-gray-700">변수가 적용된 프롬프트</h3>
                   <div className="flex items-center space-x-2">
@@ -568,18 +574,20 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
                     </button>
                   </div>
                 </div>
-                <div className="relative border rounded-md p-2 bg-gray-50 text-xs h-44 overflow-y-auto">
-                  {hasVariables ? (
-                    <HighlightedContent 
-                      content={prompt.content} 
-                      variableValues={variableValues} 
-                    />
-                  ) : (
-                    <div className="whitespace-pre-wrap">{prompt.content || '내용이 없습니다.'}</div>
-                  )}
+                <div className="relative border rounded-md p-2 bg-gray-50 text-sm">
+                  <div className="h-80 overflow-y-auto">
+                    {hasVariables ? (
+                      <HighlightedContent 
+                        content={prompt.content} 
+                        variableValues={variableValues} 
+                      />
+                    ) : (
+                      <div className="whitespace-pre-wrap text-sm">{prompt.content || '내용이 없습니다.'}</div>
+                    )}
+                  </div>
                   <button
                     onClick={() => handleOpenExpandView(processedContent, '변수가 적용된 프롬프트')}
-                    className="absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500"
+                    className={`absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500 z-10 ${isExpandViewOpen ? 'hidden' : ''}`}
                     title="확대 보기"
                   >
                     <Maximize2 size={16} />
@@ -588,7 +596,7 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
               </div>
             </div>
             
-            <div className="border rounded-lg p-3 flex flex-col">
+            <div className="flex flex-col">
               <div className="flex items-center justify-between mb-1">
                 <h3 className="text-sm font-medium text-gray-700 flex items-center">
                   <span className="mr-2">📝</span>
@@ -619,8 +627,8 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
               </div>
             </div>
             
-            <div className="border rounded-lg p-3">
-              <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
+            <div className="">
+              <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
                 <div className="flex items-center">
                   <span className="text-gray-500 mr-1">원본 프롬프트:</span>
                   <span className="text-blue-600">
