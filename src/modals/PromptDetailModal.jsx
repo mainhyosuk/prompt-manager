@@ -28,7 +28,7 @@ const HighlightedContent = ({ content, variableValues }) => {
   const parts = splitContentByVariables(content);
   
   return (
-    <div className="">
+    <div className="whitespace-pre-wrap">
       {parts.map((part, index) => {
         if (part.type === 'variable') {
           // 매칭되는 사용자 변수 찾기 (변수 파서와 동일한 로직)
