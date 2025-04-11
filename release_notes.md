@@ -1,3 +1,77 @@
+## [v1.448] - 2025-04-11
+
+### 주요 개선사항
+
+- 프롬프트 변수 에디팅 기능 오류 해결:
+    - 모든 프롬프트 모달에서 변수 기본값 저장 로직 통합 및 안정화
+    - 사용자 추가 프롬프트 변수 저장 오류(ID 식별 문제) 수정
+    - 텍스트 에디터 모달과 인라인 입력의 일관된 동작 보장
+    - 변수 저장 UI 통일성 확보 및 사용자 경험 개선
+
+### 문제 원인 분석
+
+- 프롬프트 유형별 변수 저장 로직 분기 처리 미흡:
+    - 사용자 추가 프롬프트(`user-added-` ID 패턴)의 변수 저장 시 로컬 스토리지 API 호출 실패
+    - PromptDetailModal에서 변수 저장 함수가 모든 프롬프트 타입에 단일 API 호출 시도
+    - 텍스트 에디터 모달에서 변수 저장 시 중복된 기능 구현으로 인한 코드 복잡성 증가
+    - UI 디자인의 비일관성으로 인한 사용자 혼란 (버튼 배치 및 동작 차이)
+
+### 코드 변경 사항
+
+- src/modals/PromptDetailModal.jsx:
+    - 변수 기본값 저장 핸들러(handleSaveVariableDefaultValue) 개선:
+        - 프롬프트 ID 확인하여 사용자 추가 프롬프트 여부 판단
+        - 사용자 추가 프롬프트는 userPromptApi.updateUserAddedPrompt 함수 직접 호출
+        - 일반 프롬프트는 AppContext의 handleUpdateVariableDefaultValue 함수 호출
+        - ID 기반 API 분기 처리로 모든 프롬프트 타입 지원
+    - 텍스트 에디터 관련 함수 최적화:
+        - 기존 handleSaveVariableDefaultValue 호출하여 중복 코드 제거
+        - saveTextEditorValue, saveTextEditorValueAsDefault 함수 간결화
+    - 변수 편집 UI 개선:
+        - 모든 변수 입력 영역에 일관된 저장 버튼 디자인 적용
+        - 저장 상태 표시 개선 (저장 중, 저장 완료, 오류)
+        - 버튼 배치 및 시각적 피드백 일관성 확보
+
+- src/modals/PromptOverlayModal.jsx:
+    - handleSaveVariableValue 함수 업데이트:
+        - 사용자 추가 탭과 동일한 로직 적용으로 일관성 제공
+        - 중복 코드 제거 및 불필요한 로그 정리
+    - 텍스트 에디터 모달 상호작용 개선:
+        - 배경 클릭 시 모달 닫힘 방지 로직 개선
+        - 버튼 명칭 명확화 ("적용" → "적용 (현재만)")
+    - 변수 UI 레이아웃 개선:
+        - 그리드 레이아웃 변경으로 더 나은 공간 활용
+        - 시각적 요소 개선으로 사용성 향상
+
+- src/modals/UserPromptDetailModal.jsx:
+    - handleSaveVariableValue 함수 최적화:
+        - 불필요한 로그 제거 및 코드 간결화
+        - 명확한 조건문으로 변수 값 변경 여부 확인 로직 개선
+    - 메모 저장 로직 개선:
+        - updatePromptMemo 대신 updateUserAddedPrompt 직접 호출
+        - 올바른 API 경로 사용으로 메모 저장 안정성 향상
+
+### 기술적 개선
+
+- 코드 일관성 및 재사용성 강화:
+    - 세 가지 모달(PromptDetailModal, PromptOverlayModal, UserPromptDetailModal) 간 동일한 변수 저장 패턴 적용
+    - 프롬프트 ID 기반 API 분기 처리로 모든 프롬프트 타입에 대한 일관된 동작 보장
+    - 공통 로직 추출로 코드 중복 감소 및 유지보수성 향상
+
+- 사용자 경험 개선:
+    - 변수 저장 버튼 디자인 통일로 직관적인 UI 제공
+    - 저장 상태 표시의 일관성 확보로 사용자 피드백 향상
+    - 텍스트 에디터 모달 인터랙션 강화로 사용성 개선
+    - 명확한 버튼 기능 설명으로 사용자 혼란 감소
+
+- 유지보수성 향상:
+    - useCallback 활용으로 함수 재생성 최소화 및 메모리 효율성 증대
+    - 변수명 및 함수명 통일로 개발자 가독성 개선
+    - 조건부 로직 최적화로 코드 복잡성 감소
+    - 에러 처리 및 사용자 피드백 메커니즘 표준화
+
+---
+
 ## [v1.4473] - 2025-04-11
 
 ### 주요 개선사항

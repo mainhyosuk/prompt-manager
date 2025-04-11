@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.448] - 2025-04-11
+
+### Fixed
+- 변수 에디팅 아이콘 및 기능 오류 해결
+  - 사용자 추가 프롬프트에서 변수 기본값 저장 오류 수정
+  - 변수 저장 UI 일관성 개선 및 코드 최적화
+  - 텍스트 에디터 모달에서 변수 값 저장 로직 통합
+
 ## [v1.4473] - 2025-04-11
 
 ### Fixed
