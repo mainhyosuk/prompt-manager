@@ -875,30 +875,28 @@ const PromptDetailModal = () => {
                             defaultSizePercentage={hPanelSizes[0]} 
                             minSizePercentage={30}
                           >
-                            <div className="h-full flex flex-col">
+                            <div className="h-full flex flex-col relative">
                               <div className="flex items-center justify-between mb-1">
                                 <h3 className="font-medium text-gray-800">원본 프롬프트</h3>
                               </div>
-                              <div className="flex-1 bg-gray-50 p-2 rounded-lg border text-base whitespace-pre-wrap overflow-y-auto relative">
+                              <div className="flex-1 bg-gray-50 p-2 rounded-lg border text-base whitespace-pre-wrap overflow-y-auto">
                                 {/* 원본 변수 하이라이트 */}
                                 <HighlightedContent 
                                   content={selectedPrompt.content}
                                   variableValues={{}} // 빈 객체 전달하여 변수값은 적용하지 않고 원본 텍스트만 유지
                                 />
-                                
-                                {/* 확대 보기 버튼 */}
-                                <button
-                                  onClick={() => handleOpenExpandView(
-                                    selectedPrompt.content,
-                                    '원본 프롬프트',
-                                    true
-                                  )}
-                                  className="absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500"
-                                  title="확대 보기"
-                                >
-                                  <Maximize2 size={16} />
-                                </button>
                               </div>
+                              <button
+                                onClick={() => handleOpenExpandView(
+                                  selectedPrompt.content,
+                                  '원본 프롬프트',
+                                  true
+                                )}
+                                className="absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500"
+                                title="확대 보기"
+                              >
+                                <Maximize2 size={16} />
+                              </button>
                             </div>
                           </Panel>
 
@@ -914,7 +912,7 @@ const PromptDetailModal = () => {
                             defaultSizePercentage={hPanelSizes[1]} 
                             minSizePercentage={30}
                           >
-                            <div className="h-full flex flex-col">
+                            <div className="h-full flex flex-col relative">
                               <div className="flex items-center justify-between mb-1">
                                 <h3 className="font-medium text-gray-800">변수가 적용된 프롬프트</h3>
                                 {/* 복사 버튼 */}
@@ -934,24 +932,22 @@ const PromptDetailModal = () => {
                                    '클립보드에 복사'}
                                 </button>
                               </div>
-                              <div className="flex-1 bg-gray-50 p-2 rounded-lg border overflow-y-auto relative">
+                              <div className="flex-1 bg-gray-50 p-2 rounded-lg border overflow-y-auto">
                                 <HighlightedContent
                                   content={selectedPrompt.content}
                                   variableValues={variableValues}
                                 />
-                                
-                                {/* 확대 보기 버튼 */}
-                                <button
-                                  onClick={() => handleOpenExpandView(
-                                    processedContent,
-                                    '변수가 적용된 프롬프트'
-                                  )}
-                                  className="absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500"
-                                  title="확대 보기"
-                                >
-                                  <Maximize2 size={16} />
-                                </button>
                               </div>
+                              <button
+                                onClick={() => handleOpenExpandView(
+                                  processedContent,
+                                  '변수가 적용된 프롬프트'
+                                )}
+                                className="absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500"
+                                title="확대 보기"
+                              >
+                                <Maximize2 size={16} />
+                              </button>
                             </div>
                           </Panel>
                         </PanelGroup>
