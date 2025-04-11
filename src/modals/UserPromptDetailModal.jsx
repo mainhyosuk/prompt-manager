@@ -231,8 +231,8 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
       const contentToCopy = applyVariables(prompt.content, variableValues);
       await copyToClipboard(contentToCopy);
       
-      // 사용 기록 업데이트
-      if (handleRecordUsage && prompt?.id) {
+      // 사용 기록 업데이트 - 사용자 추가 프롬프트('user-added-'로 시작하는 ID)는 API 호출하지 않음
+      if (handleRecordUsage && prompt?.id && !(typeof prompt.id === 'string' && prompt.id.startsWith('user-added-'))) {
         await handleRecordUsage(prompt.id);
       }
       

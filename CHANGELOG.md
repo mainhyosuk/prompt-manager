@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.4472] - 2025-04-11
+
+### Fixed
+- 사용자 추가 탭: 프롬프트 상세내용 오버레이 모달 복사하기 오류 해결
+  - 사용자 추가 프롬프트(`user-added-`로 시작하는 ID)에서 복사하기 시 사용 기록 API 호출 방지
+  - 버전 관리 탭에도 동일한 로직 적용하여 일관성 확보
+  - 콘솔 오류 'AppContext.jsx:394 사용자 추가 프롬프트는 사용 기록 API를 호출하지 않습니다.' 해결
+
 ## [v1.4471] - 2025-04-11
 
 ### Fixed

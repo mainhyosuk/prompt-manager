@@ -1,3 +1,43 @@
+## [v1.4472] - 2025-04-11
+
+### 주요 개선사항
+
+- 사용자 추가 탭: 프롬프트 상세내용 오버레이 모달 복사하기 오류 해결:
+    - 사용자 추가 프롬프트에서 복사하기 버튼 클릭 시 발생하는 오류 수정
+    - 콘솔 오류 메시지 'AppContext.jsx:394 사용자 추가 프롬프트는 사용 기록 API를 호출하지 않습니다.' 해결
+    - 버전 관리 탭에도 동일한 로직 적용하여 일관성 확보
+    - 사용자 추가 탭과 버전 관리 탭 간 동작 일관성 향상
+
+### 문제 원인 분석
+
+- 이벤트 핸들링 처리 불일치:
+    - 프롬프트 복사 시 handleRecordUsage 함수가 모든 프롬프트 타입에 동일하게 호출됨
+    - 사용자 추가 프롬프트(ID가 'user-added-'로 시작)는 사용 기록 API를 호출하지 않아야 함
+    - AppContext.jsx에서 사용자 추가 프롬프트 여부 확인 로직은 있으나, 모달 내 코드에서는 미적용
+    - 동일한 구조를 가진 버전 관리 탭에서는 구현 방식 차이로 오류가 발생하지 않았음
+
+### 코드 변경 사항
+
+- src/modals/UserPromptDetailModal.jsx:
+    - handleCopyToClipboard 함수에 사용자 추가 프롬프트 확인 로직 추가
+    - ID가 'user-added-'로 시작하는 프롬프트의 경우 handleRecordUsage 호출 방지
+    - 조건문 추가: if (handleRecordUsage && prompt?.id && !(typeof prompt.id === 'string' && prompt.id.startsWith('user-added-')))
+
+- src/modals/VersionDetailModal.jsx:
+    - UserPromptDetailModal과 동일한 로직 적용하여 일관성 확보
+    - 사용자 추가 프롬프트 ID 패턴 확인 로직 추가
+    - 동일한 조건문으로 handleRecordUsage 호출 제어
+
+### 기술적 개선
+
+- 코드 일관성 강화:
+    - 사용자 추가 탭과 버전 관리 탭 간의 동작 방식 통일
+    - 프롬프트 ID 체크 로직 표준화로 향후 유지보수성 향상
+    - 불필요한 API 호출 방지로 서버 리소스 절약
+    - 브라우저 콘솔 오류 로그 감소로 디버깅 환경 개선
+
+---
+
 ## [v1.4471] - 2025-04-11
 
 ### 주요 개선사항
@@ -12,7 +52,7 @@
 
 - API 경로 불일치:
     - 클라이언트 코드에서 '/api/prompts/${id}/record-usage' 경로 호출
-    - 서버에는 '/api/prompts/<int:id>/use' 경로만 구현되어 있어 불일치 발생
+    - 서버에는 '/api/prompts/<int:id>/use' 경로만 구현되어 불일치 발생
     - HTTP 405 오류 (METHOD NOT ALLOWED) 발생으로 사용 기록 저장 실패
     - 클라이언트 요청과 서버 API 엔드포인트 간 매핑 오류
 
