@@ -545,7 +545,7 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
                   </div>
                   <button
                     onClick={() => handleOpenExpandView(prompt.content, '원본 프롬프트')}
-                    className={`absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500 z-10 ${isExpandViewOpen ? 'hidden' : ''}`}
+                    className={`absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500 z-10 ${isExpandViewOpen || isTextEditorOpen || isMemoExpanded ? 'hidden' : ''}`}
                     title="확대 보기"
                   >
                     <Maximize2 size={16} />
@@ -587,7 +587,7 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
                   </div>
                   <button
                     onClick={() => handleOpenExpandView(processedContent, '변수가 적용된 프롬프트')}
-                    className={`absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500 z-10 ${isExpandViewOpen ? 'hidden' : ''}`}
+                    className={`absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500 z-10 ${isExpandViewOpen || isTextEditorOpen || isMemoExpanded ? 'hidden' : ''}`}
                     title="확대 보기"
                   >
                     <Maximize2 size={16} />

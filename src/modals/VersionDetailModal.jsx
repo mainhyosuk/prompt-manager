@@ -276,24 +276,38 @@ const VersionDetailModal = ({ isOpen, onClose, prompt }) => {
   };
 
   // 변수 기본값 저장 핸들러 (PromptDetailModal 로직 가져오기)
-  const handleSaveVariableDefaultValue = async (variableName) => {
-    if (!prompt?.id || !variableName || !handleUpdateVariableDefaultValue) return;
+  const handleSaveVariableValue = useCallback(async (variableName, explicitValue = null) => {
+    if (!prompt?.id || !variableName || !prompt.variables || (typeof prompt.id === 'string' && prompt.id.startsWith('user-added-'))) {
+      // VersionDetailModal은 일반 프롬프트만 처리해야 함
+      console.error('잘못된 프롬프트 ID 또는 변수 정보');
+      return;
+    }
+    const variableIndex = prompt.variables.findIndex(v => v.name === variableName);
+    if (variableIndex === -1) {
+      console.error(`변수 '${variableName}'을 찾을 수 없습니다.`);
+      return;
+    }
+    const newValue = explicitValue !== null ? explicitValue : (variableValues[variableName] || '');
 
-    const variable = prompt.variables.find(v => v.name === variableName);
-    if (!variable) return;
-
-    const currentValue = variableValues[variableName] || '';
-
-    // 현재 값과 기본값이 다를 경우에만 저장 시도
-    if (currentValue !== variable.default_value) {
+    if (newValue !== prompt.variables[variableIndex].default_value) {
       setSavingStates(prev => ({ ...prev, [variableName]: 'saving' }));
       try {
-        await handleUpdateVariableDefaultValue(prompt.id, variable.id, currentValue);
+        await handleUpdateVariableDefaultValue(prompt.id, variableName, newValue);
+
+        const updatedVariables = prompt.variables.map((v, index) => {
+          if (index === variableIndex) {
+            return { ...v, default_value: newValue };
+          }
+          return v;
+        });
+        updatePromptItem(prompt.id, { variables: updatedVariables });
+        setVariableValues(prev => ({ ...prev, [variableName]: newValue }));
+
         setSavingStates(prev => ({ ...prev, [variableName]: 'saved' }));
-        // AppContext에서 updatePromptItem을 통해 로컬 상태 업데이트 가정
         setTimeout(() => {
           setSavingStates(prev => ({ ...prev, [variableName]: 'idle' }));
         }, 2000);
+
       } catch (error) {
         console.error('변수 기본값 저장 오류:', error);
         setSavingStates(prev => ({ ...prev, [variableName]: 'error' }));
@@ -302,14 +316,12 @@ const VersionDetailModal = ({ isOpen, onClose, prompt }) => {
         }, 3000);
       }
     } else {
-      // 이미 기본값과 동일함을 알림 (간단히 콘솔 로그)
-      console.log(`Variable '${variableName}' is already set to its default value.`);
-      setSavingStates(prev => ({ ...prev, [variableName]: 'saved' })); // 즉시 saved 상태로 변경
+      setSavingStates(prev => ({ ...prev, [variableName]: 'saved' }));
       setTimeout(() => {
         setSavingStates(prev => ({ ...prev, [variableName]: 'idle' }));
       }, 1500);
     }
-  };
+  }, [prompt, variableValues, handleUpdateVariableDefaultValue, updatePromptItem]);
 
   // 메모 변경 및 자동 저장 핸들러 (PromptDetailModal 로직 가져오기)
   const handleMemoChange = (e) => {
@@ -364,8 +376,8 @@ const VersionDetailModal = ({ isOpen, onClose, prompt }) => {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div 
-        ref={modalRef} 
-        className="bg-white rounded-lg shadow-xl w-10/12 max-w-5xl h-[67vh] flex flex-col"
+        ref={modalRef}
+        className="bg-white rounded-lg shadow-xl w-10/12 max-w-5xl max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 모달 헤더 */}
@@ -400,17 +412,16 @@ const VersionDetailModal = ({ isOpen, onClose, prompt }) => {
         
         {/* 모달 콘텐츠 - 스크롤 가능한 영역 */}
         <div className="flex-1 overflow-y-auto p-4">
-          <div className="space-y-4">
-            {/* 변수 입력 영역 수정 */}
+          <div className="space-y-6">
+            {/* 변수 입력 영역 (스타일 수정) */}
             {hasVariables && (
-              <div className="border rounded-lg p-3 bg-gray-50">
+              <div className="">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">변수 입력</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {prompt.variables.map((variable, index) => (
-                    <div key={`${variable.id || variable.name}-${index}`} className="border rounded-md p-2 bg-white">
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                    <div key={`${variable.id || variable.name}-${index}`} className="mb-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
                         {variable.name}
-                        {variable.required && <span className="text-red-500 ml-1">*</span>}
                       </label>
                       <div className="flex w-full">
                         <input
@@ -420,28 +431,25 @@ const VersionDetailModal = ({ isOpen, onClose, prompt }) => {
                           className="flex-1 px-2 py-1 text-sm border rounded-l-md focus:outline-none focus:ring-1 focus:ring-blue-500"
                           placeholder={`{${variable.name}} 값 입력...`}
                         />
-                        {/* 기본값 저장 버튼 (PromptDetailModal 로직 사용) */}
-                        {savingStates[variable.name] === 'idle' ? (
-                          <button
-                            onClick={() => handleSaveVariableDefaultValue(variable.name)}
-                            title="기본값으로 저장"
-                            className="ml-1 px-2 py-1 border rounded-md hover:bg-blue-50 group"
-                          >
-                            <span className="text-gray-500 group-hover:text-blue-500">💾</span>
-                          </button>
-                        ) : savingStates[variable.name] === 'saving' ? (
-                          <button disabled className="ml-1 px-2 py-1 border rounded-md bg-gray-50">
-                            <span className="text-blue-500 animate-pulse">⏳</span>
-                          </button>
-                        ) : savingStates[variable.name] === 'saved' ? (
-                          <button disabled className="ml-1 px-2 py-1 border rounded-md bg-green-50">
-                            <span className="text-green-500">✓</span>
-                          </button>
-                        ) : (
-                          <button disabled className="ml-1 px-2 py-1 border rounded-md bg-red-50">
-                            <span className="text-red-500">✕</span>
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleSaveVariableValue(variable.name)}
+                          className={`px-2 py-1 border border-l-0 rounded-none text-xs 
+                            ${savingStates[variable.name] === 'saved' ? 'bg-green-50 text-green-600' : 
+                              savingStates[variable.name] === 'error' ? 'bg-red-50 text-red-600' : 
+                              savingStates[variable.name] === 'saving' ? 'bg-blue-50 text-blue-400' : 
+                              'bg-gray-50 hover:bg-gray-100 text-gray-600'}`}
+                          title="기본값으로 저장"
+                          disabled={savingStates[variable.name] === 'saving'}
+                        >
+                          {savingStates[variable.name] === 'saved' ? (
+                            <span>✓</span>
+                          ) : savingStates[variable.name] === 'saving' ? (
+                            <div className="w-3 h-3 border-2 border-t-blue-500 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin" />
+                          ) : (
+                            <span>💾</span>
+                          )}
+                        </button>
                         <button
                           type="button"
                           onClick={() => openTextEditor(variable)}
@@ -457,102 +465,105 @@ const VersionDetailModal = ({ isOpen, onClose, prompt }) => {
               </div>
             )}
             
-            {/* 원본/적용 프롬프트 영역 (UserPromptDetailModal과 동일하게 + 확대 버튼) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-               {/* 원본 프롬프트 */}
-               <div className="border rounded-lg p-3">
-                 <div className="flex justify-between items-center mb-2">
-                   <h3 className="text-sm font-medium text-gray-700">원본 프롬프트</h3>
-                   {/* --- 상단 확대 보기 버튼 제거 --- */}
-                   {/* <button ... /> */}
-                 </div>
-                 <div className="relative border rounded-md p-2 bg-gray-50 whitespace-pre-wrap text-xs h-44 overflow-y-auto">
-                   {prompt.content || '내용이 없습니다.'}
-                   {/* 확대 버튼 위치 재조정 */}
-                    <button
-                      onClick={() => handleOpenExpandView(prompt.content, '원본 프롬프트')}
-                      className="absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500"
-                      title="확대 보기"
-                    >
-                      <Maximize2 size={16} />
-                    </button>
-                 </div>
-               </div>
+            {/* 구분선 추가 */}
+            {hasVariables && (
+              <hr className="border-gray-200" />
+            )}
 
-               {/* 변수가 적용된 프롬프트 */}
-               <div className="border rounded-lg p-3">
-                 <div className="flex justify-between items-center mb-2">
-                   <h3 className="text-sm font-medium text-gray-700">변수가 적용된 프롬프트</h3>
-                   <div className="flex items-center space-x-2">
-                     {/* --- 상단 확대 보기 버튼 제거 --- */}
-                     {/* <button ... /> */}
-                     <button
-                       onClick={handleCopyToClipboard}
-                       className={`px-2 py-1 rounded text-xs transition ${
-                         copyStatus === 'idle' ? 'bg-blue-500 text-white' :
-                         copyStatus === 'copying' ? 'bg-blue-600 text-white' :
-                         copyStatus === 'copied' ? 'bg-green-500 text-white' :
-                         'bg-red-500 text-white'
-                       }`}
-                       disabled={copyStatus !== 'idle'}
-                     >
-                       {copyStatus === 'idle' ? '복사하기' :
-                        copyStatus === 'copying' ? '복사 중...' :
-                        copyStatus === 'copied' ? '복사됨!' :
-                        '오류 발생'}
-                     </button>
-                   </div>
-                 </div>
-                 <div className="relative border rounded-md p-2 bg-gray-50 text-xs h-44 overflow-y-auto">
-                   {hasVariables ? (
-                     <HighlightedContent
-                       content={prompt.content}
-                       variableValues={variableValues}
-                     />
-                   ) : (
-                     <div className="whitespace-pre-wrap">{prompt.content || '내용이 없습니다.'}</div>
-                   )}
-                    {/* 확대 버튼 위치 재조정 */}
-                     <button
-                       onClick={() => handleOpenExpandView(processedContent, '변수가 적용된 프롬프트')}
-                       className="absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500"
-                       title="확대 보기"
-                     >
-                       <Maximize2 size={16} />
-                     </button>
-                 </div>
-               </div>
-             </div>
+            {/* 원본/적용 프롬프트 영역 (스타일, 구조, 폰트 수정) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-sm font-medium text-gray-700">원본 프롬프트</h3>
+                </div>
+                <div className="relative border rounded-md p-2 bg-gray-50 text-sm">
+                  <div className="h-80 overflow-y-auto whitespace-pre-wrap">
+                    {prompt.content || '내용이 없습니다.'}
+                  </div>
+                  <button
+                    onClick={() => handleOpenExpandView(prompt.content, '원본 프롬프트')}
+                    className={`absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500 z-10 ${isExpandViewOpen || isTextEditorOpen ? 'hidden' : ''}`}
+                    title="확대 보기"
+                  >
+                    <Maximize2 size={16} />
+                  </button>
+                </div>
+              </div>
+              
+              <div className="">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-sm font-medium text-gray-700">변수가 적용된 프롬프트</h3>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={handleCopyToClipboard}
+                      className={`px-2 py-1 rounded text-xs transition ${
+                        copyStatus === 'idle' ? 'bg-blue-500 text-white' :
+                        copyStatus === 'copying' ? 'bg-blue-600 text-white' :
+                        copyStatus === 'copied' ? 'bg-green-500 text-white' :
+                        'bg-red-500 text-white'
+                      }`}
+                      disabled={copyStatus !== 'idle'}
+                    >
+                      {copyStatus === 'idle' ? '복사하기' :
+                       copyStatus === 'copying' ? '복사 중...' :
+                       copyStatus === 'copied' ? '복사됨!' :
+                       '오류 발생'}
+                    </button>
+                  </div>
+                </div>
+                <div className="relative border rounded-md p-2 bg-gray-50 text-sm">
+                  <div className="h-80 overflow-y-auto">
+                    {hasVariables ? (
+                      <HighlightedContent
+                        content={prompt.content}
+                        variableValues={variableValues}
+                      />
+                    ) : (
+                      <div className="whitespace-pre-wrap text-sm">{prompt.content || '내용이 없습니다.'}</div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleOpenExpandView(processedContent, '변수가 적용된 프롬프트')}
+                    className={`absolute bottom-2 right-2 p-1 bg-white/70 hover:bg-white rounded-md border border-gray-200 shadow-sm text-gray-500 hover:text-blue-500 z-10 ${isExpandViewOpen || isTextEditorOpen ? 'hidden' : ''}`}
+                    title="확대 보기"
+                  >
+                    <Maximize2 size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
             
-            {/* 메모 영역 */}
-            <div className="border rounded-lg p-3">
+            {/* 메모 영역 (스타일 확인 및 조정) */}
+            <div className="flex flex-col">
               <div className="flex items-center justify-between mb-1">
-                <h3 className="font-medium text-gray-800 flex items-center">
-                  <span className="mr-2">📝</span> 메모
+                <h3 className="text-sm font-medium text-gray-700 flex items-center">
+                  <span className="mr-2">📝</span>
+                  메모
                 </h3>
                 {savingMemo && (
                   <span className="text-xs text-blue-500">저장 중...</span>
                 )}
               </div>
-              <textarea
-                value={memo}
-                onChange={handleMemoChange}
-                onBlur={() => { // 포커스 잃을 때도 저장
-                  if (memoTimerRef.current) {
-                    clearTimeout(memoTimerRef.current);
-                    memoTimerRef.current = null;
-                  }
-                  autoSaveMemo(memo);
-                }}
-                className="w-full flex-1 resize-none border rounded-lg p-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 min-h-[100px]"
-                placeholder="메모를 입력하세요..."
-              />
+              <div className="flex-1 relative min-h-[120px] h-full">
+                <textarea
+                  value={memo}
+                  onChange={handleMemoChange}
+                  onBlur={() => {
+                    if (memoTimerRef.current) {
+                      clearTimeout(memoTimerRef.current);
+                      memoTimerRef.current = null;
+                    }
+                    autoSaveMemo(memo);
+                  }}
+                  placeholder="프롬프트 관련 메모를 입력하세요..."
+                  className="w-full h-full min-h-[120px] resize-none border rounded-md p-2 pr-10 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
             </div>
             
-            {/* 메타 정보 - 한 줄로 표시 */}
-            <div className="border rounded-lg p-3">
-              <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
-                {/* 태그 */}
+            {/* 속성 정보 영역 (스타일 제거, 폰트 크기 조정) */}
+            <div className="">
+              <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
                 <div className="flex items-center">
                   <span className="text-gray-500 mr-1">태그:</span>
                   <div className="flex flex-wrap gap-1">
@@ -571,7 +582,6 @@ const VersionDetailModal = ({ isOpen, onClose, prompt }) => {
                   </div>
                 </div>
                 
-                {/* 폴더 */}
                 <div className="flex items-center">
                   <span className="text-gray-500 mr-1">폴더:</span>
                   {prompt.folder ? (
@@ -581,7 +591,6 @@ const VersionDetailModal = ({ isOpen, onClose, prompt }) => {
                   )}
                 </div>
                 
-                {/* 생성 일자 */}
                 <div className="flex items-center">
                   <span className="text-gray-500 mr-1">생성일:</span>
                   <span>
@@ -589,7 +598,6 @@ const VersionDetailModal = ({ isOpen, onClose, prompt }) => {
                   </span>
                 </div>
                 
-                {/* 마지막 수정일 */}
                 <div className="flex items-center">
                   <span className="text-gray-500 mr-1">마지막 수정일:</span>
                   <span>
@@ -601,7 +609,7 @@ const VersionDetailModal = ({ isOpen, onClose, prompt }) => {
           </div>
         </div>
         
-        {/* 텍스트 에디터 모달 추가 */}
+        {/* 텍스트 에디터 모달 (버튼 문구 수정) */}
         {isTextEditorOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-60">
             <div ref={textEditorRef} className="bg-white rounded-lg shadow-xl w-2/3 max-w-2xl flex flex-col">
@@ -637,14 +645,13 @@ const VersionDetailModal = ({ isOpen, onClose, prompt }) => {
                   onClick={saveTextEditorValue}
                   className="px-3 py-1.5 rounded-lg bg-blue-500 text-white hover:bg-blue-600"
                 >
-                  적용 (현재 모달에만)
+                  적용 (현재만)
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* 확대 보기 모달 렌더링 */}
         <PromptExpandView
           isOpen={isExpandViewOpen}
           onClose={handleCloseExpandView}
