@@ -265,26 +265,20 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
     }));
   };
   
-  // 변수 값 저장 핸들러 (사용자 추가 프롬프트용)
-  const handleSaveVariableValue = useCallback(async (variableName) => {
+  // 변수 값 저장 핸들러 수정 (로그 제거)
+  const handleSaveVariableValue = useCallback(async (variableName, explicitValue = null) => {
     if (!prompt?.id || !variableName || !prompt.variables) {
-      console.error('저장에 필요한 정보 부족');
       return;
     }
-
     const variableIndex = prompt.variables.findIndex(v => v.name === variableName);
     if (variableIndex === -1) {
-      console.error(`변수 '${variableName}'을 찾을 수 없습니다.`);
       return;
     }
+    const newValue = explicitValue !== null ? explicitValue : (variableValues[variableName] || '');
 
-    const newValue = variableValues[variableName] || '';
-
-    // 변경된 경우에만 업데이트
     if (newValue !== prompt.variables[variableIndex].default_value) {
       setSavingStates(prev => ({ ...prev, [variableName]: 'saving' }));
       try {
-        // 1. 업데이트된 변수 배열 생성
         const updatedVariables = prompt.variables.map((v, index) => {
           if (index === variableIndex) {
             return { ...v, default_value: newValue };
@@ -292,11 +286,11 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
           return v;
         });
 
-        // 2. API 호출하여 로컬 스토리지 업데이트 (userPromptApi 사용)
         await updateUserAddedPrompt(prompt.id, { variables: updatedVariables });
 
-        // 3. AppContext 상태 업데이트
         updatePromptItem(prompt.id, { variables: updatedVariables });
+
+        setVariableValues(prev => ({ ...prev, [variableName]: newValue }));
 
         setSavingStates(prev => ({ ...prev, [variableName]: 'saved' }));
         setTimeout(() => {
@@ -311,7 +305,6 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
         }, 3000);
       }
     } else {
-      // 이미 기본값과 동일함
       setSavingStates(prev => ({ ...prev, [variableName]: 'saved' }));
       setTimeout(() => {
         setSavingStates(prev => ({ ...prev, [variableName]: 'idle' }));
@@ -339,18 +332,14 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
     closeTextEditor();
   };
   
-  // 텍스트 에디터에서 값 저장 버튼 핸들러 (내부에서 handleSaveVariableValue 호출)
+  // 텍스트 에디터에서 값 저장 버튼 핸들러 수정 (newValue 전달)
   const saveTextEditorValueAndStore = async () => {
     if (!editingVariable || !prompt) return;
     try {
-      // 1. 현재 변수 값 업데이트 (로컬 state)
-      handleVariableChange(editingVariable.name, textEditorValue);
-      // 2. 업데이트된 값을 기본값으로 저장 (위에서 수정한 핸들러 호출)
-      await handleSaveVariableValue(editingVariable.name);
+      await handleSaveVariableValue(editingVariable.name, textEditorValue);
       closeTextEditor();
     } catch (error) {
       console.error('텍스트 에디터에서 변수 저장 오류:', error);
-      // 오류 처리는 handleSaveVariableValue 내부에서 이미 수행됨
     }
   };
   

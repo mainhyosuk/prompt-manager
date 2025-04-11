@@ -12,6 +12,7 @@ import { ChevronLeft, GripVertical, Maximize2 } from 'lucide-react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import PromptExpandView from '../components/common/PromptExpandView';
 import MemoExpandModal from '../components/common/MemoExpandModal';
+import { updateUserAddedPrompt } from '../api/userPromptApi'; // 사용자 프롬프트 업데이트 API 임포트
 
 // 변수가 적용된 내용을 하이라이트하는 컴포넌트
 const HighlightedContent = ({ content, variableValues }) => {
@@ -261,72 +262,72 @@ const PromptDetailModal = () => {
         ...prev,
         [name]: value
       };
-      
-      // 즉시 프롬프트 내용 업데이트
       const processed = applyVariables(selectedPrompt.content, newValues);
       setProcessedContent(processed);
-      
       return newValues;
     });
-    
-    // 값이 변경되면 해당 변수의 저장 상태를 idle로 설정
-    setSavingStates(prev => ({
-      ...prev,
-      [name]: 'idle'
-    }));
+    setSavingStates(prev => ({ ...prev, [name]: 'idle' }));
   };
   
-  // 변수 기본값 저장
-  const handleSaveVariableDefaultValue = async (variableName) => {
-    if (!selectedPrompt) return;
-    
-    // 저장 상태를 'saving'으로 변경
-    setSavingStates(prev => ({
-      ...prev,
-      [variableName]: 'saving'
-    }));
-    
-    try {
-      const currentValue = variableValues[variableName] || '';
-      
-      // API 호출하여 변수 기본값 업데이트
-      await handleUpdateVariableDefaultValue(
-        selectedPrompt.id,
-        variableName,
-        currentValue
-      );
-      
-      // 저장 성공 시 상태를 'saved'로 변경
-      setSavingStates(prev => ({
-        ...prev,
-        [variableName]: 'saved'
-      }));
-      
-      // 3초 후에 'idle' 상태로 되돌림
-      setTimeout(() => {
-        setSavingStates(prev => ({
-          ...prev,
-          [variableName]: 'idle'
-        }));
-      }, 3000);
-    } catch (error) {
-      console.error('변수 기본값 저장 오류:', error);
-      
-      // 저장 실패 시 상태를 'error'로 변경
-      setSavingStates(prev => ({
-        ...prev,
-        [variableName]: 'error'
-      }));
-      
-      // 3초 후에 'idle' 상태로 되돌림
-      setTimeout(() => {
-        setSavingStates(prev => ({
-          ...prev,
-          [variableName]: 'idle'
-        }));
-      }, 3000);
+  // 변수 기본값 저장 핸들러 (ID 기반 분기 로직 수정)
+  const handleSaveVariableDefaultValue = useCallback(async (variableName, explicitValue = null) => {
+    if (!selectedPrompt?.id || !variableName || !selectedPrompt.variables) {
+      console.error('저장에 필요한 정보 부족');
+      return;
     }
-  };
+    const variableIndex = selectedPrompt.variables.findIndex(v => v.name === variableName);
+    if (variableIndex === -1) {
+      console.error(`변수 '${variableName}'을 찾을 수 없습니다.`);
+      return;
+    }
+    const newValue = explicitValue !== null ? explicitValue : (variableValues[variableName] || '');
+
+    // 변경된 경우에만 업데이트
+    if (newValue !== selectedPrompt.variables[variableIndex].default_value) {
+      setSavingStates(prev => ({ ...prev, [variableName]: 'saving' }));
+      try {
+        const updatedVariables = selectedPrompt.variables.map((v, index) => {
+          if (index === variableIndex) {
+            return { ...v, default_value: newValue };
+          }
+          return v;
+        });
+
+        // ID 확인하여 API 분기
+        if (typeof selectedPrompt.id === 'string' && selectedPrompt.id.startsWith('user-added-')) {
+          // 사용자 추가 프롬프트: 로컬 스토리지 API 직접 호출
+          await updateUserAddedPrompt(selectedPrompt.id, { variables: updatedVariables });
+          console.log(`[handleSaveVariableDefaultValue] Updated user-added prompt ${selectedPrompt.id} via userPromptApi`);
+        } else {
+          // 일반 프롬프트: AppContext의 서버 API 래퍼 호출
+          await handleUpdateVariableDefaultValue(selectedPrompt.id, variableName, newValue);
+          console.log(`[handleSaveVariableDefaultValue] Updated server prompt ${selectedPrompt.id} via AppContext handler`);
+        }
+
+        // AppContext 상태 업데이트
+        updatePromptItem(selectedPrompt.id, { variables: updatedVariables });
+        // 로컬 상태 업데이트
+        setVariableValues(prev => ({ ...prev, [variableName]: newValue }));
+
+        setSavingStates(prev => ({ ...prev, [variableName]: 'saved' }));
+        setTimeout(() => {
+          setSavingStates(prev => ({ ...prev, [variableName]: 'idle' }));
+        }, 2000);
+
+      } catch (error) {
+        console.error(`변수 기본값 저장 오류 (ID: ${selectedPrompt.id}):`, error);
+        setSavingStates(prev => ({ ...prev, [variableName]: 'error' }));
+        setTimeout(() => {
+          setSavingStates(prev => ({ ...prev, [variableName]: 'idle' }));
+        }, 3000);
+      }
+    } else {
+      setSavingStates(prev => ({ ...prev, [variableName]: 'saved' }));
+      setTimeout(() => {
+        setSavingStates(prev => ({ ...prev, [variableName]: 'idle' }));
+      }, 1500);
+    }
+  }, [selectedPrompt, variableValues, handleUpdateVariableDefaultValue, updatePromptItem]);
   
   // 텍스트 에디터 열기
   const openTextEditor = (variable) => {
@@ -342,130 +343,23 @@ const PromptDetailModal = () => {
     setTextEditorValue('');
   };
   
-  // 텍스트 에디터 저장
+  // 텍스트 에디터 '적용' 버튼
   const saveTextEditorValue = () => {
     if (editingVariable) {
-      // handleVariableChange 함수 인라인 정의
-      const updateVariableValue = (name, value) => {
-        setVariableValues(prev => {
-          const newValues = {
-            ...prev,
-            [name]: value
-          };
-          
-          // 즉시 프롬프트 내용 업데이트 (selectedPrompt가 있을 경우만)
-          if (selectedPrompt && selectedPrompt.content) {
-            const processed = applyVariables(selectedPrompt.content, newValues);
-            setProcessedContent(processed);
-          }
-          
-          return newValues;
-        });
-        
-        // 값이 변경되면 해당 변수의 저장 상태를 idle로 설정
-        setSavingStates(prev => ({
-          ...prev,
-          [name]: 'idle'
-        }));
-      };
-      
-      // 인라인 정의한 함수 호출
-      updateVariableValue(editingVariable.name, textEditorValue);
+      handleVariableChange(editingVariable.name, textEditorValue);
     }
     closeTextEditor();
   };
   
-  // 텍스트 에디터에서 기본값 저장 버튼
+  // 텍스트 에디터 '기본값으로 저장' 버튼
   const saveTextEditorValueAsDefault = async () => {
     if (!editingVariable || !selectedPrompt) return;
-    
     try {
-      // handleVariableChange 함수 인라인 정의
-      const updateVariableValue = (name, value) => {
-        setVariableValues(prev => {
-          const newValues = {
-            ...prev,
-            [name]: value
-          };
-          
-          // 즉시 프롬프트 내용 업데이트
-          if (selectedPrompt && selectedPrompt.content) {
-            const processed = applyVariables(selectedPrompt.content, newValues);
-            setProcessedContent(processed);
-          }
-          
-          return newValues;
-        });
-        
-        // 값이 변경되면 해당 변수의 저장 상태를 idle로 설정
-        setSavingStates(prev => ({
-          ...prev,
-          [name]: 'idle'
-        }));
-      };
-      
-      // 변수 값을 업데이트
-      updateVariableValue(editingVariable.name, textEditorValue);
-      
-      // handleSaveVariableDefaultValue 함수 인라인 정의
-      const saveVariableDefaultValue = async (variableName) => {
-        if (!selectedPrompt) return;
-        
-        // 저장 상태를 'saving'으로 변경
-        setSavingStates(prev => ({
-          ...prev,
-          [variableName]: 'saving'
-        }));
-        
-        try {
-          const currentValue = variableValues[variableName] || '';
-          
-          // API 호출하여 변수 기본값 업데이트
-          await handleUpdateVariableDefaultValue(
-            selectedPrompt.id,
-            variableName,
-            currentValue
-          );
-          
-          // 저장 성공 시 상태를 'saved'로 변경
-          setSavingStates(prev => ({
-            ...prev,
-            [variableName]: 'saved'
-          }));
-          
-          // 3초 후에 'idle' 상태로 되돌림
-          setTimeout(() => {
-            setSavingStates(prev => ({
-              ...prev,
-              [variableName]: 'idle'
-            }));
-          }, 3000);
-        } catch (error) {
-          console.error('변수 기본값 저장 오류:', error);
-          
-          // 저장 실패 시 상태를 'error'로 변경
-          setSavingStates(prev => ({
-            ...prev,
-            [variableName]: 'error'
-          }));
-          
-          // 3초 후에 'idle' 상태로 되돌림
-          setTimeout(() => {
-            setSavingStates(prev => ({
-              ...prev,
-              [variableName]: 'idle'
-            }));
-          }, 3000);
-        }
-      };
-      
-      // 저장 프로세스 시작
-      await saveVariableDefaultValue(editingVariable.name);
-      
-      // 에디터 닫기
+      // 수정된 handleSaveVariableDefaultValue 호출 확인
+      await handleSaveVariableDefaultValue(editingVariable.name, textEditorValue);
       closeTextEditor();
     } catch (error) {
-      console.error('텍스트 에디터에서 변수 저장 오류:', error);
+      console.error('텍스트 에디터에서 기본값 저장 오류:', error);
     }
   };
   
@@ -910,45 +804,44 @@ const PromptDetailModal = () => {
                               <label className="block text-sm font-medium text-gray-700 mb-1">
                                 {variable.name}
                               </label>
+                              {/* UI 재적용 */} 
                               <div className="flex w-full">
                                 <input
                                   type="text"
                                   value={variableValues[variable.name] || ''}
                                   onChange={(e) => handleVariableChange(variable.name, e.target.value)}
-                                  onBlur={(e) => handleVariableChange(variable.name, e.target.value)}
                                   placeholder={variable.default_value || `${variable.name} 값 입력`}
                                   className="flex-1 px-2 py-1 text-sm border rounded-l-md focus:outline-none focus:ring-1 focus:ring-blue-300 focus:border-blue-300"
                                 />
-                                {/* 긴 텍스트 편집 버튼 */}
+                                {/* 저장 버튼 (PromptOverlayModal과 동일하게) */} 
                                 <button
-                                  onClick={() => openTextEditor(variable)}
-                                  title="텍스트 에디터에서 편집"
-                                  className="px-2 py-1 border-y border-r rounded-r-md hover:bg-gray-100 group"
+                                  type="button"
+                                  onClick={() => handleSaveVariableDefaultValue(variable.name)}
+                                  className={`px-2 py-1 border border-l-0 rounded-none text-xs 
+                                    ${savingStates[variable.name] === 'saved' ? 'bg-green-50 text-green-600' : 
+                                      savingStates[variable.name] === 'error' ? 'bg-red-50 text-red-600' : 
+                                      savingStates[variable.name] === 'saving' ? 'bg-blue-50 text-blue-400' : 
+                                      'bg-gray-50 hover:bg-gray-100 text-gray-600'}`}
+                                  title="기본값으로 저장"
+                                  disabled={savingStates[variable.name] === 'saving'}
                                 >
-                                  <span className="text-gray-500 group-hover:text-gray-700">📝</span>
+                                  {savingStates[variable.name] === 'saved' ? (
+                                    <span>✓</span>
+                                  ) : savingStates[variable.name] === 'saving' ? (
+                                    <div className="w-3 h-3 border-2 border-t-blue-500 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <span>💾</span>
+                                  )}
                                 </button>
-                                {/* 저장 버튼 */}
-                                {savingStates[variable.name] === 'idle' ? (
-                                  <button
-                                    onClick={() => handleSaveVariableDefaultValue(variable.name)}
-                                    title="기본값으로 저장"
-                                    className="ml-1 px-2 py-1 border rounded-md hover:bg-blue-50 group"
-                                  >
-                                    <span className="text-gray-500 group-hover:text-blue-500">💾</span>
-                                  </button>
-                                ) : savingStates[variable.name] === 'saving' ? (
-                                  <button disabled className="ml-1 px-2 py-1 border rounded-md bg-gray-50">
-                                    <span className="text-blue-500 animate-pulse">⏳</span>
-                                  </button>
-                                ) : savingStates[variable.name] === 'saved' ? (
-                                  <button disabled className="ml-1 px-2 py-1 border rounded-md bg-green-50">
-                                    <span className="text-green-500">✓</span>
-                                  </button>
-                                ) : (
-                                  <button disabled className="ml-1 px-2 py-1 border rounded-md bg-red-50">
-                                    <span className="text-red-500">✕</span>
-                                  </button>
-                                )}
+                                {/* 텍스트 에디터 버튼 */} 
+                                <button
+                                  type="button"
+                                  onClick={() => openTextEditor(variable)}
+                                  className="px-2 py-1 border border-l-0 rounded-r-md bg-gray-50 hover:bg-gray-100 text-gray-600 text-xs"
+                                  title="텍스트 에디터 열기"
+                                >
+                                  <span>📝</span>
+                                </button>
                               </div>
                             </div>
                           ))}
@@ -1222,10 +1115,10 @@ const PromptDetailModal = () => {
           </div>
         </div>
         
-        {/* 텍스트 에디터 모달 - 다시 추가 */}
+        {/* 텍스트 에디터 모달 */}
         {isTextEditorOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-60">
-            <div ref={textEditorRef} className="bg-white rounded-lg shadow-xl w-2/3 max-w-2xl flex flex-col">
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[100]" onClick={closeTextEditor}>
+            <div ref={textEditorRef} className="bg-white rounded-lg shadow-xl w-2/3 max-w-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
               {/* 에디터 헤더 */}
               <div className="flex justify-between items-center border-b px-4 py-2">
                 <h3 className="font-medium">
@@ -1247,7 +1140,6 @@ const PromptDetailModal = () => {
                   placeholder="내용을 입력하세요..."
                 />
               </div>
-              {/* 에디터 푸터 */}
               <div className="border-t p-3 flex justify-end space-x-2">
                 <button
                   onClick={closeTextEditor}
@@ -1265,7 +1157,7 @@ const PromptDetailModal = () => {
                   onClick={saveTextEditorValue}
                   className="px-3 py-1.5 rounded-lg bg-blue-500 text-white hover:bg-blue-600"
                 >
-                  적용
+                  적용 (현재만)
                 </button>
               </div>
             </div>

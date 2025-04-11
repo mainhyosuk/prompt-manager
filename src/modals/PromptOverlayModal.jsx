@@ -324,74 +324,65 @@ const PromptOverlayModal = ({ isOpen, onClose, prompt }) => {
     }
   };
 
-  // 변수 기본값 저장
-  const handleSaveVariableDefaultValue = async (variableName) => {
-    if (!prompt || !variableName) return;
-    
-    const value = variableValues[variableName] || '';
-    
-    // 저장 상태 업데이트
-    setSavingStates(prev => ({
-      ...prev,
-      [variableName]: 'saving'
-    }));
-    
-    try {
-      // 변수 기본값 저장 API 호출
-      await handleUpdateVariableDefaultValue(prompt.id, variableName, value);
-      
-      // 저장 성공 표시
-      setSavingStates(prev => ({
-        ...prev,
-        [variableName]: 'saved'
-      }));
-      
-      // 3초 후 상태 초기화
-      setTimeout(() => {
-        setSavingStates(prev => ({
-          ...prev,
-          [variableName]: 'idle'
-        }));
-      }, 2000);
-    } catch (error) {
-      console.error('변수 기본값 저장 오류:', error);
-      
-      // 저장 실패 표시
-      setSavingStates(prev => ({
-        ...prev,
-        [variableName]: 'error'
-      }));
-      
-      // 3초 후 상태 초기화
-      setTimeout(() => {
-        setSavingStates(prev => ({
-          ...prev,
-          [variableName]: 'idle'
-        }));
-      }, 2000);
+  // 변수 기본값 저장 핸들러 추가 (UserPromptDetailModal 로직 기반, 서버 API 사용)
+  const handleSaveVariableValue = useCallback(async (variableName, explicitValue = null) => {
+    if (!prompt?.id || !variableName || !prompt.variables) {
+      console.error('저장에 필요한 정보 부족');
+      return;
     }
-  };
+    const variableIndex = prompt.variables.findIndex(v => v.name === variableName);
+    if (variableIndex === -1) {
+      console.error(`변수 '${variableName}'을 찾을 수 없습니다.`);
+      return;
+    }
+    const newValue = explicitValue !== null ? explicitValue : (variableValues[variableName] || '');
 
-  // 변수값 업데이트
-  const handleVariableChange = (name, value) => {
-    if (!name) return; // 변수명이 없으면 처리하지 않음
-    
-    setVariableValues(prev => {
-      const newValues = {
-        ...prev,
-        [name]: value
-      };
-      
-      // 즉시 프롬프트 내용 업데이트
-      if (prompt && prompt.content) {
-        const processed = applyVariables(prompt.content, newValues);
-        setProcessedContent(processed);
+    // 변경된 경우에만 업데이트
+    if (newValue !== prompt.variables[variableIndex].default_value) {
+      setSavingStates(prev => ({ ...prev, [variableName]: 'saving' }));
+      try {
+        // 1. 서버 API 호출하여 기본값 업데이트 (AppContext 함수 사용)
+        await handleUpdateVariableDefaultValue(prompt.id, variableName, newValue);
+
+        // 2. AppContext 상태 업데이트 (변경된 default_value 포함)
+        const updatedVariables = prompt.variables.map((v, index) => {
+          if (index === variableIndex) {
+            return { ...v, default_value: newValue };
+          }
+          return v;
+        });
+        updatePromptItem(prompt.id, { variables: updatedVariables });
+
+        // 3. 로컬 상태 업데이트 (variableValues)
+        setVariableValues(prev => ({ ...prev, [variableName]: newValue }));
+
+        setSavingStates(prev => ({ ...prev, [variableName]: 'saved' }));
+        setTimeout(() => {
+          setSavingStates(prev => ({ ...prev, [variableName]: 'idle' }));
+        }, 2000);
+
+      } catch (error) {
+        console.error('일반 프롬프트 변수 기본값 저장 오류:', error);
+        setSavingStates(prev => ({ ...prev, [variableName]: 'error' }));
+        setTimeout(() => {
+          setSavingStates(prev => ({ ...prev, [variableName]: 'idle' }));
+        }, 3000);
       }
-      
-      return newValues;
-    });
-    
-    // 값이 변경되면 해당 변수의 저장 상태를 idle로 설정
+    } else {
+      // 이미 동일하면 UI 피드백만 제공
+      setSavingStates(prev => ({ ...prev, [variableName]: 'saved' }));
+      setTimeout(() => {
+        setSavingStates(prev => ({ ...prev, [variableName]: 'idle' }));
+      }, 1500);
+    }
+  }, [prompt, variableValues, handleUpdateVariableDefaultValue, updatePromptItem]);
+
+  // 변수 값 변경 핸들러 (UserPromptDetailModal과 동일)
+  const handleVariableChange = (name, value) => {
+    setVariableValues(prev => ({
+      ...prev,
+      [name]: value
+    }));
     setSavingStates(prev => ({
       ...prev,
       [name]: 'idle'
@@ -400,8 +391,6 @@ const PromptOverlayModal = ({ isOpen, onClose, prompt }) => {
 
   // 텍스트 에디터 열기
   const openTextEditor = (variable) => {
-    if (!variable || !variable.name) return;
-    
     setEditingVariable(variable);
     setTextEditorValue(variableValues[variable.name] || '');
     setIsTextEditorOpen(true);
@@ -410,32 +399,31 @@ const PromptOverlayModal = ({ isOpen, onClose, prompt }) => {
   // 텍스트 에디터 닫기
   const closeTextEditor = (e) => {
     if (e) e.stopPropagation();
-    
+    setIsTextEditorOpen(false);
     setEditingVariable(null);
     setTextEditorValue('');
-    setIsTextEditorOpen(false);
   };
   
-  // 텍스트 에디터 값 저장
+  // 텍스트 에디터 '적용' 버튼 (현재만 적용)
   const saveTextEditorValue = (e) => {
     if (e) e.stopPropagation();
-    if (!editingVariable) return;
-    
-    handleVariableChange(editingVariable.name, textEditorValue);
+    if (editingVariable) {
+      handleVariableChange(editingVariable.name, textEditorValue);
+    }
     closeTextEditor();
   };
   
-  // 텍스트 에디터 값을 기본값으로 저장
+  // 텍스트 에디터 '기본값으로 저장' 버튼 수정
   const saveTextEditorValueAsDefault = async (e) => {
     if (e) e.stopPropagation();
     if (!editingVariable || !prompt) return;
-    
-    handleVariableChange(editingVariable.name, textEditorValue);
-    
-    // 기본값으로 저장
-    await handleSaveVariableDefaultValue(editingVariable.name);
-    
-    closeTextEditor();
+    try {
+      // handleSaveVariableValue 호출 시 textEditorValue 전달
+      await handleSaveVariableValue(editingVariable.name, textEditorValue);
+      closeTextEditor();
+    } catch (error) {
+      console.error('텍스트 에디터에서 기본값 저장 오류:', error);
+    }
   };
 
   // 확대 보기 핸들러
@@ -537,82 +525,50 @@ const PromptOverlayModal = ({ isOpen, onClose, prompt }) => {
                 <div className="flex items-center justify-between">
                   <h3 className="font-medium text-gray-800 mb-1">변수 입력</h3>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-32 overflow-y-auto pr-2">
-                  {prompt.variables.map((variable, index) => {
-                    if (!variable || !variable.name) return null;
-                    
-                    return (
-                      <div 
-                        key={`${variable.id || variable.name}-${index}`} 
-                        className="flex flex-col"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                        }}
-                      >
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          {variable.name}
-                        </label>
-                        <div className="flex w-full">
-                          <input
-                            type="text"
-                            value={variableValues[variable.name] || ''}
-                            onChange={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleVariableChange(variable.name, e.target.value);
-                            }}
-                            onBlur={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleVariableChange(variable.name, e.target.value);
-                            }}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                            }}
-                            placeholder={variable.default_value || `${variable.name} 값 입력`}
-                            className="flex-1 px-3 py-1 border rounded-l text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-                          />
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleSaveVariableDefaultValue(variable.name);
-                            }}
-                            className={`px-3 py-1 border border-l-0 rounded-none 
-                              ${savingStates[variable.name] === 'saved' ? 'bg-green-50 text-green-600' : 
-                                savingStates[variable.name] === 'error' ? 'bg-red-50 text-red-600' : 
-                                savingStates[variable.name] === 'saving' ? 'bg-blue-50 text-blue-400' : 
-                                'bg-gray-50 hover:bg-gray-100 text-gray-600'}`}
-                            title="변수값을 기본값으로 저장"
-                            disabled={savingStates[variable.name] === 'saving'}
-                          >
-                            {savingStates[variable.name] === 'saved' ? (
-                              <span>✓</span>
-                            ) : savingStates[variable.name] === 'saving' ? (
-                              <div className="w-4 h-4 border-2 border-t-blue-500 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin" />
-                            ) : (
-                              <span>💾</span>
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              openTextEditor(variable);
-                            }}
-                            className="px-3 py-1 border border-l-0 rounded-r bg-gray-50 hover:bg-gray-100 text-gray-600"
-                            title="텍스트 에디터 열기"
-                          >
-                            <span>📝</span>
-                          </button>
-                        </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {prompt.variables.map((variable, index) => (
+                    <div key={`${variable.id || variable.name}-${index}`} className="border rounded-md p-2 bg-white">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        {variable.name}
+                      </label>
+                      <div className="flex w-full">
+                        <input
+                          type="text"
+                          value={variableValues[variable.name] || ''}
+                          onChange={(e) => handleVariableChange(variable.name, e.target.value)}
+                          className="flex-1 px-2 py-1 text-sm border rounded-l-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          placeholder={`{${variable.name}} 값 입력...`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSaveVariableValue(variable.name)}
+                          className={`px-2 py-1 border border-l-0 rounded-none text-xs 
+                            ${savingStates[variable.name] === 'saved' ? 'bg-green-50 text-green-600' : 
+                              savingStates[variable.name] === 'error' ? 'bg-red-50 text-red-600' : 
+                              savingStates[variable.name] === 'saving' ? 'bg-blue-50 text-blue-400' : 
+                              'bg-gray-50 hover:bg-gray-100 text-gray-600'}`}
+                          title="기본값으로 저장"
+                          disabled={savingStates[variable.name] === 'saving'}
+                        >
+                          {savingStates[variable.name] === 'saved' ? (
+                            <span>✓</span>
+                          ) : savingStates[variable.name] === 'saving' ? (
+                            <div className="w-3 h-3 border-2 border-t-blue-500 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin" />
+                          ) : (
+                            <span>💾</span>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openTextEditor(variable)}
+                          className="px-2 py-1 border border-l-0 rounded-r-md bg-gray-50 hover:bg-gray-100 text-gray-600 text-xs"
+                          title="텍스트 에디터 열기"
+                        >
+                          <span>📝</span>
+                        </button>
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -774,75 +730,45 @@ const PromptOverlayModal = ({ isOpen, onClose, prompt }) => {
         
         {/* 텍스트 에디터 모달 */}
         {isTextEditorOpen && (
-          <div 
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                e.stopPropagation();
-                closeTextEditor();
-              }
-            }}
-          >
-            <div 
-              ref={textEditorRef} 
-              className="bg-white rounded-lg shadow-xl w-2/3 max-w-2xl flex flex-col"
-              onClick={(e) => e.stopPropagation()}
-            >
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-60" onClick={closeTextEditor}>
+            <div ref={textEditorRef} className="bg-white rounded-lg shadow-xl w-2/3 max-w-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center border-b px-4 py-2">
                 <h3 className="font-medium">
                   "{editingVariable?.name}" 변수 편집
                 </h3>
                 <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeTextEditor();
-                  }}
+                  onClick={closeTextEditor}
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <span>✕</span>
                 </button>
               </div>
-              
               <div className="p-4">
                 <textarea
                   value={textEditorValue}
-                  onChange={(e) => {
-                    e.stopPropagation();
-                    setTextEditorValue(e.target.value);
-                  }}
-                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => setTextEditorValue(e.target.value)}
                   className="w-full h-56 px-3 py-2 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-300"
                   placeholder="내용을 입력하세요..."
                 />
               </div>
-              
               <div className="border-t p-3 flex justify-end space-x-2">
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeTextEditor();
-                  }}
+                  onClick={closeTextEditor}
                   className="px-3 py-1.5 border rounded-lg text-gray-600 hover:bg-gray-50"
                 >
                   취소
                 </button>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    saveTextEditorValueAsDefault(e);
-                  }}
+                  onClick={saveTextEditorValueAsDefault} 
                   className="px-3 py-1.5 border rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100"
                 >
-                  기본값으로 저장
+                  기본값으로 저장 
                 </button>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    saveTextEditorValue(e);
-                  }}
+                  onClick={saveTextEditorValue}
                   className="px-3 py-1.5 rounded-lg bg-blue-500 text-white hover:bg-blue-600"
                 >
-                  적용
+                  적용 (현재만)
                 </button>
               </div>
             </div>

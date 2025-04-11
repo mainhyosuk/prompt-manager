@@ -3,6 +3,8 @@
  */
 import { API_HEADERS, API_FETCH_OPTIONS } from './config';
 
+const BASE_URL = '/api';
+
 // 모든 컬렉션 가져오기
 export const getCollections = async () => {
   try {
@@ -125,16 +127,20 @@ export const reorderCollectionPrompts = async (collectionId, promptIds) => {
   }
 };
 
-// 유사 프롬프트 가져오기
+// 유사 프롬프트 목록 가져오기
 export const getSimilarPrompts = async (promptId) => {
+  // 사용자 추가 프롬프트인 경우 API 호출 방지
+  if (typeof promptId === 'string' && promptId.startsWith('user-added-')) {
+    console.log('[DEBUG] getSimilarPrompts: Skipping API call for user-added prompt:', promptId);
+    return Promise.resolve([]); // 빈 배열 즉시 반환
+  }
+  
   try {
-    const response = await fetch(`/api/prompts/${promptId}/similar`, API_FETCH_OPTIONS);
-    
+    const response = await fetch(`${BASE_URL}/prompts/${promptId}/similar`);
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || '유사 프롬프트를 불러오는데 실패했습니다.');
+      // 405 오류도 여기서 잡힐 수 있음
+      throw new Error('유사 프롬프트를 불러오는데 실패했습니다.');
     }
-    
     return await response.json();
   } catch (error) {
     console.error('유사 프롬프트 불러오기 오류:', error);

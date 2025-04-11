@@ -169,42 +169,43 @@ export const updateUserAddedPrompt = async (promptId, promptData) => {
   try {
     const userPrompts = getUserPromptsFromStorage();
     let updatedPrompt = null;
-    
+
     // 모든 부모 ID 순회
     for (const parentId in userPrompts) {
       const parentPrompts = userPrompts[parentId];
       const promptIndex = parentPrompts.findIndex(p => p.id === promptId);
-      
+
       if (promptIndex !== -1) {
-        // 프롬프트 업데이트 - 태그, 변수, 폴더 정보 등 모든 필드 보존
+        // 프롬프트 업데이트 - 전달받은 promptData를 기존 데이터와 병합
         updatedPrompt = {
           ...parentPrompts[promptIndex],
           ...promptData,
+          // 명시적 필드 병합 로직 유지
           title: promptData.title || parentPrompts[promptIndex].title,
           content: promptData.content || parentPrompts[promptIndex].content,
-          memo: promptData.memo || parentPrompts[promptIndex].memo,
+          memo: typeof promptData.memo !== 'undefined' ? promptData.memo : parentPrompts[promptIndex].memo,
           variables: promptData.variables || parentPrompts[promptIndex].variables || [],
           tags: promptData.tags || parentPrompts[promptIndex].tags || [],
-          folder_id: promptData.folder_id,
-          folder: promptData.folder,
+          folder_id: typeof promptData.folder_id !== 'undefined' ? promptData.folder_id : parentPrompts[promptIndex].folder_id,
+          folder: typeof promptData.folder !== 'undefined' ? promptData.folder : parentPrompts[promptIndex].folder,
           is_favorite: typeof promptData.is_favorite !== 'undefined' ? promptData.is_favorite : parentPrompts[promptIndex].is_favorite,
           updated_at: new Date().toISOString(),
-          is_user_added: true // is_user_added 속성 보존
+          is_user_added: true
         };
-        
+
         parentPrompts[promptIndex] = updatedPrompt;
         saveUserPromptsToStorage(userPrompts);
         break;
       }
     }
-    
+
     if (!updatedPrompt) {
       throw new Error(`프롬프트 ID ${promptId}를 찾을 수 없습니다.`);
     }
-    
-    // 인위적인 지연을 줘서 비동기 호출을 시뮬레이션
+
+    // 인위적인 지연
     await new Promise(resolve => setTimeout(resolve, 200));
-    
+
     return updatedPrompt;
   } catch (error) {
     console.error('사용자 추가 프롬프트 업데이트 오류:', error);
