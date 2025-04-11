@@ -1,3 +1,83 @@
+## [v1.51] - 2025-04-11
+
+### 주요 개선사항
+
+- 프롬프트 필드 가독성 및 UI 개선:
+    - 프롬프트 영역에 하이라이트 기능 추가로 가독성 향상
+    - 모든 프롬프트 영역(기본/사용자 추가)에 변수 하이라이트 일관적용
+    - 줄바꿈 처리 개선으로 텍스트 포맷 유지 기능 강화
+    - 확장 아이콘 위치 고정으로 일관된 사용자 경험 제공
+
+### 문제 원인 분석
+
+- 프롬프트 영역 텍스트 표시 문제:
+    - 원본 프롬프트 영역에서 변수 하이라이트 누락으로 가독성 저하
+    - whitespace-pre-wrap 클래스 누락으로 줄바꿈 처리 불일치
+    - 사용자 추가 탭과 기본 탭 간 하이라이트 적용 불일치
+    - 확장 아이콘 위치 변동으로 인한 사용자 혼란
+
+### 코드 변경 사항
+
+- src/modals/PromptDetailModal.jsx:
+    - HighlightedContent 컴포넌트에 whitespace-pre-wrap 클래스 추가:
+        ```jsx
+        <div className="whitespace-pre-wrap">
+          {parts.map((part, index) => {
+            // ... existing code ...
+          })}
+        </div>
+        ```
+    - 원본 프롬프트 영역에 HighlightedContent 적용:
+        ```jsx
+        <HighlightedContent 
+          content={selectedPrompt.content}
+          variableValues={{}} // 빈 객체 전달하여 변수값은 적용하지 않고 원본 텍스트만 유지
+        />
+        ```
+    - 확장 아이콘 배치 최적화:
+        - 부모 컨테이너에 relative 클래스 추가
+        - 아이콘 버튼을 컨텐츠 영역 밖으로 이동하여 스크롤과 독립적으로 배치
+        - 원본/변수적용 프롬프트 영역 모두에 동일한 패턴 적용
+
+- src/modals/UserPromptDetailModal.jsx:
+    - 원본 프롬프트 영역에 하이라이트 적용 로직 추가:
+        ```jsx
+        {hasVariables ? (
+          <HighlightedContent 
+            content={prompt.content} 
+            variableValues={{}} // 빈 객체 전달하여 변수값은 적용하지 않고 원본 변수만 하이라이트
+          />
+        ) : (
+          <div className="whitespace-pre-wrap text-sm">{prompt.content || '내용이 없습니다.'}</div>
+        )}
+        ```
+    - 확장 모달에서도 하이라이트 적용:
+        ```jsx
+        highlightedContent={
+          <HighlightedContent
+            content={prompt?.content}
+            variableValues={expandViewTitle === '원본 프롬프트' ? {} : variableValues}
+          />
+        }
+        ```
+
+### 기술적 개선
+
+- 일관된 UI 패턴 적용:
+    - 동일한 UI 요소(프롬프트 영역, 확장 버튼)에 일관된 스타일 및 위치 적용
+    - 컴포넌트 재사용을 통한 코드 중복 감소
+    - CSS 클래스 통일로 디자인 시스템 일관성 확보
+
+- 렌더링 최적화:
+    - 변수 하이라이트 컴포넌트 재사용으로 렌더링 로직 통합
+    - 스크롤 영역과 고정 요소 분리로 성능 개선
+    - 유연한 레이아웃 구조로 다양한 화면 크기 대응력 향상
+
+- 코드 품질 향상:
+    - 컴포넌트 구조 개선으로 코드 가독성 증대
+    - 조건부 렌더링 최적화로 불필요한 중첩 감소
+    - 유사 기능 통합으로 유지보수성 향상
+
 ## [v1.5] - 2025-04-11
 
 ### 주요 개선사항
