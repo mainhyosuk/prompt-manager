@@ -3,7 +3,7 @@ import { Star, Clock, Edit, Trash2, User, Copy, Layers } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { copyToClipboard } from '../../utils/clipboard';
 
-const PromptCard = ({ prompt }) => {
+const PromptCard = ({ prompt, onClick, isMultiSelectMode }) => {
   const { 
     getTagColorClasses, 
     handleViewPrompt,
@@ -100,9 +100,10 @@ const PromptCard = ({ prompt }) => {
   return (
     <div 
       className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer relative group"
-      onClick={() => handleViewPrompt(prompt)}
+      onClick={onClick}
     >
-      {renderActionButtons()}
+      {/* 다중 선택 모드가 아닐 때만 액션 버튼 렌더링 */}
+      {!isMultiSelectMode && renderActionButtons()}
       
       <div className="flex items-start mb-2">
         <h3 className="font-medium text-lg mr-2 flex-grow">{prompt.title}</h3>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus } from 'lucide-react';
-import PromptItemCard from './PromptItemCard';
+import BasePromptCard from '../cards/BasePromptCard';
 import { 
   getCollections, 
   createCollection, 
@@ -294,11 +294,11 @@ const CollectionsList = ({ selectedPromptId, onPromptSelect }) => {
       ) : (
         <div className="space-y-2">
           {prompts.map(prompt => (
-            <PromptItemCard
+            <BasePromptCard
               key={prompt.id}
               prompt={prompt}
-              onRemoveFromCollection={handleRemovePromptFromCollection}
               onClick={onPromptSelect}
+              onRemoveFromCollection={handleRemovePromptFromCollection}
             />
           ))}
         </div>

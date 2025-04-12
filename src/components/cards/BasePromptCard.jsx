@@ -3,7 +3,7 @@ import { useAppContext } from '../../context/AppContext';
 import { copyToClipboard } from '../../utils/clipboard';
 import { Download, Copy, Star, Upload, Trash2, ExternalLink } from 'lucide-react';
 
-const PromptItemCard = ({ 
+const BasePromptCard = ({ 
   prompt, 
   onRemoveFromCollection,
   onClick,
@@ -12,7 +12,13 @@ const PromptItemCard = ({
   customExportHandler, // 내보내기 핸들러 prop 추가
   isVersionTab = false, // 버전 관리 탭에서 사용되는지 여부
   cardType = 'default', // 카드 타입 prop 추가 (default, similar)
-  onSwitchPrompt // 모달 전환 핸들러 prop 추가
+  onSwitchPrompt, // 모달 전환 핸들러 prop 추가
+  onDragStart, // 사용자 추가 리스트에서 사용
+  onDragOver, // 사용자 추가 리스트에서 사용
+  onDragEnd, // 사용자 추가 리스트에서 사용
+  onDrop, // 사용자 추가 리스트에서 사용
+  isDragging, // 사용자 추가 리스트에서 사용
+  isDraggingOver // 사용자 추가 리스트에서 사용
 }) => {
   const { getTagColorClasses, handleToggleFavorite, handleRecordUsage, handleEditPrompt } = useAppContext();
   
@@ -203,4 +209,4 @@ const PromptItemCard = ({
   );
 };
 
-export default PromptItemCard;
+export default BasePromptCard;

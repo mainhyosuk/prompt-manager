@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import PromptItemCard from './PromptItemCard';
+// import PromptItemCard from './PromptItemCard'; // 이전 import 제거
+import BasePromptCard from '../cards/BasePromptCard'; // 새로운 BasePromptCard import
 import { getRecentPrompts } from '../../api/collectionApi';
 
 const RecentPromptsList = ({ selectedPromptId, onPromptSelect }) => {
@@ -68,7 +69,8 @@ const RecentPromptsList = ({ selectedPromptId, onPromptSelect }) => {
       ) : (
         <div className="space-y-2">
           {prompts.map(prompt => (
-            <PromptItemCard
+            // PromptItemCard 대신 BasePromptCard 사용
+            <BasePromptCard
               key={prompt.id}
               prompt={prompt}
               onClick={onPromptSelect}

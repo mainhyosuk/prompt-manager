@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import PromptItemCard from './PromptItemCard';
+import BasePromptCard from '../cards/BasePromptCard';
 import { Plus } from 'lucide-react';
 import { getCollections, createCollection, deleteCollection, addPromptToCollection, removePromptFromCollection, renameCollection, reorderCollections } from '../../api/collectionApi';
 import { getCollectionPrompts, getSimilarPrompts, getRecentPrompts } from '../../api/collectionApi';
@@ -313,14 +313,13 @@ const VersionManagementList = ({ selectedPromptId, onPromptSelect }) => {
   
   // 프롬프트 카드용 커스텀 렌더링 함수 (버전 관리용 오버라이드)
   const renderPromptItemCard = (prompt) => {
+    if (!prompt) return null;
+
     return (
-      <PromptItemCard
+      <BasePromptCard
         key={prompt.id}
         prompt={prompt}
         onClick={handleCardClick}
-        customEditHandler={(e) => handleEditButtonClick(prompt, e)}
-        customDeleteHandler={(e) => handleVersionDelete(prompt, e)}
-        isVersionTab={true}
       />
     );
   };
@@ -773,6 +772,8 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
   // --- End Drag and Drop Handlers ---
 
   const renderPromptItemCard = useCallback((prompt) => {
+    if (!prompt) return null;
+    
     const isDraggingOver = dragOverId === prompt.id;
     const showMarker = isDraggingOver && dropPos;
     const isBeingDragged = dragItem.current === prompt.id;
@@ -798,7 +799,7 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
           <div className="absolute top-0 left-0 right-0 h-1 bg-blue-500 z-10 pointer-events-none" />
         )}
         <div style={{ pointerEvents: isDraggingOver ? 'none' : 'auto' }}>
-          <PromptItemCard
+          <BasePromptCard
             prompt={prompt}
             onClick={handleCardClick}
             customEditHandler={(e) => handlePromptEdit(prompt, e)}

@@ -7,7 +7,7 @@ import { copyToClipboard } from '../utils/clipboard';
 import { updatePromptMemo } from '../api/promptApi';
 import { getSimilarPrompts } from '../api/collectionApi';
 import PromptPanel from '../components/promptPanel/PromptPanel';
-import PromptItemCard from '../components/promptPanel/PromptItemCard';
+import BasePromptCard from '../components/cards/BasePromptCard';
 import { ChevronLeft, GripVertical, Maximize2 } from 'lucide-react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import PromptExpandView from '../components/common/PromptExpandView';
@@ -1059,9 +1059,9 @@ const PromptDetailModal = () => {
               <div className="flex overflow-x-auto space-x-3 pb-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 snap-x overflow-y-hidden" style={{ scrollbarWidth: 'thin', scrollBehavior: 'smooth' }}>
                 {similarPrompts.map(prompt => (
                   <div key={prompt.id} className="flex-shrink-0 w-80 snap-start">
-                    <PromptItemCard 
+                    <BasePromptCard
                       prompt={prompt}
-                      onClick={(p) => openOverlayModal(p)} 
+                      onClick={(p) => handleViewSimilarPrompt(p)}
                       cardType="similar"
                       onSwitchPrompt={handleSwitchToPrompt}
                     />
