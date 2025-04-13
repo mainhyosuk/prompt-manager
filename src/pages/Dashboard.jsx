@@ -6,6 +6,7 @@ import PromptList from '../components/prompts/PromptList';
 import { useAppContext } from '../context/AppContext';
 import { useMultiSelect } from '../hooks/useMultiSelect';
 import { Trash2, Folder } from 'lucide-react';
+import FolderSelectModal from '../components/modals/FolderSelectModal';
 
 const Dashboard = () => {
   const { 
@@ -16,6 +17,8 @@ const Dashboard = () => {
     error,
     loadData,
     handleViewPrompt,
+    handleDeleteMultiplePrompts,
+    handleMoveMultiplePrompts
   } = useAppContext();
   
   // 필터링된 프롬프트 목록 가져오기
@@ -35,31 +38,59 @@ const Dashboard = () => {
     selectAll,
   } = useMultiSelect(filteredPrompts);
 
-  // Placeholder for batch delete function
+  // 폴더 선택 모달 상태 추가
+  const [isFolderSelectModalOpen, setIsFolderSelectModalOpen] = useState(false);
+
+  // Batch delete function
   const handleDeleteSelected = async () => {
-    // 0개 선택 시 알림 추가
+    // 0개 선택 시 알림은 유지
     if (selectedIds.length === 0) {
       alert('삭제할 프롬프트를 선택해주세요.');
       return;
     }
-    // 기존 확인 로직 유지
-    if (window.confirm(`${selectedIds.length}개의 프롬프트를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) {
-      console.log("Deleting prompts:", selectedIds); // 실제 구현 시 API 호출로 대체
-      setSelectedIds([]);
-      alert(`${selectedIds.length}개의 프롬프트가 삭제되었습니다.`); // 알림 메시지 수정 필요 (삭제 후 selectedIds는 비어있음)
-      // loadData(); // 실제 구현 시 목록 새로고침 호출
+    
+    // AppContext의 handleDeleteMultiplePrompts 호출 (사용자 확인은 해당 함수 내에서 처리)
+    try {
+      await handleDeleteMultiplePrompts(selectedIds);
+      // 성공 알림 (선택 사항 - handleDeleteMultiplePrompts 내부에서 처리하거나 여기서 추가)
+      // alert('선택한 프롬프트가 삭제되었습니다.'); 
+      setSelectedIds([]); // 삭제 후 로컬 선택 상태 초기화
+    } catch (error) {
+      // 오류 알림 (선택 사항 - handleDeleteMultiplePrompts 내부에서 에러 상태 설정)
+      console.error('벌크 삭제 처리 중 오류 발생:', error);
+      // alert('프롬프트 삭제 중 오류가 발생했습니다.');
     }
+    
+    // 기존 console.log 및 alert 제거
+    // if (window.confirm(...)) { ... }
   };
 
-  // Placeholder for move function
+  // Move function
   const handleMoveSelected = () => {
-    // 0개 선택 시 알림 추가
+    // 0개 선택 시 알림
     if (selectedIds.length === 0) {
       alert('이동할 프롬프트를 선택해주세요.');
       return;
     }
-    console.log("Moving prompts:", selectedIds); // 실제 구현 시 폴더 선택 UI 및 API 호출
-    alert("폴더 이동 기능은 아직 구현되지 않았습니다.");
+    // 폴더 선택 모달 열기
+    setIsFolderSelectModalOpen(true);
+    // 기존 console.log 및 alert 제거
+  };
+
+  // 폴더 선택 완료 핸들러
+  const handleFolderSelectConfirm = async (targetFolderId) => {
+    try {
+      await handleMoveMultiplePrompts(selectedIds, targetFolderId);
+      // 성공 알림 (선택 사항)
+      alert('선택한 프롬프트를 지정된 폴더로 이동했습니다.');
+      setSelectedIds([]); // 선택 초기화
+      setIsMultiSelectMode(false); // 다중 선택 모드 종료
+    } catch (error) {
+      // 오류 알림 (선택 사항)
+      console.error('폴더 이동 처리 중 오류:', error);
+      alert('프롬프트 이동 중 오류가 발생했습니다.');
+    }
+    // 모달은 FolderSelectModal 내부에서 닫힘
   };
 
   // 처음 마운트될 때 데이터 로드
@@ -194,7 +225,6 @@ const Dashboard = () => {
                   <Folder size={16} className="mr-1" />
                   폴더 이동
                 </button>
-                {/* 취소 버튼: 아이콘 대신 텍스트 버튼 사용 */}
                 <button
                   onClick={cancelMultiSelectMode}
                   className="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200 rounded-md transition ml-2"
@@ -225,6 +255,13 @@ const Dashboard = () => {
           )}
         </div>
       </div>
+      
+      {/* 폴더 선택 모달 렌더링 */}
+      <FolderSelectModal 
+        isOpen={isFolderSelectModalOpen}
+        onClose={() => setIsFolderSelectModalOpen(false)}
+        onFolderSelect={handleFolderSelectConfirm}
+      />
     </div>
   );
 };

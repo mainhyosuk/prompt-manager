@@ -357,7 +357,7 @@ def update_prompt(id):
         conn.close()
 
 
-# 프롬프트 삭제
+# 프롬프트 삭제 (단일)
 @prompt_bp.route("/api/prompts/<int:id>", methods=["DELETE"])
 def delete_prompt(id):
     conn = get_db_connection()
@@ -384,6 +384,143 @@ def delete_prompt(id):
     except Exception as e:
         conn.rollback()
         return jsonify({"error": str(e)}), 500
+
+    finally:
+        conn.close()
+
+
+# 여러 프롬프트 삭제 (벌크)
+@prompt_bp.route("/api/prompts/bulk-delete", methods=["POST"])
+def bulk_delete_prompts():
+    data = request.json
+    prompt_ids = data.get("ids")
+
+    if not prompt_ids or not isinstance(prompt_ids, list):
+        return jsonify({"error": "삭제할 프롬프트 ID 목록(ids)이 필요합니다."}), 400
+
+    if not prompt_ids:  # 빈 배열인 경우
+        return jsonify({"message": "삭제할 프롬프트가 없습니다.", "deleted_count": 0})
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    deleted_count = 0
+
+    try:
+        conn.execute("BEGIN")
+
+        for prompt_id in prompt_ids:
+            # 사용자 추가 프롬프트 ID 형식인지 확인 (문자열이고 'user-added-' 시작)
+            # 백엔드에서는 현재 사용자 추가 프롬프트를 직접 처리하지 않으므로,
+            # 숫자 ID만 처리하도록 가정하거나, userPromptApi.py와 연동 필요.
+            # 여기서는 숫자 ID만 처리하는 것으로 가정합니다.
+            if not isinstance(prompt_id, int):
+                print(f"Skipping non-integer prompt ID: {prompt_id}")
+                continue
+
+            # 프롬프트 존재 여부 확인 (선택 사항, 성능 고려)
+            cursor.execute("SELECT id FROM prompts WHERE id = ?", (prompt_id,))
+            if not cursor.fetchone():
+                print(f"Prompt ID not found, skipping: {prompt_id}")
+                continue  # 없는 ID는 건너뜀
+
+            # 관련 데이터 삭제 (CASCADE 설정되어 있다면 prompts 테이블만 삭제해도 됨)
+            cursor.execute("DELETE FROM variables WHERE prompt_id = ?", (prompt_id,))
+            cursor.execute("DELETE FROM prompt_tags WHERE prompt_id = ?", (prompt_id,))
+            # 프롬프트 삭제
+            cursor.execute("DELETE FROM prompts WHERE id = ?", (prompt_id,))
+
+            if cursor.rowcount > 0:
+                deleted_count += 1
+
+        conn.commit()
+
+        return jsonify(
+            {
+                "message": f"{deleted_count}개의 프롬프트가 성공적으로 삭제되었습니다.",
+                "deleted_count": deleted_count,
+            }
+        )
+
+    except Exception as e:
+        conn.rollback()
+        print(f"프롬프트 벌크 삭제 중 오류 발생: {e}")
+        return (
+            jsonify({"error": f"프롬프트 삭제 중 오류가 발생했습니다: {str(e)}"}),
+            500,
+        )
+
+    finally:
+        conn.close()
+
+
+# 여러 프롬프트 폴더 이동 (벌크)
+@prompt_bp.route("/api/prompts/bulk-move", methods=["POST"])
+def bulk_move_prompts():
+    data = request.json
+    prompt_ids = data.get("promptIds")
+    target_folder_id = data.get("targetFolderId")  # null 허용 (최상위 폴더 이동)
+
+    if not prompt_ids or not isinstance(prompt_ids, list):
+        return (
+            jsonify({"error": "이동할 프롬프트 ID 목록(promptIds)이 필요합니다."}),
+            400,
+        )
+    # targetFolderId는 null일 수 있으므로 필수 체크 제외
+
+    if not prompt_ids:
+        return jsonify({"message": "이동할 프롬프트가 없습니다.", "moved_count": 0})
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    moved_count = 0
+
+    try:
+        # 대상 폴더 유효성 검사 (targetFolderId가 null이 아닐 때만)
+        if target_folder_id is not None:
+            cursor.execute("SELECT id FROM folders WHERE id = ?", (target_folder_id,))
+            if not cursor.fetchone():
+                conn.close()
+                return jsonify({"error": "대상 폴더를 찾을 수 없습니다."}), 404
+
+        conn.execute("BEGIN")
+
+        for prompt_id in prompt_ids:
+            # 사용자 추가 프롬프트 ID 등 비정수 ID 처리 (삭제와 동일)
+            if not isinstance(prompt_id, int):
+                print(f"Skipping non-integer prompt ID for move: {prompt_id}")
+                continue
+
+            # 프롬프트 업데이트
+            cursor.execute(
+                """
+                UPDATE prompts 
+                SET folder_id = ?, updated_at = datetime('now')
+                WHERE id = ?
+                """,
+                (
+                    target_folder_id,
+                    prompt_id,
+                ),  # targetFolderId가 None이면 NULL로 설정됨
+            )
+            if cursor.rowcount > 0:
+                moved_count += 1
+
+        conn.commit()
+
+        return jsonify(
+            {
+                "message": f"{moved_count}개의 프롬프트가 성공적으로 이동되었습니다.",
+                "moved_count": moved_count,
+            }
+        )
+
+    except Exception as e:
+        conn.rollback()
+        print(f"프롬프트 벌크 이동 중 오류 발생: {e}")
+        return (
+            jsonify({"error": f"프롬프트 이동 중 오류가 발생했습니다: {str(e)}"}),
+            500,
+        )
 
     finally:
         conn.close()

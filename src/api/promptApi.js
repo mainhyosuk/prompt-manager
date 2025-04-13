@@ -76,7 +76,7 @@ export const updatePrompt = async (id, promptData) => {
   }
 };
 
-// 프롬프트 삭제
+// 프롬프트 삭제 (단일)
 export const deletePrompt = async (id) => {
   try {
     const response = await fetch(`${BASE_URL}/prompts/${id}`, {
@@ -90,6 +90,61 @@ export const deletePrompt = async (id) => {
     // 성공 시 상태 코드 또는 메시지 반환 가능 (여기서는 void 처리)
   } catch (error) {
     console.error('프롬프트 삭제 오류:', error);
+    throw error;
+  }
+};
+
+// 여러 프롬프트 삭제 (벌크 삭제)
+export const deleteMultiplePrompts = async (ids) => {
+  // ids 배열 유효성 검사
+  if (!ids || ids.length === 0) {
+    console.warn('삭제할 프롬프트 ID 배열이 비어있습니다.');
+    return; 
+  }
+
+  try {
+    // 백엔드 API 엔드포인트 및 메소드 수정
+    const response = await fetch(`${BASE_URL}/prompts/bulk-delete`, { 
+      ...API_FETCH_OPTIONS,
+      method: 'POST', // 메소드를 POST로 변경
+      body: JSON.stringify({ ids }), // 본문에 ID 배열 전달은 유지
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      // 백엔드에서 반환하는 오류 메시지 사용
+      throw new Error(errorData.error || '여러 프롬프트를 삭제하는 데 실패했습니다.'); 
+    }
+    // 성공 시 백엔드에서 메시지를 포함한 json 반환 예상
+    return await response.json(); 
+  } catch (error) {
+    console.error('프롬프트 벌크 삭제 오류:', error);
+    throw error;
+  }
+};
+
+// 여러 프롬프트 폴더 이동 (벌크 이동)
+export const moveMultiplePrompts = async (promptIds, targetFolderId) => {
+  // ID 배열 및 폴더 ID 유효성 검사 (선택 사항)
+  if (!promptIds || promptIds.length === 0) {
+    console.warn('이동할 프롬프트 ID 배열이 비어있습니다.');
+    return { moved_count: 0 }; // 이동 없음
+  }
+  // targetFolderId는 null일 수 있음 (최상위 폴더로 이동)
+
+  try {
+    const response = await fetch(`${BASE_URL}/prompts/bulk-move`, {
+      ...API_FETCH_OPTIONS,
+      method: 'POST',
+      body: JSON.stringify({ promptIds, targetFolderId }), // promptIds와 targetFolderId 전달
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || '프롬프트를 이동하는 데 실패했습니다.');
+    }
+    // 성공 시 백엔드에서 메시지와 이동된 개수 반환 예상
+    return await response.json(); 
+  } catch (error) {
+    console.error('프롬프트 벌크 이동 오류:', error);
     throw error;
   }
 };

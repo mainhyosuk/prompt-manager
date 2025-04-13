@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { getPrompts, createPrompt, updatePrompt, deletePrompt, toggleFavorite, recordPromptUsage, duplicatePrompt, updateVariableDefaultValue, updatePromptMemo } from '../api/promptApi';
-import { getFolders, createFolder as createFolderApi } from '../api/folderApi';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { getPrompts, createPrompt, updatePrompt, deletePrompt, toggleFavorite, recordPromptUsage, duplicatePrompt, updateVariableDefaultValue, updatePromptMemo, deleteMultiplePrompts, moveMultiplePrompts } from '../api/promptApi';
+import { getFolders, createFolder as createFolderApi, updateFolder, deleteFolder } from '../api/folderApi';
 import { getTags } from '../api/tagApi';
 import { getUserPromptsFromStorage, deleteUserAddedPrompt as deleteUserAddedPromptApi } from '../api/userPromptApi';
 import PromptOverlayModal from '../modals/PromptOverlayModal';
@@ -153,11 +153,15 @@ export const AppProvider = ({ children }) => {
 
       // 3. 서버 데이터만 prompts 상태에 설정
       const serverPromptsWithFlag = serverPrompts.map(p => ({ ...p, is_user_added: false }));
-      setPrompts(serverPromptsWithFlag);
+      const newPromptsState = [...serverPromptsWithFlag];
+      setPrompts(newPromptsState); 
       
       // 폴더와 태그 데이터 설정
-      setFolders(foldersData);
-      setTags(tagsData);
+      const newFoldersState = [...foldersData];
+      const newTagsState = [...tagsData];
+      setFolders(newFoldersState); 
+      setTags(newTagsState); 
+      
     } catch (err) {
       console.error('[AppContext] 데이터 로드 오류:', err);
       setError('데이터를 불러오는 중 오류가 발생했습니다.');
@@ -477,7 +481,7 @@ export const AppProvider = ({ children }) => {
     }, 300);
   }, []);
 
-  // 프롬프트 삭제 핸들러 수정 (사용자 추가 프롬프트 처리 추가)
+  // 프롬프트 삭제 핸들러 (단일)
   const handleDeletePrompt = useCallback(async (promptId) => {
     // ID 타입 확인
     const isUserAdded = typeof promptId === 'string' && promptId.startsWith('user-added-');
@@ -532,6 +536,87 @@ export const AppProvider = ({ children }) => {
       setIsLoading(false);
     }
   }, [selectedPrompt, editMode, overlayPrompt, userPrompt, closeOverlayModal, closeUserPromptModal]); // 의존성 배열 업데이트
+
+  // 여러 프롬프트 삭제 핸들러 (벌크)
+  const handleDeleteMultiplePrompts = useCallback(async (promptIds) => {
+    // ID 배열 유효성 검사
+    if (!promptIds || promptIds.length === 0) return;
+
+    // 사용자 확인 (단일 삭제와 메시지 동일하게 사용 가능)
+    if (!window.confirm(`정말로 선택된 ${promptIds.length}개의 프롬프트를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // API 호출 (일반 프롬프트와 사용자 추가 프롬프트 분리 필요 없음 - API에서 처리 가정)
+      // 만약 API가 분리되어 있다면, promptIds를 필터링하여 각각 호출해야 함
+      await deleteMultiplePrompts(promptIds);
+
+      // 로컬 상태 업데이트: prompts 배열에서 삭제된 ID들 제거
+      setPrompts(prev => prev.filter(p => !promptIds.includes(p.id)));
+      // 사용자 추가 프롬프트 상태도 업데이트
+      setUserAddedPrompts(prev => prev.filter(p => !promptIds.includes(p.id)));
+
+      // 현재 선택/편집/오버레이/사용자 모달에 있는 프롬프트가 삭제 목록에 포함되면 초기화
+      if (selectedPrompt && promptIds.includes(selectedPrompt.id)) {
+        setIsDetailModalOpen(false);
+        setSelectedPrompt(null);
+      }
+      if (editMode && selectedPrompt && promptIds.includes(selectedPrompt.id)) {
+        setIsAddEditModalOpen(false);
+        setEditMode(false);
+        setSelectedPrompt(null);
+      }
+      if (overlayPrompt && promptIds.includes(overlayPrompt.id)) {
+        closeOverlayModal();
+      }
+      if (userPrompt && promptIds.includes(userPrompt.id)) {
+        closeUserPromptModal();
+      }
+
+      // 삭제 성공 후 알림 (선택 사항)
+      // alert(`${promptIds.length}개의 프롬프트가 삭제되었습니다.`); 
+      // 또는 토스트 메시지 사용
+
+    } catch (err) {
+      console.error(`[AppContext] 프롬프트 벌크 삭제 오류:`, err);
+      setError('프롬프트를 삭제하는 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedPrompt, editMode, overlayPrompt, userPrompt, closeOverlayModal, closeUserPromptModal]); // 의존성 배열 확인
+
+  // 여러 프롬프트 폴더 이동 핸들러 (벌크)
+  const handleMoveMultiplePrompts = useCallback(async (promptIds, targetFolderId) => {
+    // ID 배열 유효성 검사
+    if (!promptIds || promptIds.length === 0) return;
+
+    // targetFolderId가 null일 수도 있으므로 유효성 검사는 API 함수에서 처리
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // API 호출
+      const result = await moveMultiplePrompts(promptIds, targetFolderId);
+
+      // 로컬 상태 업데이트 대신 전체 데이터 리로드 (사이드바 등 동기화 목적)
+      await loadData(); // loadData 호출 추가
+
+      // 이동 성공 후 알림 (선택 사항)
+      // alert(result.message || `${result.moved_count}개의 프롬프트가 이동되었습니다.`);
+
+    } catch (err) {
+      console.error(`[AppContext] 프롬프트 벌크 이동 오류:`, err);
+      setError(err.message || '프롬프트를 이동하는 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+    // 의존성 배열에 loadData 추가
+  }, [folders, loadData, setIsLoading, setError]); // loadData 추가
 
   // 프롬프트 복제 핸들러
   const handleDuplicatePrompt = useCallback(async (promptId) => {
@@ -746,32 +831,68 @@ export const AppProvider = ({ children }) => {
     resetFolderModalState();
   }, [resetFolderModalState]);
 
-  // 폴더 생성 핸들러 (API 호출 포함)
+  // 폴더 생성 핸들러 (API 호출 포함) - loadData 호출 방식으로 복구
   const handleCreateFolder = useCallback(async () => {
     if (!newFolderName.trim()) {
       setFolderError('폴더 이름을 입력해주세요.');
       return;
     }
-    
+
+    setIsLoading(true);
+    setFolderError('');
+
     try {
-      await createFolderApi({
-        name: newFolderName.trim(),
-        parent_id: parentFolderId
-      });
+      await createFolderApi({ 
+        name: newFolderName, 
+        parent_id: parentFolderId 
+      }); 
       
-      // 폴더 목록 갱신
-      await loadData();
-      
-      // 모달 닫고 상태 초기화
-      closeFolderModal();
-    } catch (error) {
-      console.error('폴더 생성 오류:', error);
-      setFolderError('폴더 생성에 실패했습니다.');
+      // 폴더 생성 성공 후 전체 데이터 리로드 (복구)
+      await loadData(); 
+      closeFolderModal(); 
+    } catch (err) {
+      console.error('폴더 생성 오류:', err);
+      setFolderError(err.message || '폴더 생성 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
     }
-  }, [newFolderName, parentFolderId, loadData, closeFolderModal]);
+  }, [newFolderName, parentFolderId, closeFolderModal, loadData, setFolderError, setIsLoading]); 
+
+  // 폴더 삭제 핸들러 추가
+  const handleDeleteFolder = useCallback(async (folderId) => {
+    // 기본 폴더 삭제 방지 (필요시 백엔드에서도 확인)
+    if (folderId <= 0) { 
+      alert('기본 폴더는 삭제할 수 없습니다.');
+      return;
+    }
+    
+    // 하위 항목 확인 및 사용자 확인 (백엔드 deleteFolder API에서 처리하므로 생략 가능, 또는 여기서 추가 확인)
+    if (!window.confirm('정말로 이 폴더를 삭제하시겠습니까? 하위 폴더 및 프롬프트가 없는 경우에만 삭제됩니다.')) {
+      return;
+    }
+    
+    setIsLoading(true);
+    setError(null);
+    try {
+      await deleteFolder(folderId);
+      await loadData(); // 삭제 후 데이터 리로드
+      // alert('폴더가 삭제되었습니다.'); // 성공 알림 (선택 사항)
+      // 현재 선택된 폴더가 삭제된 폴더면 '모든 프롬프트'로 변경
+      const deletedFolder = folders.find(f => f.id === folderId);
+      if (deletedFolder && selectedFolder === deletedFolder.name) {
+          setSelectedFolder('모든 프롬프트');
+      }
+    } catch (err) {
+      console.error('폴더 삭제 오류:', err);
+      setError(err.message || '폴더 삭제 중 오류가 발생했습니다.');
+      alert(err.message || '폴더 삭제 중 오류가 발생했습니다.'); // 사용자에게 오류 알림
+    } finally {
+      setIsLoading(false);
+    }
+  }, [loadData, folders, selectedFolder, setSelectedFolder, setIsLoading, setError]);
 
   // 제공할 컨텍스트 값
-  const value = {
+  const value = useMemo(() => ({ 
     // 상태
     currentScreen,
     isAddEditModalOpen,
@@ -799,11 +920,16 @@ export const AppProvider = ({ children }) => {
     userPromptUpdateTimestamp,
     previousPrompt,
     userAddedPrompts,
-    
+    isFolderModalOpen,
+    newFolderName,
+    parentFolderId,
+    folderError,
+
     // 데이터 접근 함수
     getFilteredPrompts,
+    getTagColorClasses,
     
-    // 액션
+    // 액션 함수들
     setIsAddEditModalOpen,
     setIsDetailModalOpen,
     setIsLoading,
@@ -825,11 +951,11 @@ export const AppProvider = ({ children }) => {
     handleRecordUsage,
     handleSavePrompt,
     handleDeletePrompt,
+    handleDeleteMultiplePrompts,
     handleDuplicatePrompt,
     handleUpdateVariableDefaultValue,
     goToSettings,
     goToDashboard,
-    getTagColorClasses,
     loadData,
     changeTheme,
     updatePromptItem,
@@ -845,19 +971,34 @@ export const AppProvider = ({ children }) => {
     handleGoBack,
     handleCloseModal,
     handleUpdatePromptTitle,
-    
-    // 폴더 생성 모달 관련
-    isFolderModalOpen,
     openFolderModal,
     closeFolderModal,
     handleCreateFolder,
-    newFolderName,
     setNewFolderName,
-    parentFolderId,
     setParentFolderId,
-    folderError,
     setFolderError,
-  };
+    handleMoveMultiplePrompts,
+    handleDeleteFolder
+  }), [
+    // 원래의 전체 의존성 배열 복구
+    currentScreen, isAddEditModalOpen, isDetailModalOpen, isLoading, error, theme, prompts, folders, tags, 
+    selectedPrompt, selectedFolder, editMode, initialFolderInfo, expandedFolders, searchQuery, filterTags, 
+    sortBy, sortDirection, viewMode, isOverlayModalOpen, overlayPrompt, isUserPromptModalOpen, userPrompt, 
+    userPromptUpdateTimestamp, previousPrompt, userAddedPrompts, isFolderModalOpen, newFolderName, 
+    parentFolderId, folderError,
+    // useCallback 함수들
+    getFilteredPrompts, getTagColorClasses, toggleFolder, handleAddPrompt, handleEditPrompt, handleViewPrompt,
+    handleToggleFavorite, handleRecordUsage, handleSavePrompt, handleDeletePrompt, handleDeleteMultiplePrompts,
+    handleDuplicatePrompt, handleUpdateVariableDefaultValue, goToSettings, goToDashboard, loadData,
+    changeTheme, updatePromptItem, openOverlayModal, closeOverlayModal, closeUserPromptModal, 
+    switchToPrompt, handleGoBack, handleCloseModal, handleUpdatePromptTitle, openFolderModal, 
+    closeFolderModal, handleCreateFolder, handleMoveMultiplePrompts, handleDeleteFolder,
+    // setState 함수들
+    setIsAddEditModalOpen, setIsDetailModalOpen, setIsLoading, setError, setCurrentScreen, setSearchQuery,
+    setFilterTags, setSortBy, setSortDirection, setViewMode, setSelectedFolder, setInitialFolderInfo,
+    setExpandedFolders, setIsOverlayModalOpen, setOverlayPrompt, setIsUserPromptModalOpen, setUserPrompt,
+    setUserPromptUpdateTimestamp, setNewFolderName, setParentFolderId, setFolderError
+  ]);
 
   return (
     <AppContext.Provider value={value}>

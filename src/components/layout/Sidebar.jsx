@@ -25,7 +25,7 @@ const Sidebar = () => {
     parentFolderId,
     setParentFolderId,
     folderError,
-    setFolderError
+    setFolderError,
   } = useAppContext();
   const [width, setWidth] = useState(() => {
     // 로컬 스토리지에서 너비 불러오기
