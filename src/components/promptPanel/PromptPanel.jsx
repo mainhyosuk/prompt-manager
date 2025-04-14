@@ -438,16 +438,14 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
     loadData // 메인 목록 새로고침 함수 가져오기
   } = useAppContext();
   
-  // 사용자 추가 프롬프트 데이터 로드
+  // 사용자 추가 프롬프트 데이터 로드 (기존 함수 - 이제 DB에서 가져옴)
   const loadUserPrompts = useCallback(async () => {
     if (!selectedPromptId) return;
-    
     setIsLoading(true);
     setError(null);
-    
     try {
-      // API를 통해 사용자 추가 프롬프트 목록 가져오기
-      const response = await getUserAddedPrompts(selectedPromptId);
+      // API를 통해 사용자 추가 프롬프트 목록 가져오기 (수정된 getUserAddedPrompts 호출)
+      const response = await getUserAddedPrompts(selectedPromptId); // parentId는 현재 사용 안함
       setUserPrompts(response);
     } catch (err) {
       console.error('사용자 추가 프롬프트 로드 오류:', err);
@@ -460,32 +458,28 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
   // 새 사용자 프롬프트 생성 핸들러
   const handleCreateNewPrompt = async () => {
     if (!selectedPrompt) return;
-    
     try {
       // 새 프롬프트 생성을 위한 데이터 준비
       const newPromptData = {
         parent_id: selectedPrompt.id,
-        parent_title: selectedPrompt.title, // 부모 프롬프트 제목 추가
+        parent_title: selectedPrompt.title,
         title: newPromptTitle.trim() || `${selectedPrompt.title}의 사용자 추가 프롬프트`,
-        content: "", // 기본 내용은 비워둡니다
-        variables: [], // 기본 변수는 비워둡니다
+        content: "새 프롬프트 내용",
+        variables: [],
         tags: [],
-        is_user_added: true, // 사용자 추가 프롬프트 플래그
+        is_user_added: true,
         created_at: new Date().toISOString()
       };
-      
-      // API를 통해 새 프롬프트 생성 및 저장
+
+      // API를 통해 새 프롬프트 생성 및 저장 (DB에 저장됨)
       const createdPrompt = await createUserAddedPrompt(newPromptData);
-      
-      // 응답 받은 프롬프트를 로컬 목록에 추가
-      setUserPrompts(prev => [createdPrompt, ...prev]);
-      
-      // 로컬 스토리지 업데이트 후 컨텍스트의 loadData 호출하여 전역 상태 업데이트
-      loadData();
-      
+
+      // DB에서 최신 목록을 다시 로드하여 화면 갱신
+      await loadUserPrompts();
+
       // 입력 필드 초기화
       setNewPromptTitle('');
-      
+
     } catch (err) {
       console.error('사용자 추가 프롬프트 생성 오류:', err);
       alert('사용자 추가 프롬프트를 생성하는데 실패했습니다.');
@@ -494,29 +488,22 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
   
   // 프롬프트 삭제 핸들러
   const handlePromptDelete = async (prompt, e) => {
-    e.stopPropagation(); // 이벤트 버블링 방지
-    
+    e.stopPropagation();
     if (!prompt) return;
-    
-    if (window.confirm(`정말로 "${prompt.title}" 프롬프트를 삭제하시겠습니까?`)) {
+    if (window.confirm(`정말로 \"${prompt.title}\" 프롬프트를 삭제하시겠습니까?`)) {
       try {
         setIsDeleting(true);
-        
-        // API를 통해 프롬프트 삭제
+        // TODO: deleteUserAddedPrompt API 함수를 백엔드 연동으로 수정 필요
         await deleteUserAddedPrompt(prompt.id);
-        
-        // 프롬프트 목록에서 해당 프롬프트 제거
-        setUserPrompts(prev => prev.filter(p => p.id !== prompt.id));
-        
-        // 로컬 스토리지 업데이트 후 컨텍스트의 loadData 호출하여 전역 상태 업데이트
-        loadData();
-        
+
+        // DB에서 최신 목록을 다시 로드하여 화면 갱신
+        await loadUserPrompts();
+
         // 편집 모달이 열려있고, 삭제한 프롬프트와 같은 프롬프트이면 모달 닫기
         if (isEditModalOpen && editingPrompt && editingPrompt.id === prompt.id) {
           setIsEditModalOpen(false);
           setEditingPrompt(null);
         }
-        
       } catch (error) {
         console.error('프롬프트 삭제 오류:', error);
         alert('프롬프트 삭제에 실패했습니다.');
@@ -529,24 +516,17 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
   // 프롬프트 업데이트 핸들러
   const handlePromptUpdate = useCallback(async (updatedPrompt) => {
     try {
-      // API를 통해 프롬프트 업데이트
+      // TODO: updateUserAddedPrompt API 함수를 백엔드 연동으로 수정 필요
       const updatedData = await updateUserAddedPrompt(updatedPrompt.id, updatedPrompt);
-      
-      // 프롬프트 목록에서 해당 프롬프트 업데이트
-      setUserPrompts(prev => 
-        prev.map(prompt => 
-          prompt.id === updatedData.id ? updatedData : prompt
-        )
-      );
-      
-      // 로컬 스토리지 업데이트 후 컨텍스트의 loadData 호출하여 전역 상태 업데이트
-      loadData();
-      
+
+      // DB에서 최신 목록을 다시 로드하여 화면 갱신
+      await loadUserPrompts();
+
     } catch (error) {
       console.error('프롬프트 업데이트 오류:', error);
       alert('프롬프트 업데이트에 실패했습니다.');
     }
-  }, [loadData]);
+  }, [loadUserPrompts]);
   
   // 프롬프트 편집 핸들러
   const handlePromptEdit = useCallback((prompt, e) => {
@@ -577,37 +557,33 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
     setIsImportModalOpen(true);
   };
 
-  // 프롬프트 불러오기 완료 핸들러 (모달 닫고 프롬프트 생성)
+  // 프롬프트 불러오기 완료 핸들러
   const handleImportPrompt = async (importedPrompt) => {
     if (!selectedPromptId || !importedPrompt) return;
-    
     try {
       // 1. 불러온 프롬프트 데이터 기반으로 새 사용자 프롬프트 데이터 준비
       const newPromptData = {
-        parent_id: selectedPromptId, 
-        parent_title: selectedPrompt?.title, // 현재 패널의 부모 정보 사용
-        title: importedPrompt.title, // 원본 제목 유지
+        parent_id: selectedPromptId,
+        parent_title: selectedPrompt?.title,
+        title: importedPrompt.title,
         content: importedPrompt.content,
         variables: importedPrompt.variables || [],
-        tags: importedPrompt.tags || [], 
+        tags: importedPrompt.tags || [],
         memo: importedPrompt.memo || '',
         is_user_added: true,
-        is_imported: true, // 불러옴 플래그 추가
+        is_imported: true,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
 
-      // 2. createUserAddedPrompt API 호출하여 저장
+      // 2. createUserAddedPrompt API 호출하여 저장 (DB에 저장됨)
       const createdPrompt = await createUserAddedPrompt(newPromptData);
-      
-      // 3. 로컬 스토리지 업데이트 후 컨텍스트의 loadData 호출하여 전역 상태 업데이트
-      loadData();
 
-      // 4. 타임스탬프 업데이트하여 목록 새로고침
-      setUserPromptUpdateTimestamp(Date.now());
+      // DB에서 최신 목록을 다시 로드하여 화면 갱신
+      await loadUserPrompts();
 
       setIsImportModalOpen(false); // 모달 닫기
-      
+
     } catch (err) {
       console.error('프롬프트 불러오기 오류:', err);
       alert('프롬프트를 불러오는 중 오류가 발생했습니다.');
@@ -637,12 +613,6 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
         // 2. 일반 프롬프트 생성 API 호출 (handleSavePrompt 사용)
         await handleSavePrompt(exportData); // 이 함수가 loadData를 호출하여 메인 목록 새로고침
 
-        // 3. 원본 사용자 추가 프롬프트 삭제 로직 제거
-        // await deleteUserAddedPrompt(promptToExport.id);
-
-        // 4. 사용자 추가 목록 새로고침 로직 제거 (원본이 유지되므로 불필요)
-        // setUserPromptUpdateTimestamp(Date.now());
-        
         alert('프롬프트를 성공적으로 내보냈습니다.');
 
       } catch (error) {
@@ -1105,14 +1075,6 @@ const PromptPanel = ({
       }
     } catch (err) {
       alert('프롬프트를 컬렉션에서 제거하는데 실패했습니다.');
-    }
-  };
-  
-  // 프롬프트 추가 완료 후 콜백
-  const handlePromptAdded = () => {
-    // 컬렉션 프롬프트 다시 로드
-    if (selectedCollectionId) {
-      loadCollectionPrompts(selectedCollectionId);
     }
   };
   

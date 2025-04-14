@@ -24,7 +24,7 @@ def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # 프롬프트 테이블 - is_user_prompt, user_id 컬럼 추가
+    # 프롬프트 테이블 - is_user_prompt, user_id, parent_prompt_id 컬럼 추가
     cursor.execute(
         """
     CREATE TABLE IF NOT EXISTS prompts (
@@ -40,7 +40,9 @@ def init_db():
         memo TEXT,
         is_user_prompt BOOLEAN DEFAULT 0, -- 사용자 추가 프롬프트 여부
         user_id TEXT, -- 사용자 식별자 (추후 확장 가능성 고려하여 TEXT)
-        FOREIGN KEY (folder_id) REFERENCES folders(id)
+        parent_prompt_id INTEGER, -- 부모 프롬프트 ID 추가
+        FOREIGN KEY (folder_id) REFERENCES folders(id),
+        FOREIGN KEY (parent_prompt_id) REFERENCES prompts(id) ON DELETE SET NULL -- 부모 삭제 시 연결 해제
     )
     """
     )
@@ -547,79 +549,86 @@ def migrate_memo_field():
 # --- 사용자 프롬프트 필드 마이그레이션 함수 추가 ---
 def migrate_user_prompt_fields():
     """prompts 테이블에 is_user_prompt 와 user_id 필드가 없으면 추가합니다."""
-    print("--- DEBUG: migrate_user_prompt_fields 함수 시작 ---")  # DEBUG LOG 추가
     conn = None  # conn 초기화
     should_commit = False
     try:
-        print("--- DEBUG: DB 연결 시도 ---")  # DEBUG LOG 추가
         conn = get_db_connection()
-        print("--- DEBUG: DB 연결 성공 ---")  # DEBUG LOG 추가
         cursor = conn.cursor()
 
-        print("--- DEBUG: PRAGMA table_info(prompts) 실행 전 ---")  # DEBUG LOG 추가
         # 현재 prompts 테이블의 컬럼 정보 가져오기
         cursor.execute("PRAGMA table_info(prompts)")
         columns = [column[1] for column in cursor.fetchall()]
-        print(f"--- DEBUG: 현재 컬럼 목록: {columns} ---")  # DEBUG LOG 추가
 
         # is_user_prompt 필드가 없다면 추가
         if "is_user_prompt" not in columns:
-            print(
-                "--- DEBUG: is_user_prompt 컬럼 없음, 추가 시도 ---"
-            )  # DEBUG LOG 추가
             try:
                 cursor.execute(
                     "ALTER TABLE prompts ADD COLUMN is_user_prompt BOOLEAN DEFAULT 0"
                 )
-                print("--- DEBUG: is_user_prompt 컬럼 추가 성공 ---")  # DEBUG LOG 추가
-                print(
-                    "프롬프트 테이블에 is_user_prompt 필드가 추가되었습니다."
-                )  # 기존 로그 유지
+                print("프롬프트 테이블에 is_user_prompt 필드가 추가되었습니다.")
                 should_commit = True
             except Exception as e:
-                print(
-                    f"--- DEBUG: is_user_prompt 컬럼 추가 실패: {str(e)} ---"
-                )  # DEBUG LOG 추가
-                print(f"is_user_prompt 필드 추가 실패: {str(e)}")  # 기존 로그 유지
+                print(f"is_user_prompt 필드 추가 실패: {str(e)}")
         else:
-            print("--- DEBUG: is_user_prompt 컬럼 이미 존재 ---")  # DEBUG LOG 추가
+            pass
 
         # user_id 필드가 없다면 추가
         if "user_id" not in columns:
-            print("--- DEBUG: user_id 컬럼 없음, 추가 시도 ---")  # DEBUG LOG 추가
             try:
                 # 사용자 ID는 NULL을 허용합니다.
                 cursor.execute("ALTER TABLE prompts ADD COLUMN user_id TEXT")
-                print("--- DEBUG: user_id 컬럼 추가 성공 ---")  # DEBUG LOG 추가
-                print(
-                    "프롬프트 테이블에 user_id 필드가 추가되었습니다."
-                )  # 기존 로그 유지
+                print("프롬프트 테이블에 user_id 필드가 추가되었습니다.")
                 should_commit = True
             except Exception as e:
-                print(
-                    f"--- DEBUG: user_id 컬럼 추가 실패: {str(e)} ---"
-                )  # DEBUG LOG 추가
-                print(f"user_id 필드 추가 실패: {str(e)}")  # 기존 로그 유지
+                print(f"user_id 필드 추가 실패: {str(e)}")
         else:
-            print("--- DEBUG: user_id 컬럼 이미 존재 ---")  # DEBUG LOG 추가
+            pass
 
         if should_commit:
-            print("--- DEBUG: 변경 사항 커밋 시도 ---")  # DEBUG LOG 추가
             conn.commit()
-            print("--- DEBUG: 변경 사항 커밋 완료 ---")  # DEBUG LOG 추가
         else:
-            print("--- DEBUG: 커밋할 변경 사항 없음 ---")  # DEBUG LOG 추가
+            pass
 
     except Exception as e:
-        print(f"--- DEBUG: 마이그레이션 중 예외 발생: {str(e)} ---")  # DEBUG LOG 추가
-        print(f"사용자 프롬프트 필드 마이그레이션 오류: {str(e)}")  # 기존 로그 유지
+        print(f"사용자 프롬프트 필드 마이그레이션 오류: {str(e)}")
     finally:
         if conn:
-            print("--- DEBUG: DB 연결 종료 ---")  # DEBUG LOG 추가
             conn.close()
-        else:
-            print("--- DEBUG: DB 연결 객체 없음 ---")  # DEBUG LOG 추가
-        print("--- DEBUG: migrate_user_prompt_fields 함수 종료 ---")  # DEBUG LOG 추가
+
+
+# --- 부모 프롬프트 ID 필드 마이그레이션 함수 추가 ---
+def migrate_parent_prompt_id_field():
+    """prompts 테이블에 parent_prompt_id 필드가 없으면 추가합니다."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    should_commit = False
+    try:
+        cursor.execute("PRAGMA table_info(prompts)")
+        columns = [column[1] for column in cursor.fetchall()]
+
+        if "parent_prompt_id" not in columns:
+            try:
+                # 외래 키 제약 조건 추가 (부모 프롬프트가 삭제되면 NULL로 설정)
+                # SQLite에서 ALTER TABLE로 외래키 직접 추가는 복잡하므로, 컬럼만 추가하고 제약은 CREATE TABLE에 의존
+                # cursor.execute("""
+                #     ALTER TABLE prompts ADD COLUMN parent_prompt_id INTEGER
+                #     REFERENCES prompts(id) ON DELETE SET NULL
+                # """)
+                # -> 위 방식 대신 컬럼만 추가
+                cursor.execute(
+                    "ALTER TABLE prompts ADD COLUMN parent_prompt_id INTEGER"
+                )
+                print("프롬프트 테이블에 parent_prompt_id 필드가 추가되었습니다.")
+                should_commit = True
+            except Exception as e:
+                print(f"parent_prompt_id 필드 추가 실패: {str(e)}")
+
+        if should_commit:
+            conn.commit()
+    except Exception as e:
+        print(f"부모 프롬프트 ID 필드 마이그레이션 오류: {str(e)}")
+    finally:
+        conn.close()
 
 
 # --- 마이그레이션 함수 추가 끝 ---
@@ -646,6 +655,7 @@ def setup_database():
 
         # --- 사용자 프롬프트 필드 마이그레이션 호출 추가 ---
         migrate_user_prompt_fields()
+        migrate_parent_prompt_id_field()
         # --- 호출 추가 끝 ---
 
         # 데이터베이스가 새로 생성된 경우에만 샘플 프롬프트 추가

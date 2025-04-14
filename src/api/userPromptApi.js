@@ -24,228 +24,211 @@ const saveUserPromptsToStorage = (userPrompts) => {
 };
 
 /**
- * 프롬프트에 연결된 사용자 추가 프롬프트 목록을 가져옵니다.
- * @param {string} parentId - 부모 프롬프트 ID
- * @returns {Promise<Array>} - 사용자 추가 프롬프트 목록
+ * 사용자 추가 프롬프트 목록을 가져옵니다. (백엔드 API 호출 방식으로 변경)
+ * @param {string} parentId - 부모 프롬프트 ID (이제 사용됨)
+ * @returns {Promise<Array>} - 사용자 추가 프롬프트 목록 (DB에서 조회)
  */
 export const getUserAddedPrompts = async (parentId) => {
+  // parentId 유효성 검사 추가
+  if (!parentId) {
+    console.warn('getUserAddedPrompts 호출 시 parentId가 필요합니다.');
+    return []; // parentId 없으면 빈 배열 반환
+  }
+
+  // 백엔드 API 엔드포인트 URL (userId 및 parentId 쿼리 파라미터 추가)
+  const userId = "default-user";
+  const API_URL = `/api/prompts?userId=${encodeURIComponent(userId)}&parentId=${encodeURIComponent(parentId)}`;
+
   try {
-    // 로컬 스토리지에서 사용자 추가 프롬프트 데이터 조회
-    const userPrompts = getUserPromptsFromStorage();
-    
-    // 해당 부모 ID의 사용자 추가 프롬프트 목록 반환
-    const parentUserPrompts = userPrompts[parentId] || [];
-    
-    // 중복 방지: ID로 고유한 프롬프트만 필터링
-    const uniquePrompts = [];
-    const seenIds = new Set();
-    
-    for (const prompt of parentUserPrompts) {
-      if (!seenIds.has(prompt.id)) {
-        seenIds.add(prompt.id);
-        uniquePrompts.push(prompt);
-      }
+    // --- 로컬 스토리지 로직 제거 ---
+    // const userPrompts = getUserPromptsFromStorage();
+    // const parentUserPrompts = userPrompts[parentId] || [];
+    // ... (중복 제거 및 지연 로직 제거) ...
+
+    // --- 백엔드 API 호출 로직 추가 ---
+    const response = await fetch(API_URL);
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('API Error Response (getUserAddedPrompts):', errorData);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
     }
-    
-    // 인위적인 지연을 줘서 비동기 호출을 시뮬레이션
-    await new Promise(resolve => setTimeout(resolve, 200));
-    
-    return uniquePrompts;
+
+    const promptsFromDB = await response.json();
+
+    // 백엔드에서 is_user_added 플래그를 이미 추가했으므로 별도 처리 필요 없음
+    // (get_prompts 함수에서 `prompt['is_user_added'] = bool(prompt.get('is_user_prompt'))` 처리함)
+
+    console.log(`사용자(${userId}) 추가 프롬프트 목록 조회 성공 (DB):`, promptsFromDB);
+    return promptsFromDB; // DB에서 직접 조회한 목록 반환
+    // --- API 호출 로직 끝 ---
+
   } catch (error) {
-    console.error('사용자 추가 프롬프트 목록 조회 오류:', error);
+    console.error('사용자 추가 프롬프트 목록 조회 오류 (API):', error);
     throw error;
   }
 };
 
 /**
- * 새 사용자 추가 프롬프트를 생성합니다.
- * @param {Object} promptData - 프롬프트 데이터
- * @returns {Promise<Object>} - 생성된 프롬프트 정보
+ * 새 사용자 추가 프롬프트를 생성합니다. (백엔드 API 호출 방식으로 변경)
+ * @param {Object} promptData - 프롬프트 데이터 (title, content, parent_id 등 포함)
+ * @returns {Promise<Object>} - 생성된 프롬프트 정보 (백엔드로부터 받은 데이터)
  */
 export const createUserAddedPrompt = async (promptData) => {
+  // 백엔드 API 엔드포인트 URL
+  const API_URL = '/api/prompts'; // 실제 환경에 맞게 조정 필요 (예: http://localhost:8000/api/prompts)
+
   try {
-    if (!promptData || !promptData.parent_id) {
-      throw new Error('유효하지 않은 프롬프트 데이터: parent_id가 필요합니다.');
+    // 필수 데이터 확인 (기존 로직 유지)
+    if (!promptData || !promptData.title || !promptData.content) {
+      throw new Error('유효하지 않은 프롬프트 데이터: 제목과 내용은 필수입니다.');
     }
-    
-    // 프롬프트 ID 생성 (실제로는 서버에서 생성)
-    const promptId = `user-added-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    
-    // 부모 프롬프트 제목 가져오기 시도
-    let parentTitle = promptData.parent_title || '';
-    
-    // 부모 제목이 없으면 로컬 스토리지에서 다른 프롬프트 목록을 조회해 찾아보기
-    if (!parentTitle) {
-      try {
-        const allPromptsJSON = localStorage.getItem('prompts');
-        if (allPromptsJSON) {
-          const allPrompts = JSON.parse(allPromptsJSON);
-          const parentPrompt = allPrompts.find(p => p.id === promptData.parent_id);
-          if (parentPrompt) {
-            parentTitle = parentPrompt.title;
-          }
-        }
-      } catch (err) {
-        // console.warn('부모 프롬프트 제목 가져오기 실패:', err); // 제거
-      }
-    }
-    
-    // 데이터에 ID와 생성 시간 추가
-    const newPromptData = {
-      ...promptData,
-      id: promptId,
-      created_at: promptData.created_at || new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      is_user_added: true,
-      parent_title: parentTitle,
-      
-      // 필요한 경우 기본값을 설정
-      variables: promptData.variables || [],
-      tags: promptData.tags || [],
-      memo: promptData.memo || '',
-      folder_id: promptData.folder_id || null,
-      folder: promptData.folder || null,
-      is_favorite: promptData.is_favorite || false
+
+    // --- 백엔드 API 호출 로직 추가 ---
+    // 백엔드로 전송할 데이터 구성
+    const payload = {
+      ...promptData, // 프론트엔드에서 전달받은 데이터 (title, content, tags, variables 등)
+      isUserPrompt: true, // 사용자 추가 프롬프트임을 명시
+      userId: "default-user", // 임시 사용자 ID (추후 실제 ID로 변경 필요)
+      parentId: promptData.parent_id // <<< parent_id를 parentId로 전달
     };
-    
-    // 로컬 스토리지에서 사용자 추가 프롬프트 데이터 조회
-    const userPrompts = getUserPromptsFromStorage();
-    
-    // 부모 ID 기준으로 프롬프트 목록 업데이트
-    const parentId = promptData.parent_id;
-    if (!userPrompts[parentId]) {
-      userPrompts[parentId] = [];
-    }
-    
-    // 중복 확인: 동일한 title과 content를 가진 프롬프트가 있는지 확인
-    let isDuplicate = false;
-    const now = new Date();
-    
-    isDuplicate = userPrompts[parentId].some(p => {
-      // title과 content가 같은지 확인
-      const isSameContent = p.title === newPromptData.title;
-      
-      if (!isSameContent) return false;
-      
-      // 생성 시간이 1분 이내인지 확인 (중복 방지 시간 윈도우)
-      try {
-        const pCreatedDate = new Date(p.created_at);
-        const timeDiffMs = now - pCreatedDate;
-        const isWithinTimeWindow = timeDiffMs < 60000; // 1분 (60,000ms)
-        return isWithinTimeWindow;
-      } catch (e) {
-        return false; // 날짜 파싱 오류 시 중복으로 간주하지 않음
-      }
+    // payload에서 parent_id, parent_title 제거 로직 제거
+    // delete payload.parent_id;
+    // delete payload.parent_title;
+
+    // 백엔드 API 호출 (fetch 사용 예시)
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
     });
-    
-    // 중복이 아닐 경우에만 추가
-    if (!isDuplicate) {
-      // 프롬프트 목록 맨 앞에 추가
-      userPrompts[parentId].unshift(newPromptData);
-      
-      // 로컬 스토리지에 저장
-      saveUserPromptsToStorage(userPrompts);
-    } else {
-      // console.warn('중복된 프롬프트 생성 시도가 감지되어 무시되었습니다.'); // 제거
+
+    // 응답 상태 확인
+    if (!response.ok) {
+      // 에러 응답 처리
+      const errorData = await response.json();
+      console.error('API Error Response:', errorData);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
     }
-    
-    // 인위적인 지연을 줘서 비동기 호출을 시뮬레이션
-    await new Promise(resolve => setTimeout(resolve, 200));
-    
-    return newPromptData;
+
+    // 성공 응답 처리 (생성된 프롬프트 데이터 반환)
+    const createdPrompt = await response.json();
+
+    // 백엔드에서 받은 데이터에 is_user_added 플래그 추가 (프론트엔드 호환성)
+    createdPrompt.is_user_added = true;
+
+    console.log('사용자 추가 프롬프트 생성 성공 (DB):', createdPrompt);
+    return createdPrompt;
+    // --- API 호출 로직 끝 ---
+
   } catch (error) {
-    console.error('사용자 추가 프롬프트 생성 오류:', error);
-    throw error;
+    console.error('사용자 추가 프롬프트 생성 오류 (API):', error);
+    throw error; // 에러를 다시 throw하여 호출한 곳에서 처리하도록 함
   }
 };
 
 /**
- * 사용자 추가 프롬프트를 업데이트합니다.
- * @param {string} promptId - 프롬프트 ID
+ * 사용자 추가 프롬프트를 업데이트합니다. (백엔드 API 호출 방식으로 변경)
+ * @param {string} promptId - 프롬프트 ID (DB의 숫자 ID여야 함)
  * @param {Object} promptData - 업데이트할 프롬프트 데이터
  * @returns {Promise<Object>} - 업데이트된 프롬프트 정보
  */
 export const updateUserAddedPrompt = async (promptId, promptData) => {
+  // 백엔드 API 엔드포인트 URL
+  const API_URL = `/api/prompts/${promptId}`;
+
   try {
-    const userPrompts = getUserPromptsFromStorage();
-    let updatedPrompt = null;
+    // --- 로컬 스토리지 로직 제거 ---
+    // const userPrompts = getUserPromptsFromStorage();
+    // ... (찾기 및 업데이트 로직 제거) ...
 
-    // 모든 부모 ID 순회
-    for (const parentId in userPrompts) {
-      const parentPrompts = userPrompts[parentId];
-      const promptIndex = parentPrompts.findIndex(p => p.id === promptId);
+    // --- 백엔드 API 호출 로직 추가 ---
+    // 백엔드로 전송할 데이터 구성 (기존 update_prompt 엔드포인트 형식에 맞춤)
+    const payload = {
+      // title, content는 필수
+      title: promptData.title,
+      content: promptData.content,
+      // 나머지 필드는 promptData에 있으면 포함, 없으면 생략 (백엔드 기본값 또는 기존값 유지)
+      ...(promptData.folder_id !== undefined && { folder_id: promptData.folder_id }),
+      ...(promptData.is_favorite !== undefined && { is_favorite: promptData.is_favorite }),
+      ...(promptData.memo !== undefined && { memo: promptData.memo }),
+      ...(promptData.tags !== undefined && { tags: promptData.tags }),
+      ...(promptData.variables !== undefined && { variables: promptData.variables }),
+      // isUserPrompt, userId, parentId 등은 업데이트하지 않음 (필요시 별도 API 구현)
+    };
 
-      if (promptIndex !== -1) {
-        // 프롬프트 업데이트 - 전달받은 promptData를 기존 데이터와 병합
-        updatedPrompt = {
-          ...parentPrompts[promptIndex],
-          ...promptData,
-          // 명시적 필드 병합 로직 유지
-          title: promptData.title || parentPrompts[promptIndex].title,
-          content: promptData.content || parentPrompts[promptIndex].content,
-          memo: typeof promptData.memo !== 'undefined' ? promptData.memo : parentPrompts[promptIndex].memo,
-          variables: promptData.variables || parentPrompts[promptIndex].variables || [],
-          tags: promptData.tags || parentPrompts[promptIndex].tags || [],
-          folder_id: typeof promptData.folder_id !== 'undefined' ? promptData.folder_id : parentPrompts[promptIndex].folder_id,
-          folder: typeof promptData.folder !== 'undefined' ? promptData.folder : parentPrompts[promptIndex].folder,
-          is_favorite: typeof promptData.is_favorite !== 'undefined' ? promptData.is_favorite : parentPrompts[promptIndex].is_favorite,
-          updated_at: new Date().toISOString(),
-          is_user_added: true
-        };
+    const response = await fetch(API_URL, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
 
-        parentPrompts[promptIndex] = updatedPrompt;
-        saveUserPromptsToStorage(userPrompts);
-        break;
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('API Error Response (updateUserAddedPrompt):', errorData);
+      if (response.status === 404) {
+          throw new Error(`프롬프트 ID ${promptId}를 찾을 수 없습니다 (API).`);
+      } else {
+          throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
     }
 
-    if (!updatedPrompt) {
-      throw new Error(`프롬프트 ID ${promptId}를 찾을 수 없습니다.`);
-    }
+    const updatedPrompt = await response.json();
 
-    // 인위적인 지연
-    await new Promise(resolve => setTimeout(resolve, 200));
+    // 백엔드에서 is_user_added 플래그를 이미 추가했으므로 별도 처리 필요 없음
+    updatedPrompt.is_user_added = true; // 호환성을 위해 유지할 수 있음
 
+    console.log(`사용자 추가 프롬프트 업데이트 성공 (DB): ID ${promptId}`, updatedPrompt);
     return updatedPrompt;
+    // --- API 호출 로직 끝 ---
+
   } catch (error) {
-    console.error('사용자 추가 프롬프트 업데이트 오류:', error);
+    console.error('사용자 추가 프롬프트 업데이트 오류 (API):', error);
     throw error;
   }
 };
 
 /**
- * 사용자 추가 프롬프트를 삭제합니다.
+ * 사용자 추가 프롬프트를 삭제합니다. (백엔드 API 호출 방식으로 변경)
  * @param {string} promptId - 프롬프트 ID
  * @returns {Promise<void>}
  */
 export const deleteUserAddedPrompt = async (promptId) => {
+  // 백엔드 API 엔드포인트 URL
+  const API_URL = `/api/prompts/${promptId}`;
+
   try {
-    const userPrompts = getUserPromptsFromStorage();
-    let found = false;
-    
-    // 모든 부모 ID 순회
-    for (const parentId in userPrompts) {
-      const parentPrompts = userPrompts[parentId];
-      const promptIndex = parentPrompts.findIndex(p => p.id === promptId);
-      
-      if (promptIndex !== -1) {
-        // 프롬프트 삭제
-        parentPrompts.splice(promptIndex, 1);
-        saveUserPromptsToStorage(userPrompts);
-        found = true;
-        break;
+    // --- 로컬 스토리지 로직 제거 ---
+    // const userPrompts = getUserPromptsFromStorage();
+    // ... (찾기 및 삭제 로직 제거) ...
+
+    // --- 백엔드 API 호출 로직 추가 ---
+    const response = await fetch(API_URL, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('API Error Response (deleteUserAddedPrompt):', errorData);
+      // 백엔드에서 404를 반환할 수도 있으므로, 에러 메시지를 좀 더 구체적으로
+      if (response.status === 404) {
+          throw new Error(`프롬프트 ID ${promptId}를 찾을 수 없습니다 (API).`);
+      } else {
+          throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
     }
-    
-    if (!found) {
-      throw new Error(`프롬프트 ID ${promptId}를 찾을 수 없습니다.`);
-    }
-    
-    // 인위적인 지연을 줘서 비동기 호출을 시뮬레이션
-    await new Promise(resolve => setTimeout(resolve, 200));
-    
+
+    // 성공 시 (보통 200 OK 또는 204 No Content 반환)
+    console.log(`사용자 추가 프롬프트 삭제 성공 (DB): ID ${promptId}`);
+    // 반환값 없음 (void)
+    // --- API 호출 로직 끝 ---
+
   } catch (error) {
-    console.error('사용자 추가 프롬프트 삭제 오류:', error);
+    console.error('사용자 추가 프롬프트 삭제 오류 (API):', error);
     throw error;
   }
 };

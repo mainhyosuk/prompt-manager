@@ -16,9 +16,7 @@ from routes.collection_routes import collection_bp
 app = Flask(__name__)
 
 # 애플리케이션 컨텍스트 외부에서, 서버 시작 시 1회 실행되도록 함
-print("--- DEBUG: Calling setup_database() ---")
 setup_database()
-print("--- DEBUG: setup_database() finished ---")
 
 
 # 프론트엔드와의 CORS 이슈 해결

@@ -5,22 +5,44 @@ import datetime
 prompt_bp = Blueprint("prompts", __name__)
 
 
-# 모든 프롬프트 가져오기
+# 모든 프롬프트 가져오기 - userId 필터링 및 is_user_prompt, user_id 필드 추가
 @prompt_bp.route("/api/prompts", methods=["GET"])
 def get_prompts():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # 프롬프트 기본 정보 조회
-    cursor.execute(
-        """
+    # userId 쿼리 파라미터 확인
+    user_id_filter = request.args.get("userId")
+    parent_id_filter = request.args.get("parentId")
+
+    query = """
         SELECT p.id, p.title, p.content, p.folder_id, f.name as folder,
-               p.created_at, p.updated_at, p.is_favorite, 
-               p.use_count, p.last_used_at, p.memo
+               p.created_at, p.updated_at, p.is_favorite,
+               p.use_count, p.last_used_at, p.memo,
+               p.is_user_prompt, p.user_id, p.parent_prompt_id
         FROM prompts p
         LEFT JOIN folders f ON p.folder_id = f.id
     """
-    )
+    params = []
+    conditions = []
+
+    # userId 필터링 조건 추가
+    if user_id_filter:
+        conditions.append("p.is_user_prompt = 1")
+        conditions.append("p.user_id = ?")
+        params.append(user_id_filter)
+        # parentId 필터링 조건 추가 (userId가 있을 때만 의미 있음)
+        if parent_id_filter:
+            conditions.append("p.parent_prompt_id = ?")
+            params.append(parent_id_filter)
+    else:
+        # userId가 없으면 일반 프롬프트만 조회 (기존 동작 유지)
+        conditions.append("(p.is_user_prompt = 0 OR p.is_user_prompt IS NULL)")
+
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+
+    cursor.execute(query, params)
 
     prompts = []
     for row in cursor.fetchall():
@@ -108,6 +130,9 @@ def get_prompts():
         else:
             prompt["last_used"] = "사용 이력 없음"
 
+        # is_user_added 플래그 추가 (프론트엔드 호환성)
+        prompt["is_user_added"] = bool(prompt.get("is_user_prompt"))
+
         prompts.append(prompt)
 
     conn.close()
@@ -169,7 +194,7 @@ def get_prompt(id):
     return jsonify(prompt)
 
 
-# 프롬프트 생성
+# 프롬프트 생성 - 사용자 프롬프트 지원 추가
 @prompt_bp.route("/api/prompts", methods=["POST"])
 def create_prompt():
     data = request.json
@@ -184,19 +209,35 @@ def create_prompt():
     try:
         conn.execute("BEGIN")
 
-        # 프롬프트 기본 정보 저장
+        # --- 사용자 프롬프트 필드 처리 추가 ---
+        is_user_prompt = data.get(
+            "isUserPrompt", False
+        )  # 요청에서 isUserPrompt 값 읽기 (기본값 False)
+        user_id = (
+            data.get("userId") if is_user_prompt else None
+        )  # isUserPrompt가 참일 때만 userId 읽기
+        parent_id = (
+            data.get("parentId") if is_user_prompt else None
+        )  # <<< parentId 읽기 추가
+
+        # 프롬프트 기본 정보 저장 - parent_prompt_id 추가
         cursor.execute(
             """
-            INSERT INTO prompts (title, content, folder_id, is_favorite)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO prompts (title, content, folder_id, is_favorite, is_user_prompt, user_id, memo, parent_prompt_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 data["title"],
                 data["content"],
                 data.get("folder_id"),
                 1 if data.get("is_favorite") else 0,
+                1 if is_user_prompt else 0,
+                user_id,
+                data.get("memo"),
+                parent_id,  # <<< parent_id 값 바인딩 추가
             ),
         )
+        # --- 필드 처리 끝 ---
 
         prompt_id = cursor.lastrowid
 
@@ -246,12 +287,15 @@ def create_prompt():
 
         conn.commit()
 
-        # 새로 생성된 프롬프트 정보 반환
-        return get_prompt(prompt_id)
+        # 새로 생성된 프롬프트 정보 반환 (변경된 get_prompt 사용)
+        return get_prompt(prompt_id)  # 기존 get_prompt 함수는 수정 없이 사용 가능
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        # 더 상세한 에러 로깅 추가
+        print(f"Error in create_prompt: {e}")
+        print(f"Request data: {data}")
+        return jsonify({"error": f"프롬프트 생성 중 오류 발생: {str(e)}"}), 500
 
     finally:
         conn.close()
