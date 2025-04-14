@@ -1,12 +1,15 @@
 // 사용자 추가 프롬프트를 편집하는 모달
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { X, AlertTriangle } from 'lucide-react';
 import VariableList from '../components/variables/VariableList';
 import VariableHighlighter, { extractVariablesFromContent } from '../components/variables/VariableHighlighter';
 import TagSelector from '../components/tags/TagSelector';
 import FolderSelector from '../components/folders/FolderSelector';
+
+// UnsavedChangesPopup 임포트
+import UnsavedChangesPopup from '../components/common/UnsavedChangesPopup';
 
 const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
   const { updatePromptItem } = useAppContext();
@@ -26,21 +29,73 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
   // 모달 참조
   const modalRef = useRef(null);
   
-  // 초기 데이터 로드
+  // --- 변경 감지 및 확인 팝업 관련 상태 추가 ---
+  const [initialState, setInitialState] = useState(null); // 초기 상태 저장
+  const [isConfirmPopupOpen, setIsConfirmPopupOpen] = useState(false); // 확인 팝업 열림 상태
+  // --- 변경 감지 및 확인 팝업 관련 상태 추가 끝 ---
+  
+  // 변경 사항 감지 함수 (PromptAddEditModal과 유사하게 구현)
+  const hasUnsavedChanges = useCallback(() => {
+    if (!initialState) return false;
+    const currentState = {
+      title,
+      content,
+      memo,
+      folderId: folderInfo?.id,
+      tags: tags.map(t => t.name).sort(),
+      variables: variables.map(({ name, default_value, type }) => ({ name, default_value, type })).sort((a, b) => a.name.localeCompare(b.name)),
+      isFavorite
+    };
+    return JSON.stringify(initialState) !== JSON.stringify(currentState);
+  }, [initialState, title, content, memo, folderInfo, tags, variables, isFavorite]);
+  
+  // 모달 닫기 시도 함수
+  const attemptClose = useCallback(() => {
+    if (hasUnsavedChanges()) {
+      setIsConfirmPopupOpen(true);
+    } else {
+      onClose(); // 변경 없으면 바로 닫기
+    }
+  }, [hasUnsavedChanges, onClose]);
+  
+  // 초기 데이터 로드 및 초기 상태 저장
   useEffect(() => {
     if (isOpen && prompt) {
-      setTitle(prompt.title || '');
-      setContent(prompt.content || '');
-      setMemo(prompt.memo || '');
-      setVariables(prompt.variables || []);
-      setTags(prompt.tags || []);
-      setFolderInfo(prompt.folder_id ? {
+      const currentTitle = prompt.title || '';
+      const currentContent = prompt.content || '';
+      const currentMemo = prompt.memo || '';
+      const currentVariables = prompt.variables || [];
+      const currentTags = prompt.tags || [];
+      const currentFolderInfo = prompt.folder_id ? {
         id: prompt.folder_id,
         name: prompt.folder
-      } : null);
-      setIsFavorite(!!prompt.is_favorite);
+      } : null;
+      const currentIsFavorite = !!prompt.is_favorite;
+      
+      setTitle(currentTitle);
+      setContent(currentContent);
+      setMemo(currentMemo);
+      setVariables(currentVariables);
+      setTags(currentTags);
+      setFolderInfo(currentFolderInfo);
+      setIsFavorite(currentIsFavorite);
+      
+      // 초기 상태 저장
+      setInitialState({
+        title: currentTitle,
+        content: currentContent,
+        memo: currentMemo,
+        folderId: currentFolderInfo?.id,
+        tags: currentTags.map(t => t.name).sort(),
+        variables: currentVariables.map(({ name, default_value, type }) => ({ name, default_value, type })).sort((a, b) => a.name.localeCompare(b.name)),
+        isFavorite: currentIsFavorite
+      });
+      
+      // 팝업 초기화
+      setIsConfirmPopupOpen(false);
+      
     } else {
-      // 모달이 닫히거나 prompt가 없는 경우 상태 초기화
+      // 모달 닫힐 때 상태 초기화 (팝업 상태 포함)
       setTitle('');
       setContent('');
       setMemo('');
@@ -48,15 +103,17 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
       setTags([]);
       setFolderInfo(null);
       setIsFavorite(false);
+      setInitialState(null);
+      setIsConfirmPopupOpen(false);
     }
   }, [isOpen, prompt]);
   
-  // 외부 클릭 감지
+  // 외부 클릭 감지 (attemptClose 사용)
   useEffect(() => {
     const handleOutsideClick = (event) => {
       if (isOpen && modalRef.current && !modalRef.current.contains(event.target)) {
         event.stopPropagation();
-        onClose();
+        attemptClose(); // 직접 닫기 대신 attemptClose 호출
       }
     };
     
@@ -67,14 +124,14 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
     return () => {
       document.removeEventListener('mousedown', handleOutsideClick, true);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, attemptClose]); // attemptClose 의존성 추가
 
-  // ESC 키 입력 감지
+  // ESC 키 입력 감지 (attemptClose 사용)
   useEffect(() => {
     const handleEscKey = (event) => {
       if (isOpen && event.key === 'Escape') {
         event.stopPropagation();
-        onClose();
+        attemptClose(); // 직접 닫기 대신 attemptClose 호출
       }
     };
     
@@ -85,7 +142,7 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
     return () => {
       document.removeEventListener('keydown', handleEscKey, true);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, attemptClose]); // attemptClose 의존성 추가
   
   // 내용 변경 시 변수 자동 추출
   const handleContentChange = (newContent) => {
@@ -149,12 +206,12 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
     setMemo(e.target.value);
   };
   
-  // 취소 핸들러
+  // 취소 핸들러 (attemptClose 사용)
   const handleCancel = () => {
-    onClose();
+    attemptClose();
   };
   
-  // 업데이트 핸들러
+  // 업데이트 핸들러 (성공 시 초기 상태 업데이트 추가)
   const handleUpdate = async () => {
     if (!prompt) return;
     
@@ -182,8 +239,18 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
         await onUpdate(updatedPrompt);
       }
       
-      // 모달 닫기
-      onClose();
+      // 저장 성공 시 초기 상태 업데이트
+      setInitialState({
+        title,
+        content,
+        memo,
+        folderId: folderInfo?.id,
+        tags: tags.map(t => t.name).sort(),
+        variables: variables.map(({ name, default_value, type }) => ({ name, default_value, type })).sort((a, b) => a.name.localeCompare(b.name)),
+        isFavorite
+      });
+      setIsConfirmPopupOpen(false); // 팝업 닫기
+      
     } catch (error) {
       console.error('업데이트 오류:', error);
       alert('프롬프트 업데이트에 실패했습니다.');
@@ -205,7 +272,7 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
             프롬프트 편집 {prompt?.is_user_added && <span className="text-blue-500 text-sm">(사용자 추가)</span>}
           </h2>
           <button 
-            onClick={onClose}
+            onClick={attemptClose}
             className="text-gray-400 hover:text-gray-600"
             title="닫기"
           >
@@ -349,6 +416,48 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
           </button>
         </div>
       </div>
+      
+      {/* 확인 팝업 렌더링 */}
+      <UnsavedChangesPopup 
+        isOpen={isConfirmPopupOpen}
+        onCancel={() => setIsConfirmPopupOpen(false)} // 팝업 닫기
+        onDiscard={() => { // 저장 없이 닫기
+          setIsConfirmPopupOpen(false);
+          onClose(); // 실제 모달 닫기
+        }}
+        onSaveAndClose={async () => { // 저장 후 닫기
+          setIsConfirmPopupOpen(false);
+          // handleUpdate 로직 직접 호출
+          if (!prompt) return;
+          if (!validateForm()) {
+            return;
+          }
+          try {
+            const updatedPrompt = {
+              ...prompt,
+              title,
+              content,
+              memo,
+              variables,
+              tags,
+              folder_id: folderInfo?.id,
+              folder: folderInfo?.name,
+              is_favorite: isFavorite,
+              updated_at: new Date().toISOString()
+            };
+            if (onUpdate) {
+              await onUpdate(updatedPrompt);
+            } 
+            // 성공 시 초기 상태 업데이트 및 닫기 로직은 handleUpdate 내부에 포함됨
+            // (하지만 위에서 onClose() 호출을 주석처리했으므로, onUpdate 콜백 내에서 닫도록 유도하거나 여기서 직접 닫아야 함)
+            // 임시로 여기서 닫도록 추가
+            onClose(); 
+          } catch (error) {
+            console.error('팝업에서 업데이트 오류:', error);
+            alert('프롬프트 업데이트에 실패했습니다.');
+          }
+        }}
+      />
     </div>
   );
 };

@@ -129,9 +129,16 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
         // 이벤트 전파 방지
         event.preventDefault();
         event.stopPropagation();
-        if (event.nativeEvent) {
-          event.nativeEvent.stopImmediatePropagation();
+        // if (event.nativeEvent) { // stopImmediatePropagation은 너무 강력하여 자식 모달 이벤트 막음
+        //   event.nativeEvent.stopImmediatePropagation();
+        // }
+        
+        // --- 추가: 편집 오버레이 모달이 열려있으면 여기서 처리 중단 --- 
+        if (isEditOverlayOpen) {
+          console.log('UserPromptDetailModal ESC: Edit overlay is open, skipping close.');
+          return; // 자식 모달(UserPromptEditModal)에서 ESC 처리하도록 함
         }
+        // --- 추가 끝 ---
         
         // 우선순위 처리: 확대 뷰 > 텍스트 에디터 > 모달
         if (isExpandViewOpen) {
@@ -175,7 +182,7 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
     return () => {
       document.removeEventListener('keydown', handleEscKey, true);
     };
-  }, [isOpen, onClose, isTextEditorOpen, isExpandViewOpen, memo, prompt, updatePromptItem]);
+  }, [isOpen, onClose, isTextEditorOpen, isExpandViewOpen, memo, prompt, updatePromptItem, isEditOverlayOpen]);
 
   // 텍스트 에디터 외부 클릭 감지 추가
   useEffect(() => {

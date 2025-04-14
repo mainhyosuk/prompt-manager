@@ -8,6 +8,9 @@ import VariableHighlighter, { extractVariablesFromContent } from '../components/
 import TagSelector from '../components/tags/TagSelector';
 import FolderSelector from '../components/folders/FolderSelector';
 
+// UnsavedChangesPopup 임포트
+import UnsavedChangesPopup from '../components/common/UnsavedChangesPopup';
+
 // Props와 Context를 모두 고려하여 수정
 const PromptAddEditModal = ({ 
   isOpen: isOpenProp,       // 오버레이 호출 시 사용 (Props)
@@ -49,17 +52,49 @@ const PromptAddEditModal = ({
   // 모달 참조
   const modalRef = useRef(null);
   
-  // 외부 클릭 감지 (Props 기반 onClose 우선)
+  // --- 변경 감지 및 확인 팝업 관련 상태 추가 ---
+  const [initialState, setInitialState] = useState(null); // 모달 열릴 때 초기 상태 저장
+  const [isConfirmPopupOpen, setIsConfirmPopupOpen] = useState(false); // 확인 팝업 열림 상태
+  // --- 변경 감지 및 확인 팝업 관련 상태 추가 끝 ---
+  
+  // 변경 사항 감지 함수
+  const hasUnsavedChanges = useCallback(() => {
+    if (!initialState) return false; // 초기 상태 없으면 변경 없음
+    
+    // 현재 상태 객체 생성
+    const currentState = {
+      title,
+      content,
+      folderId: folderInfo?.id,
+      tags: tags.map(t => t.name).sort(), // 태그는 이름 배열로 변환 후 정렬하여 비교
+      variables: variables.map(({ name, default_value, type }) => ({ name, default_value, type })).sort((a, b) => a.name.localeCompare(b.name)), // 변수 객체 단순화 및 정렬
+      isFavorite
+    };
+    
+    // JSON 문자열로 변환하여 비교 (객체/배열 깊은 비교 간소화)
+    return JSON.stringify(initialState) !== JSON.stringify(currentState);
+  }, [initialState, title, content, folderInfo, tags, variables, isFavorite]);
+
+  // 모달 닫기 시도 함수 (공통 로직)
+  const attemptClose = useCallback(() => {
+    if (hasUnsavedChanges()) {
+      setIsConfirmPopupOpen(true); // 변경사항 있으면 팝업 열기
+    } else {
+      // 변경사항 없으면 바로 닫기 (Props 우선)
+      if (onCloseProp) {
+        onCloseProp();
+      } else {
+        setIsAddEditModalOpen(false);
+      }
+    }
+  }, [hasUnsavedChanges, onCloseProp, setIsAddEditModalOpen]);
+  
+  // 외부 클릭 감지 (attemptClose 사용)
   useEffect(() => {
     const handleOutsideClick = (event) => {
       if (isOpen && modalRef.current && !modalRef.current.contains(event.target)) {
         event.stopPropagation();
-        // 오버레이 모드면 onCloseProp 호출, 아니면 전역 모달 닫기
-        if (onCloseProp) {
-          onCloseProp();
-        } else {
-          setIsAddEditModalOpen(false);
-        }
+        attemptClose(); // 직접 닫기 대신 attemptClose 호출
       }
     };
     
@@ -70,20 +105,14 @@ const PromptAddEditModal = ({
     return () => {
       document.removeEventListener('mousedown', handleOutsideClick, true);
     };
-    // setIsAddEditModalOpen 의존성 추가
-  }, [isOpen, onCloseProp, setIsAddEditModalOpen]); 
+  }, [isOpen, attemptClose]); // attemptClose 의존성 추가
 
-  // ESC 키 입력 감지 (Props 기반 onClose 우선)
+  // ESC 키 입력 감지 (attemptClose 사용)
   useEffect(() => {
     const handleEscKey = (event) => {
       if (isOpen && event.key === 'Escape') {
         event.stopPropagation();
-        // 오버레이 모드면 onCloseProp 호출, 아니면 전역 모달 닫기
-        if (onCloseProp) {
-          onCloseProp();
-        } else {
-          setIsAddEditModalOpen(false);
-        }
+        attemptClose(); // 직접 닫기 대신 attemptClose 호출
       }
     };
     
@@ -94,37 +123,57 @@ const PromptAddEditModal = ({
     return () => {
       document.removeEventListener('keydown', handleEscKey, true);
     };
-    // setIsAddEditModalOpen 의존성 추가
-  }, [isOpen, onCloseProp, setIsAddEditModalOpen]); 
+  }, [isOpen, attemptClose]); // attemptClose 의존성 추가
   
-  // 초기 데이터 로드 (Props/Context 기반 initialPrompt 사용)
+  // 초기 데이터 로드 및 초기 상태 저장
   useEffect(() => {
-    // 디버깅: 초기 로딩 시 프롬프트와 편집 모드 확인
+    // 디버깅 로그는 유지
     console.log('PromptAddEditModal useEffect: initialPrompt =', initialPrompt);
     console.log('PromptAddEditModal useEffect: editMode =', editMode);
     
+    let currentTitle = '';
+    let currentContent = '';
+    let currentFolderInfo = null;
+    let currentTags = [];
+    let currentVariables = [];
+    let currentIsFavorite = false;
+    
     if (editMode && initialPrompt) {
-      setTitle(initialPrompt.title || '');
-      setContent(initialPrompt.content || '');
-      setFolderInfo(initialPrompt.folder_id ? {
+      currentTitle = initialPrompt.title || '';
+      currentContent = initialPrompt.content || '';
+      currentFolderInfo = initialPrompt.folder_id ? {
         id: initialPrompt.folder_id,
         name: initialPrompt.folder
-      } : null);
-      setTags(initialPrompt.tags || []);
-      setVariables(initialPrompt.variables || []);
-      setIsFavorite(!!initialPrompt.is_favorite);
+      } : null;
+      currentTags = initialPrompt.tags || [];
+      currentVariables = initialPrompt.variables || [];
+      currentIsFavorite = !!initialPrompt.is_favorite;
     } else {
-      // 새 프롬프트 기본값
-      setTitle('');
-      setContent('');
-      // initialFolderInfo가 있으면 해당 값을 사용하고, 없으면 null 설정
-      setFolderInfo(initialFolderInfo || null);
-      setTags([]);
-      setVariables([]);
-      setIsFavorite(false);
+      currentFolderInfo = initialFolderInfo || null;
     }
-    // editMode, initialPrompt, initialFolderInfo를 의존성 배열에 추가
-  }, [editMode, initialPrompt, initialFolderInfo]);
+    
+    // 폼 상태 업데이트
+    setTitle(currentTitle);
+    setContent(currentContent);
+    setFolderInfo(currentFolderInfo);
+    setTags(currentTags);
+    setVariables(currentVariables);
+    setIsFavorite(currentIsFavorite);
+    
+    // 초기 상태 저장 (변경 감지용)
+    setInitialState({
+      title: currentTitle,
+      content: currentContent,
+      folderId: currentFolderInfo?.id,
+      tags: currentTags.map(t => t.name).sort(),
+      variables: currentVariables.map(({ name, default_value, type }) => ({ name, default_value, type })).sort((a, b) => a.name.localeCompare(b.name)),
+      isFavorite: currentIsFavorite
+    });
+    
+    // 모달 열릴 때 팝업 닫기 (혹시 열려있었다면)
+    setIsConfirmPopupOpen(false);
+    
+  }, [editMode, initialPrompt, initialFolderInfo, isOpen]); // isOpen 추가: 모달이 다시 열릴 때마다 초기 상태 재설정
   
   // 내용 변경 시 변수 자동 추출
   const handleContentChange = (newContent) => {
@@ -209,10 +258,16 @@ const PromptAddEditModal = ({
       console.log('PromptAddEditModal handleSubmit: initialPrompt =', initialPrompt);
       await handleSavePrompt(promptData, promptIdToUpdate);
       
-      // 저장 성공 시 모달 닫기 (Props 우선)
-      if (onCloseProp) {
-        onCloseProp();
-      } 
+      // 저장 성공 시 초기 상태 업데이트 (다음 변경 감지 위함)
+      setInitialState({
+        title,
+        content,
+        folderId: folderInfo?.id,
+        tags: tags.map(t => t.name).sort(),
+        variables: variables.map(({ name, default_value, type }) => ({ name, default_value, type })).sort((a, b) => a.name.localeCompare(b.name)),
+        isFavorite
+      });
+      setIsConfirmPopupOpen(false); // 팝업 닫기
       
     } catch (error) {
       console.error('프롬프트 저장 오류:', error);
@@ -242,8 +297,8 @@ const PromptAddEditModal = ({
             {editMode ? '프롬프트 편집' : '새 프롬프트 추가'}
           </h2>
           <button 
-            // onClick 핸들러 수정: onClose (Props 우선) 호출
-            onClick={() => onCloseProp ? onCloseProp() : setIsAddEditModalOpen(false)}
+            // onClick 핸들러 수정: attemptClose 호출
+            onClick={attemptClose}
             className="text-gray-400 hover:text-gray-600"
           >
             <X size={24} />
@@ -352,8 +407,8 @@ const PromptAddEditModal = ({
         <div className="flex justify-end border-t px-6 py-4 space-x-2">
           <button
             type="button"
-            // onClick 핸들러 수정: onClose (Props 우선) 호출
-            onClick={() => onCloseProp ? onCloseProp() : setIsAddEditModalOpen(false)}
+            // onClick 핸들러 수정: attemptClose 호출
+            onClick={attemptClose}
             className="px-4 py-2 border rounded text-gray-700 hover:bg-gray-50"
             disabled={isLoading}
           >
@@ -377,6 +432,47 @@ const PromptAddEditModal = ({
           </button>
         </div>
       </div>
+      
+      {/* 확인 팝업 렌더링 */}
+      <UnsavedChangesPopup 
+        isOpen={isConfirmPopupOpen}
+        onCancel={() => setIsConfirmPopupOpen(false)} // 팝업 닫기
+        onDiscard={() => { // 저장 없이 닫기
+          setIsConfirmPopupOpen(false);
+          if (onCloseProp) {
+            onCloseProp();
+          } else {
+            setIsAddEditModalOpen(false);
+          }
+        }}
+        onSaveAndClose={async () => { // 저장 후 닫기
+          setIsConfirmPopupOpen(false);
+          // handleSubmit 로직 직접 호출 (event 객체 없이)
+          if (!validateForm()) {
+            return; // 유효성 검사 실패 시 중단
+          }
+          try {
+            const promptData = {
+              title,
+              content,
+              folder_id: folderInfo?.id,
+              tags,
+              variables,
+              is_favorite: isFavorite
+            };
+            const promptIdToUpdate = editMode && initialPrompt ? initialPrompt.id : null;
+            await handleSavePrompt(promptData, promptIdToUpdate);
+            // 저장 성공 후 실제 닫기 로직은 handleSavePrompt 내부에서 처리됨 (Props/Context 분기 포함)
+            // 여기서는 추가적인 닫기 호출 불필요 (onCloseProp 등)
+            if (onCloseProp) {
+              onCloseProp();
+            }
+          } catch (error) {
+            console.error('팝업에서 저장 오류:', error);
+            // 에러 발생 시 사용자 알림 등 추가 처리 가능
+          }
+        }}
+      />
     </div>
   );
 };
