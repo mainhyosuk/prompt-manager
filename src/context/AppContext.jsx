@@ -326,7 +326,7 @@ export const AppProvider = ({ children }) => {
     setIsAddEditModalOpen(true);
   }, []);
 
-  // 프롬프트 편집 핸들러
+  // 프롬프트 편집 핸들러 (전역 모달 열기 로직 복구)
   const handleEditPrompt = useCallback((prompt) => {
     // 중요: 변수(variables) 속성 등 모든 프롬프트 속성이 있는지 확인
     if (prompt) {
@@ -345,8 +345,10 @@ export const AppProvider = ({ children }) => {
     }
     
     setEditMode(true);
-    setIsAddEditModalOpen(true);
-    setIsDetailModalOpen(false);
+    // 전역 편집 모달 열기 상태 설정 복구
+    setIsAddEditModalOpen(true); 
+    // 상세 모달 닫기 로직은 제거된 상태 유지 (경로 2 오버레이 위함)
+    // setIsDetailModalOpen(false); 
   }, [prompts]);
 
   // 프롬프트 상세보기 핸들러
@@ -430,20 +432,25 @@ export const AppProvider = ({ children }) => {
     }
   }, []);
 
-  // 프롬프트 저장 핸들러
-  const handleSavePrompt = useCallback(async (promptData) => {
+  // 프롬프트 저장 핸들러 (편집 시 ID 받도록 수정)
+  const handleSavePrompt = useCallback(async (promptData, promptIdToUpdate = null) => {
+    console.log('handleSavePrompt called with:', promptData, promptIdToUpdate);
     setIsLoading(true);
     setError(null);
     
     try {
       let savedPrompt;
       
-      if (editMode && selectedPrompt) {
-        savedPrompt = await updatePrompt(selectedPrompt.id, promptData);
+      // promptIdToUpdate가 있으면 업데이트, 없으면 생성
+      if (promptIdToUpdate) {
+        savedPrompt = await updatePrompt(promptIdToUpdate, promptData);
+        // 업데이트 성공 후, loadData 전에 selectedPrompt 상태 즉시 업데이트
+        setSelectedPrompt(savedPrompt); 
       } else {
         savedPrompt = await createPrompt(promptData);
       }
       
+      // 전역 모달 닫기 (이 함수는 주로 전역 모달에서 호출될 것이므로)
       setIsAddEditModalOpen(false);
       await loadData(); // 데이터 전체 리로드
       return savedPrompt;
@@ -454,7 +461,8 @@ export const AppProvider = ({ children }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [editMode, selectedPrompt, loadData]);
+    // editMode와 selectedPrompt 의존성 제거, loadData 의존성 유지
+  }, [loadData]); 
 
   // 오버레이 모달 닫기
   const closeOverlayModal = useCallback(() => {

@@ -8,6 +8,7 @@ import { Maximize2 } from 'lucide-react';
 import PromptExpandView from '../components/common/PromptExpandView';
 import MemoExpandModal from '../components/common/MemoExpandModal';
 import { updateUserAddedPrompt } from '../api/userPromptApi';
+import UserPromptEditModal from './UserPromptEditModal';
 
 // 변수가 적용된 내용을 하이라이트하는 컴포넌트
 const HighlightedContent = ({ content, variableValues }) => {
@@ -85,6 +86,9 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
   const [savingMemo, setSavingMemo] = useState(false);
   const memoTimerRef = useRef(null);
   const autoSaveDelay = 1000; // 1초 후 자동 저장
+
+  // UserPromptEditModal 오버레이 상태 추가
+  const [isEditOverlayOpen, setIsEditOverlayOpen] = useState(false);
 
   // 모달 열릴 때 savingStates 초기화 추가
   useEffect(() => {
@@ -365,12 +369,14 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
     }
   };
   
-  // 편집 핸들러
+  // 편집 핸들러 (오버레이 모달 열도록 수정)
   const handleEdit = () => {
-    if (handleEditPrompt && prompt) {
-      handleEditPrompt(prompt);
-      onClose();
-    }
+    // AppContext의 handleEditPrompt 대신 로컬 상태 변경
+    setIsEditOverlayOpen(true);
+    // if (handleEditPrompt && prompt) {
+    //   handleEditPrompt(prompt); // AppContext 함수 호출 제거
+    //   onClose(); // 기존 모달 닫기 제거
+    // }
   };
   
   // 즐겨찾기 토글 핸들러
@@ -762,6 +768,28 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
             onClose={handleCloseMemoExpand}
             onMemoChange={handleMemoChange}
             readOnly={false}
+          />
+        )}
+        
+        {/* UserPromptEditModal 오버레이 추가 */}
+        {isEditOverlayOpen && (
+          <UserPromptEditModal
+            isOpen={isEditOverlayOpen}
+            onClose={() => setIsEditOverlayOpen(false)} // 로컬 상태 닫기
+            prompt={prompt} // 현재 prompt 전달
+            onUpdate={async (updatedPromptData) => { // 업데이트 콜백 수정
+              try {
+                // updateUserAddedPrompt API 직접 호출
+                await updateUserAddedPrompt(prompt.id, updatedPromptData);
+                // AppContext 상태 업데이트
+                updatePromptItem(prompt.id, updatedPromptData);
+                setIsEditOverlayOpen(false); // 성공 시 오버레이 닫기
+              } catch (error) {
+                console.error('UserPromptEditModal 업데이트 오류:', error);
+                alert('프롬프트 업데이트에 실패했습니다.');
+                // 실패 시 모달을 닫지 않을 수 있음
+              }
+            }}
           />
         )}
       </div>

@@ -14,6 +14,9 @@ import PromptExpandView from '../components/common/PromptExpandView';
 import MemoExpandModal from '../components/common/MemoExpandModal';
 import { updateUserAddedPrompt } from '../api/userPromptApi'; // 사용자 프롬프트 업데이트 API 임포트
 
+// 상세 모달 내에서 편집 모달을 렌더링하기 위해 임포트 추가
+import PromptAddEditModal from './PromptAddEditModal';
+
 // 변수가 적용된 내용을 하이라이트하는 컴포넌트
 const HighlightedContent = ({ content, variableValues }) => {
   if (!content) return null;
@@ -666,6 +669,9 @@ const PromptDetailModal = () => {
     }
   }, [selectedPrompt]);
 
+  // 편집 오버레이 모달 상태 추가
+  const [isEditOverlayOpen, setIsEditOverlayOpen] = useState(false);
+
   if (!selectedPrompt) return null;
   
   // 클립보드 복사
@@ -743,8 +749,10 @@ const PromptDetailModal = () => {
             {/* 편집 버튼 */}
             <button
               onClick={() => {
-                const latestPromptData = { ...selectedPrompt };
-                handleEditPrompt(latestPromptData);
+                // AppContext의 handleEditPrompt 대신 내부 상태 변경으로 편집 모달 열기
+                setIsEditOverlayOpen(true);
+                // const latestPromptData = { ...selectedPrompt };
+                // handleEditPrompt(latestPromptData); // AppContext 함수 호출 제거
               }}
               className="text-gray-400 hover:text-blue-600"
               title="편집"
@@ -1164,30 +1172,37 @@ const PromptDetailModal = () => {
           </div>
         )}
 
-        {/* 프롬프트 확대 보기 컴포넌트 */}
-        <PromptExpandView
-          isOpen={expandViewOpen}
-          onClose={handleCloseExpandView}
-          title={expandViewTitle}
-          content={expandViewContent}
-          highlightedContent={
-            <HighlightedContent
-              content={selectedPrompt?.content}
-              variableValues={expandViewIsOriginal ? {} : variableValues}
-            />
-          }
-          useHighlightedContent={true}
-        />
-
-        {/* MemoExpandModal 추가 */} 
+        {/* PromptExpandView 모달 */}
+        {expandViewOpen && (
+          <PromptExpandView 
+            isOpen={expandViewOpen}
+            onClose={handleCloseExpandView}
+            title={expandViewTitle}
+            content={expandViewContent}
+            isOriginal={expandViewIsOriginal}
+            variableValues={variableValues}
+            handleOpenExpandView={handleOpenExpandView} // 확대보기 내에서 다른 내용 보기
+          />
+        )}
+        
+        {/* 메모 확장 모달 */}
         {isMemoExpanded && (
           <MemoExpandModal
-            title="메모 편집"
-            memo={memo}
             isOpen={isMemoExpanded}
             onClose={handleCloseMemoExpand}
-            onMemoChange={handleMemoChange} // 기존 메모 핸들러 전달
-            readOnly={false} // 편집 가능하도록 설정
+            memo={memo}
+            onMemoChange={handleMemoChange}
+          />
+        )}
+        
+        {/* 편집 오버레이 모달 추가 */}
+        {isEditOverlayOpen && (
+          <PromptAddEditModal 
+            isOpen={isEditOverlayOpen}
+            onClose={() => setIsEditOverlayOpen(false)} // 닫기 함수 전달
+            prompt={selectedPrompt} // 편집할 프롬프트 데이터 전달
+            editMode={true} // 편집 모드임을 명시
+            // handleSavePrompt는 PromptAddEditModal 내부에서 AppContext를 직접 사용
           />
         )}
       </div>

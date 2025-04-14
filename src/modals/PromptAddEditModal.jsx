@@ -8,16 +8,33 @@ import VariableHighlighter, { extractVariablesFromContent } from '../components/
 import TagSelector from '../components/tags/TagSelector';
 import FolderSelector from '../components/folders/FolderSelector';
 
-const PromptAddEditModal = () => {
+// Props와 Context를 모두 고려하여 수정
+const PromptAddEditModal = ({ 
+  isOpen: isOpenProp,       // 오버레이 호출 시 사용 (Props)
+  onClose: onCloseProp,     // 오버레이 호출 시 사용 (Props)
+  prompt: initialPromptProp, // 오버레이 호출 시 사용 (Props)
+  editMode: editModeProp     // 오버레이 호출 시 사용 (Props)
+}) => {
   const { 
-    editMode, 
-    selectedPrompt, 
-    setIsAddEditModalOpen,
+    // Context 상태 (전역 호출 시 사용)
+    isAddEditModalOpen: isAddEditModalOpenContext,
+    selectedPrompt: selectedPromptContext,
+    editMode: editModeContext,
+    setIsAddEditModalOpen, // 전역 모달 닫기 함수
+    
+    // 공통 사용 함수/상태
     handleSavePrompt,
     isLoading,
-    initialFolderInfo
+    initialFolderInfo 
   } = useAppContext();
   
+  // 모달 열림 상태 결정 (Props 우선)
+  const isOpen = isOpenProp ?? isAddEditModalOpenContext;
+  // 편집 모드 결정 (Props 우선)
+  const editMode = editModeProp ?? editModeContext;
+  // 편집 대상 프롬프트 결정 (Props 우선)
+  const initialPrompt = initialPromptProp ?? selectedPromptContext;
+
   // 폼 상태
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -32,48 +49,70 @@ const PromptAddEditModal = () => {
   // 모달 참조
   const modalRef = useRef(null);
   
-  // 외부 클릭 감지
+  // 외부 클릭 감지 (Props 기반 onClose 우선)
   useEffect(() => {
     const handleOutsideClick = (event) => {
-      if (modalRef.current && !modalRef.current.contains(event.target)) {
-        setIsAddEditModalOpen(false);
+      if (isOpen && modalRef.current && !modalRef.current.contains(event.target)) {
+        event.stopPropagation();
+        // 오버레이 모드면 onCloseProp 호출, 아니면 전역 모달 닫기
+        if (onCloseProp) {
+          onCloseProp();
+        } else {
+          setIsAddEditModalOpen(false);
+        }
       }
     };
     
-    document.addEventListener('mousedown', handleOutsideClick);
+    if (isOpen) {
+      document.addEventListener('mousedown', handleOutsideClick, true);
+    }
     
     return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('mousedown', handleOutsideClick, true);
     };
-  }, [setIsAddEditModalOpen]);
+    // setIsAddEditModalOpen 의존성 추가
+  }, [isOpen, onCloseProp, setIsAddEditModalOpen]); 
 
-  // ESC 키 입력 감지
+  // ESC 키 입력 감지 (Props 기반 onClose 우선)
   useEffect(() => {
     const handleEscKey = (event) => {
-      if (event.key === 'Escape') {
-        setIsAddEditModalOpen(false);
+      if (isOpen && event.key === 'Escape') {
+        event.stopPropagation();
+        // 오버레이 모드면 onCloseProp 호출, 아니면 전역 모달 닫기
+        if (onCloseProp) {
+          onCloseProp();
+        } else {
+          setIsAddEditModalOpen(false);
+        }
       }
     };
     
-    document.addEventListener('keydown', handleEscKey);
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscKey, true);
+    }
     
     return () => {
-      document.removeEventListener('keydown', handleEscKey);
+      document.removeEventListener('keydown', handleEscKey, true);
     };
-  }, [setIsAddEditModalOpen]);
+    // setIsAddEditModalOpen 의존성 추가
+  }, [isOpen, onCloseProp, setIsAddEditModalOpen]); 
   
-  // 초기 데이터 로드
+  // 초기 데이터 로드 (Props/Context 기반 initialPrompt 사용)
   useEffect(() => {
-    if (editMode && selectedPrompt) {
-      setTitle(selectedPrompt.title || '');
-      setContent(selectedPrompt.content || '');
-      setFolderInfo(selectedPrompt.folder_id ? {
-        id: selectedPrompt.folder_id,
-        name: selectedPrompt.folder
+    // 디버깅: 초기 로딩 시 프롬프트와 편집 모드 확인
+    console.log('PromptAddEditModal useEffect: initialPrompt =', initialPrompt);
+    console.log('PromptAddEditModal useEffect: editMode =', editMode);
+    
+    if (editMode && initialPrompt) {
+      setTitle(initialPrompt.title || '');
+      setContent(initialPrompt.content || '');
+      setFolderInfo(initialPrompt.folder_id ? {
+        id: initialPrompt.folder_id,
+        name: initialPrompt.folder
       } : null);
-      setTags(selectedPrompt.tags || []);
-      setVariables(selectedPrompt.variables || []);
-      setIsFavorite(!!selectedPrompt.is_favorite);
+      setTags(initialPrompt.tags || []);
+      setVariables(initialPrompt.variables || []);
+      setIsFavorite(!!initialPrompt.is_favorite);
     } else {
       // 새 프롬프트 기본값
       setTitle('');
@@ -84,7 +123,8 @@ const PromptAddEditModal = () => {
       setVariables([]);
       setIsFavorite(false);
     }
-  }, [editMode, selectedPrompt, initialFolderInfo]);
+    // editMode, initialPrompt, initialFolderInfo를 의존성 배열에 추가
+  }, [editMode, initialPrompt, initialFolderInfo]);
   
   // 내용 변경 시 변수 자동 추출
   const handleContentChange = (newContent) => {
@@ -161,22 +201,49 @@ const PromptAddEditModal = () => {
         is_favorite: isFavorite
       };
       
-      await handleSavePrompt(promptData);
+      // editMode와 initialPrompt.id를 사용하여 저장/업데이트 구분
+      // promptIdToUpdate 결정: 편집 모드이고 initialPrompt가 존재하면 그 ID 사용
+      const promptIdToUpdate = editMode && initialPrompt ? initialPrompt.id : null;
+      // 디버깅: handleSavePrompt 호출 전 ID와 데이터 확인
+      console.log('PromptAddEditModal handleSubmit: promptIdToUpdate =', promptIdToUpdate);
+      console.log('PromptAddEditModal handleSubmit: initialPrompt =', initialPrompt);
+      await handleSavePrompt(promptData, promptIdToUpdate);
+      
+      // 저장 성공 시 모달 닫기 (Props 우선)
+      if (onCloseProp) {
+        onCloseProp();
+      } 
+      
     } catch (error) {
       console.error('프롬프트 저장 오류:', error);
+      // 에러 발생 시 모달을 닫지 않고 사용자에게 피드백을 줄 수 있음 (선택사항)
     }
   };
   
+  // 모달이 열려있지 않으면 렌더링하지 않음
+  if (!isOpen) return null;
+  
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div ref={modalRef} className="bg-white rounded-lg shadow-xl w-3/4 max-w-4xl h-[85vh] flex flex-col">
+    // 오버레이 스타일 적용
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      // onClick 핸들러는 유지하되, 모달 내부 클릭 시 버블링 막기
+    >
+      {/* 모달 컨텐츠 영역, 외부 클릭 방지 */}
+      <div 
+        ref={modalRef} 
+        className="bg-white rounded-lg shadow-xl w-10/12 max-w-5xl h-[85vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()} // 모달 내부 클릭 시 이벤트 전파 중단
+      >
         {/* 모달 헤더 */}
         <div className="flex justify-between items-center border-b px-6 py-4 flex-shrink-0">
           <h2 className="text-xl font-semibold">
+            {/* editMode (Props/Context 통합) 사용 */}
             {editMode ? '프롬프트 편집' : '새 프롬프트 추가'}
           </h2>
           <button 
-            onClick={() => setIsAddEditModalOpen(false)}
+            // onClick 핸들러 수정: onClose (Props 우선) 호출
+            onClick={() => onCloseProp ? onCloseProp() : setIsAddEditModalOpen(false)}
             className="text-gray-400 hover:text-gray-600"
           >
             <X size={24} />
@@ -285,7 +352,8 @@ const PromptAddEditModal = () => {
         <div className="flex justify-end border-t px-6 py-4 space-x-2">
           <button
             type="button"
-            onClick={() => setIsAddEditModalOpen(false)}
+            // onClick 핸들러 수정: onClose (Props 우선) 호출
+            onClick={() => onCloseProp ? onCloseProp() : setIsAddEditModalOpen(false)}
             className="px-4 py-2 border rounded text-gray-700 hover:bg-gray-50"
             disabled={isLoading}
           >

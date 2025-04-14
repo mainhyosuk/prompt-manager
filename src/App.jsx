@@ -8,7 +8,7 @@ import { useAppContext } from './context/AppContext';
 const App = () => {
   const { 
     currentScreen, 
-    isAddEditModalOpen, 
+    isAddEditModalOpen,
     isDetailModalOpen,
     selectedPrompt
   } = useAppContext();
