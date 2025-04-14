@@ -146,7 +146,14 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
           // 메모에 변경 사항이 있으면 저장
           if (prompt && memo !== prompt.memo) {
             try {
-              await updateUserAddedPrompt(prompt.id, { memo: memo });
+              // 전체 프롬프트 데이터 전달
+              const dataToUpdate = {
+                ...prompt,
+                memo: memo
+              };
+              if (!dataToUpdate.title) dataToUpdate.title = '제목 없음';
+              if (!dataToUpdate.content) dataToUpdate.content = '내용 없음';
+              await updateUserAddedPrompt(prompt.id, dataToUpdate);
               updatePromptItem(prompt.id, { ...prompt, memo });
             } catch (error) {
               console.error('모달 닫기 전 메모 저장 오류:', error);
@@ -199,7 +206,14 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
         // 메모에 변경 사항이 있으면 저장
         if (prompt && memo !== prompt.memo) {
           try {
-            await updateUserAddedPrompt(prompt.id, { memo: memo });
+            // 전체 프롬프트 데이터 전달
+            const dataToUpdate = {
+              ...prompt,
+              memo: memo
+            };
+            if (!dataToUpdate.title) dataToUpdate.title = '제목 없음';
+            if (!dataToUpdate.content) dataToUpdate.content = '내용 없음';
+            await updateUserAddedPrompt(prompt.id, dataToUpdate);
             updatePromptItem(prompt.id, { ...prompt, memo });
           } catch (error) {
             console.error('모달 닫기 전 메모 저장 오류:', error);
@@ -265,7 +279,7 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
     }));
   };
   
-  // 변수 값 저장 핸들러 수정 (로그 제거)
+  // 변수 값 저장 핸들러 수정
   const handleSaveVariableValue = useCallback(async (variableName, explicitValue = null) => {
     if (!prompt?.id || !variableName || !prompt.variables) {
       return;
@@ -286,7 +300,15 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
           return v;
         });
 
-        await updateUserAddedPrompt(prompt.id, { variables: updatedVariables });
+        // 전체 프롬프트 데이터 전달
+        const dataToUpdate = {
+          ...prompt,
+          variables: updatedVariables
+        };
+        if (!dataToUpdate.title) dataToUpdate.title = '제목 없음';
+        if (!dataToUpdate.content) dataToUpdate.content = '내용 없음';
+
+        await updateUserAddedPrompt(prompt.id, dataToUpdate);
 
         updatePromptItem(prompt.id, { variables: updatedVariables });
 
@@ -381,15 +403,21 @@ const UserPromptDetailModal = ({ isOpen, onClose, prompt }) => {
     }, autoSaveDelay);
   };
   
-  // 메모 자동 저장 (updatePromptMemo 직접 사용)
+  // 메모 자동 저장
   const autoSaveMemo = async (memoText) => {
     if (!prompt) return;
     if (memoText === prompt.memo) return;
     setSavingMemo(true);
     try {
-      // API 직접 호출
-      await updateUserAddedPrompt(prompt.id, { memo: memoText });
-      // AppContext 상태 업데이트
+      // 전체 프롬프트 데이터 전달
+      const dataToUpdate = {
+        ...prompt,
+        memo: memoText
+      };
+      if (!dataToUpdate.title) dataToUpdate.title = '제목 없음';
+      if (!dataToUpdate.content) dataToUpdate.content = '내용 없음';
+
+      await updateUserAddedPrompt(prompt.id, dataToUpdate);
       updatePromptItem(prompt.id, { memo: memoText });
     } catch (error) {
       console.error('메모 저장 오류:', error);

@@ -59,7 +59,6 @@ export const getUserAddedPrompts = async (parentId) => {
     // 백엔드에서 is_user_added 플래그를 이미 추가했으므로 별도 처리 필요 없음
     // (get_prompts 함수에서 `prompt['is_user_added'] = bool(prompt.get('is_user_prompt'))` 처리함)
 
-    console.log(`사용자(${userId}) 추가 프롬프트 목록 조회 성공 (DB):`, promptsFromDB);
     return promptsFromDB; // DB에서 직접 조회한 목록 반환
     // --- API 호출 로직 끝 ---
 
@@ -119,7 +118,6 @@ export const createUserAddedPrompt = async (promptData) => {
     // 백엔드에서 받은 데이터에 is_user_added 플래그 추가 (프론트엔드 호환성)
     createdPrompt.is_user_added = true;
 
-    console.log('사용자 추가 프롬프트 생성 성공 (DB):', createdPrompt);
     return createdPrompt;
     // --- API 호출 로직 끝 ---
 
@@ -182,7 +180,6 @@ export const updateUserAddedPrompt = async (promptId, promptData) => {
     // 백엔드에서 is_user_added 플래그를 이미 추가했으므로 별도 처리 필요 없음
     updatedPrompt.is_user_added = true; // 호환성을 위해 유지할 수 있음
 
-    console.log(`사용자 추가 프롬프트 업데이트 성공 (DB): ID ${promptId}`, updatedPrompt);
     return updatedPrompt;
     // --- API 호출 로직 끝 ---
 
@@ -223,7 +220,7 @@ export const deleteUserAddedPrompt = async (promptId) => {
     }
 
     // 성공 시 (보통 200 OK 또는 204 No Content 반환)
-    console.log(`사용자 추가 프롬프트 삭제 성공 (DB): ID ${promptId}`);
+    // console.log(`사용자 추가 프롬프트 삭제 성공 (DB): ID ${promptId}`); // <<< 로그 제거
     // 반환값 없음 (void)
     // --- API 호출 로직 끝 ---
 

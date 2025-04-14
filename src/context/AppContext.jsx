@@ -700,9 +700,7 @@ export const AppProvider = ({ children }) => {
   const updatePromptItem = useCallback((promptId, updatedData) => {
     const updateItem = (items) => items.map(item => {
       if (item.id === promptId) {
-        // 업데이트된 데이터와 is_user_added 플래그 병합
         const newItem = { ...item, ...updatedData };
-        // is_user_added 플래그가 누락되지 않도록 보장
         if (typeof item.is_user_added !== 'undefined') {
           newItem.is_user_added = item.is_user_added;
         }
@@ -720,7 +718,24 @@ export const AppProvider = ({ children }) => {
     setSelectedPrompt(prev => (prev && prev.id === promptId) ? { ...prev, ...updatedData, is_user_added: prev.is_user_added } : prev);
     // 이전 프롬프트도 업데이트 (뒤로가기 시 반영되도록)
     setPreviousPrompt(prev => (prev && prev.id === promptId) ? { ...prev, ...updatedData, is_user_added: prev.is_user_added } : prev);
-  }, [setSelectedPrompt, setPreviousPrompt]);
+
+    // --- 추가: 현재 열려있는 사용자 프롬프트 모달 상태도 업데이트 ---
+    setUserPrompt(prev => {
+      if (prev && prev.id === promptId) {
+        const newItem = { ...prev, ...updatedData };
+        // is_user_added 플래그가 항상 true가 되도록 보장 (사용자 프롬프트 모달이므로)
+        newItem.is_user_added = true;
+        return newItem;
+      }
+      return prev; // ID가 다르면 기존 상태 유지
+    });
+    // --- 추가 끝 ---
+
+    // --- 추가: 목록 새로고침 트리거 ---
+    setUserPromptUpdateTimestamp(Date.now());
+    // --- 추가 끝 ---
+
+  }, [setSelectedPrompt, setPreviousPrompt, setUserPrompt, setUserPromptUpdateTimestamp]); // setUserPromptUpdateTimestamp 의존성 추가
 
   // 프롬프트 제목 업데이트 핸들러 (updatePrompt API 사용)
   const handleUpdatePromptTitle = useCallback(async (promptId, newTitle) => {

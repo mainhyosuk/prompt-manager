@@ -432,15 +432,18 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
     selectedPrompt, 
     updatePromptItem, 
     openOverlayModal: contextOpenOverlayModal, 
-    userPromptUpdateTimestamp, 
+    userPromptUpdateTimestamp,
     setUserPromptUpdateTimestamp,
     handleSavePrompt, // 일반 프롬프트 생성 함수 가져오기
     loadData // 메인 목록 새로고침 함수 가져오기
   } = useAppContext();
   
-  // 사용자 추가 프롬프트 데이터 로드 (기존 함수 - 이제 DB에서 가져옴)
+  // 사용자 추가 프롬프트 데이터 로드
   const loadUserPrompts = useCallback(async () => {
-    if (!selectedPromptId) return;
+    if (!selectedPromptId) {
+      setUserPrompts([]); // 부모 ID 없으면 목록 비우기
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
@@ -454,6 +457,16 @@ const UserAddedPromptsList = ({ selectedPromptId, onPromptSelect }) => {
       setIsLoading(false);
     }
   }, [selectedPromptId]);
+  
+  // useEffect 추가 - 프롬프트가 변경되거나, 타임스탬프가 변경될 때 목록 로드
+  useEffect(() => {
+    // selectedPromptId가 있을 때만 로드
+    if (selectedPromptId) {
+      loadUserPrompts();
+    } else {
+      setUserPrompts([]); // 부모 ID 없으면 목록 비우기
+    }
+  }, [selectedPromptId, loadUserPrompts, userPromptUpdateTimestamp]);
   
   // 새 사용자 프롬프트 생성 핸들러
   const handleCreateNewPrompt = async () => {

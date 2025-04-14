@@ -322,11 +322,11 @@ def update_prompt(id):
 
         conn.execute("BEGIN")
 
-        # 프롬프트 기본 정보 업데이트
+        # --- 프롬프트 기본 정보 업데이트 (memo 추가) ---
         cursor.execute(
             """
             UPDATE prompts
-            SET title = ?, content = ?, folder_id = ?, is_favorite = ?, updated_at = datetime('now')
+            SET title = ?, content = ?, folder_id = ?, is_favorite = ?, memo = ?, updated_at = datetime('now')
             WHERE id = ?
         """,
             (
@@ -334,14 +334,14 @@ def update_prompt(id):
                 data["content"],
                 data.get("folder_id"),
                 1 if data.get("is_favorite") else 0,
+                data.get("memo"),  # memo 필드 업데이트 추가
                 id,
             ),
         )
+        # --- 업데이트 끝 ---
 
-        # 기존 태그 연결 제거
+        # --- 태그 처리 (기존 로직 유지) ---
         cursor.execute("DELETE FROM prompt_tags WHERE prompt_id = ?", (id,))
-
-        # 새 태그 연결
         if "tags" in data and data["tags"]:
             for tag in data["tags"]:
                 # 태그 ID가 없으면 새로 생성
@@ -353,18 +353,15 @@ def update_prompt(id):
                     """,
                         (tag["name"], tag.get("color", "blue")),
                     )
-
                     cursor.execute(
                         """
                         SELECT id FROM tags WHERE name = ?
                     """,
                         (tag["name"],),
                     )
-
                     tag_id = cursor.fetchone()["id"]
                 else:
                     tag_id = tag["id"]
-
                 # 프롬프트-태그 연결
                 cursor.execute(
                     """
@@ -374,19 +371,65 @@ def update_prompt(id):
                     (id, tag_id),
                 )
 
-        # 기존 변수 제거
-        cursor.execute("DELETE FROM variables WHERE prompt_id = ?", (id,))
-
-        # 새 변수 추가
+        # --- 변수 처리 (수정: 기존 변수 업데이트) ---
         if "variables" in data and data["variables"]:
+            current_vars = {}
+            # DB에서 현재 변수 목록 가져오기
+            cursor.execute(
+                "SELECT name, default_value FROM variables WHERE prompt_id = ?", (id,)
+            )
+            for row in cursor.fetchall():
+                current_vars[row["name"]] = row["default_value"]
+
+            vars_to_update = {}
+            vars_to_add = []
+            vars_in_request = set()
+
             for variable in data["variables"]:
+                var_name = variable.get("name")
+                if not var_name:
+                    continue  # 이름 없는 변수 건너뛰기
+
+                vars_in_request.add(var_name)
+                default_value = variable.get("default_value", "")
+
+                if var_name in current_vars:
+                    # 기존 변수 업데이트 대상
+                    if current_vars[var_name] != default_value:
+                        vars_to_update[var_name] = default_value
+                else:
+                    # 새로 추가할 변수
+                    vars_to_add.append(
+                        {"name": var_name, "default_value": default_value}
+                    )
+
+            # DB 업데이트 수행
+            for name, value in vars_to_update.items():
                 cursor.execute(
-                    """
-                    INSERT INTO variables (prompt_id, name, default_value)
-                    VALUES (?, ?, ?)
-                """,
-                    (id, variable["name"], variable.get("default_value", "")),
+                    "UPDATE variables SET default_value = ? WHERE prompt_id = ? AND name = ?",
+                    (value, id, name),
                 )
+                print(f"변수 업데이트: {name} = {value}")
+
+            # 새 변수 추가
+            for var_data in vars_to_add:
+                cursor.execute(
+                    "INSERT INTO variables (prompt_id, name, default_value) VALUES (?, ?, ?)",
+                    (id, var_data["name"], var_data["default_value"]),
+                )
+                print(f"새 변수 추가: {var_data['name']} = {var_data['default_value']}")
+
+            # 요청에 없고 DB에만 있는 변수 삭제 (선택 사항 - 필요시 주석 해제)
+            # vars_to_delete = set(current_vars.keys()) - vars_in_request
+            # if vars_to_delete:
+            #     delete_placeholders = ','.join('?' * len(vars_to_delete))
+            #     cursor.execute(
+            #         f"DELETE FROM variables WHERE prompt_id = ? AND name IN ({delete_placeholders})",
+            #         (id, *list(vars_to_delete))
+            #     )
+            #     print(f"변수 삭제: {vars_to_delete}")
+
+        # --- 변수 처리 끝 ---
 
         conn.commit()
 
@@ -395,7 +438,10 @@ def update_prompt(id):
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        # 더 상세한 에러 로깅 추가
+        print(f"Error in update_prompt (ID: {id}): {e}")
+        print(f"Request data: {data}")
+        return jsonify({"error": f"프롬프트 업데이트 중 오류 발생: {str(e)}"}), 500
 
     finally:
         conn.close()

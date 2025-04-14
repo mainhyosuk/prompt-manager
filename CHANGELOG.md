@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.61.0] - YYYY-MM-DD
+
+### ✨ 새로운 기능 (Features)
+- 사용자 추가 프롬프트를 로컬 스토리지가 아닌 데이터베이스에 저장하는 기능 추가 (#이슈번호)
+
+### 🐛 버그 수정 (Bug Fixes)
+- 사용자 추가 프롬프트 수정 및 삭제 시 발생하던 오류 수정
+- 사용자 추가 프롬프트 목록이 부모 프롬프트와 관계없이 모두 표시되던 문제 수정
+- 사용자 추가 프롬프트 업데이트 시 UI가 즉시 반영되지 않던 문제 수정
+
+### ♻️ 리팩토링 (Refactoring)
+- 사용자 추가 프롬프트 관련 API 로직(`userPromptApi.js`)을 백엔드 연동 방식으로 변경
+- 백엔드 프롬프트 API(`prompt_routes.py`)에 사용자 프롬프트 처리 로직 추가 (생성, 조회 필터링, 업데이트)
+- `AppContext` 상태 관리 로직 개선 (사용자 프롬프트 업데이트 시 관련 상태 동기화)
+
 ## [v1.6] - 2025-04-13
 
 ### Added
