@@ -6,7 +6,7 @@ import sys
 # 상위 디렉토리의 모듈을 임포트하기 위한 경로 추가
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from db.database import setup_database, DB_PATH
+from db.database import setup_database
 from routes.prompt_routes import prompt_bp
 from routes.folder_routes import folder_bp
 from routes.tag_routes import tag_bp
@@ -14,6 +14,12 @@ from routes.settings_routes import settings_bp
 from routes.collection_routes import collection_bp
 
 app = Flask(__name__)
+
+# 애플리케이션 컨텍스트 외부에서, 서버 시작 시 1회 실행되도록 함
+print("--- DEBUG: Calling setup_database() ---")
+setup_database()
+print("--- DEBUG: setup_database() finished ---")
+
 
 # 프론트엔드와의 CORS 이슈 해결
 CORS(app, supports_credentials=True, resources={r"/*": {"origins": "*"}})
@@ -36,14 +42,6 @@ def add_cors_headers(response):
     return response
 
 
-# 데이터베이스 초기화 - 애플리케이션 시작 시 한 번만 실행됨
-# 이 함수는 테이블이 없는 경우에만 테이블을 생성하고,
-# 기본 데이터가 없는 경우에만 기본 데이터를 삽입합니다.
-# 사용자가 추가한 데이터는 유지됩니다.
-# 메인 앱에서 이미 초기화된 경우 중복 실행을 방지하기 위해 조건부 초기화
-if not os.path.exists(DB_PATH):
-    setup_database()
-
 # 블루프린트 등록
 app.register_blueprint(prompt_bp)
 app.register_blueprint(folder_bp)
@@ -61,4 +59,6 @@ def index():
 
 
 if __name__ == "__main__":
+    # debug=True 상태에서는 reloader가 동작하여 초기화 코드가 두 번 실행될 수 있으나,
+    # database.py 내의 마이그레이션 함수들은 멱등성을 가지므로 문제되지 않음
     app.run(debug=True, port=8000, host="0.0.0.0")

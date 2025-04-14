@@ -24,7 +24,7 @@ def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # 프롬프트 테이블
+    # 프롬프트 테이블 - is_user_prompt, user_id 컬럼 추가
     cursor.execute(
         """
     CREATE TABLE IF NOT EXISTS prompts (
@@ -38,6 +38,8 @@ def init_db():
         use_count INTEGER DEFAULT 0,
         last_used_at TIMESTAMP,
         memo TEXT,
+        is_user_prompt BOOLEAN DEFAULT 0, -- 사용자 추가 프롬프트 여부
+        user_id TEXT, -- 사용자 식별자 (추후 확장 가능성 고려하여 TEXT)
         FOREIGN KEY (folder_id) REFERENCES folders(id)
     )
     """
@@ -517,38 +519,6 @@ def migrate_collections_tables():
         conn.close()
 
 
-# 데이터베이스 초기화 함수 - 애플리케이션 시작 시 호출
-def setup_database():
-    """데이터베이스 초기화 및 필요한 경우 샘플 데이터 추가"""
-    try:
-        # 데이터베이스 존재 여부 확인
-        db_exists = os.path.exists(DB_PATH)
-
-        # 데이터 디렉토리가 없으면 생성
-        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-
-        # 데이터베이스 및 테이블 생성
-        init_db()
-
-        # memo 필드 마이그레이션
-        migrate_memo_field()
-
-        # collections 테이블 마이그레이션
-        migrate_collections_tables()
-
-        # 데이터베이스가 새로 생성된 경우에만 샘플 프롬프트 추가
-        if not db_exists:
-            add_sample_prompts()
-            print(f"새 데이터베이스 생성됨: {DB_PATH}")
-        else:
-            print(f"기존 데이터베이스 사용 중: {DB_PATH}")
-
-        return True
-    except Exception as e:
-        print(f"데이터베이스 설정 오류: {str(e)}")
-        return False
-
-
 def migrate_memo_field():
     """prompts 테이블에 memo 필드가 없으면 추가합니다."""
     conn = get_db_connection()
@@ -572,3 +542,120 @@ def migrate_memo_field():
         print(f"memo 필드 마이그레이션 오류: {str(e)}")
     finally:
         conn.close()
+
+
+# --- 사용자 프롬프트 필드 마이그레이션 함수 추가 ---
+def migrate_user_prompt_fields():
+    """prompts 테이블에 is_user_prompt 와 user_id 필드가 없으면 추가합니다."""
+    print("--- DEBUG: migrate_user_prompt_fields 함수 시작 ---")  # DEBUG LOG 추가
+    conn = None  # conn 초기화
+    should_commit = False
+    try:
+        print("--- DEBUG: DB 연결 시도 ---")  # DEBUG LOG 추가
+        conn = get_db_connection()
+        print("--- DEBUG: DB 연결 성공 ---")  # DEBUG LOG 추가
+        cursor = conn.cursor()
+
+        print("--- DEBUG: PRAGMA table_info(prompts) 실행 전 ---")  # DEBUG LOG 추가
+        # 현재 prompts 테이블의 컬럼 정보 가져오기
+        cursor.execute("PRAGMA table_info(prompts)")
+        columns = [column[1] for column in cursor.fetchall()]
+        print(f"--- DEBUG: 현재 컬럼 목록: {columns} ---")  # DEBUG LOG 추가
+
+        # is_user_prompt 필드가 없다면 추가
+        if "is_user_prompt" not in columns:
+            print(
+                "--- DEBUG: is_user_prompt 컬럼 없음, 추가 시도 ---"
+            )  # DEBUG LOG 추가
+            try:
+                cursor.execute(
+                    "ALTER TABLE prompts ADD COLUMN is_user_prompt BOOLEAN DEFAULT 0"
+                )
+                print("--- DEBUG: is_user_prompt 컬럼 추가 성공 ---")  # DEBUG LOG 추가
+                print(
+                    "프롬프트 테이블에 is_user_prompt 필드가 추가되었습니다."
+                )  # 기존 로그 유지
+                should_commit = True
+            except Exception as e:
+                print(
+                    f"--- DEBUG: is_user_prompt 컬럼 추가 실패: {str(e)} ---"
+                )  # DEBUG LOG 추가
+                print(f"is_user_prompt 필드 추가 실패: {str(e)}")  # 기존 로그 유지
+        else:
+            print("--- DEBUG: is_user_prompt 컬럼 이미 존재 ---")  # DEBUG LOG 추가
+
+        # user_id 필드가 없다면 추가
+        if "user_id" not in columns:
+            print("--- DEBUG: user_id 컬럼 없음, 추가 시도 ---")  # DEBUG LOG 추가
+            try:
+                # 사용자 ID는 NULL을 허용합니다.
+                cursor.execute("ALTER TABLE prompts ADD COLUMN user_id TEXT")
+                print("--- DEBUG: user_id 컬럼 추가 성공 ---")  # DEBUG LOG 추가
+                print(
+                    "프롬프트 테이블에 user_id 필드가 추가되었습니다."
+                )  # 기존 로그 유지
+                should_commit = True
+            except Exception as e:
+                print(
+                    f"--- DEBUG: user_id 컬럼 추가 실패: {str(e)} ---"
+                )  # DEBUG LOG 추가
+                print(f"user_id 필드 추가 실패: {str(e)}")  # 기존 로그 유지
+        else:
+            print("--- DEBUG: user_id 컬럼 이미 존재 ---")  # DEBUG LOG 추가
+
+        if should_commit:
+            print("--- DEBUG: 변경 사항 커밋 시도 ---")  # DEBUG LOG 추가
+            conn.commit()
+            print("--- DEBUG: 변경 사항 커밋 완료 ---")  # DEBUG LOG 추가
+        else:
+            print("--- DEBUG: 커밋할 변경 사항 없음 ---")  # DEBUG LOG 추가
+
+    except Exception as e:
+        print(f"--- DEBUG: 마이그레이션 중 예외 발생: {str(e)} ---")  # DEBUG LOG 추가
+        print(f"사용자 프롬프트 필드 마이그레이션 오류: {str(e)}")  # 기존 로그 유지
+    finally:
+        if conn:
+            print("--- DEBUG: DB 연결 종료 ---")  # DEBUG LOG 추가
+            conn.close()
+        else:
+            print("--- DEBUG: DB 연결 객체 없음 ---")  # DEBUG LOG 추가
+        print("--- DEBUG: migrate_user_prompt_fields 함수 종료 ---")  # DEBUG LOG 추가
+
+
+# --- 마이그레이션 함수 추가 끝 ---
+
+
+# 데이터베이스 초기화 함수 - 애플리케이션 시작 시 호출
+def setup_database():
+    """데이터베이스 초기화 및 필요한 경우 샘플 데이터 추가"""
+    try:
+        # 데이터베이스 존재 여부 확인
+        db_exists = os.path.exists(DB_PATH)
+
+        # 데이터 디렉토리가 없으면 생성
+        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+
+        # 데이터베이스 및 테이블 생성
+        init_db()
+
+        # memo 필드 마이그레이션
+        migrate_memo_field()
+
+        # collections 테이블 마이그레이션
+        migrate_collections_tables()
+
+        # --- 사용자 프롬프트 필드 마이그레이션 호출 추가 ---
+        migrate_user_prompt_fields()
+        # --- 호출 추가 끝 ---
+
+        # 데이터베이스가 새로 생성된 경우에만 샘플 프롬프트 추가
+        if not db_exists:
+            add_sample_prompts()
+            print(f"새 데이터베이스 생성됨: {DB_PATH}")
+        else:
+            print(f"기존 데이터베이스 사용 중: {DB_PATH}")
+
+        return True
+    except Exception as e:
+        print(f"데이터베이스 설정 오류: {str(e)}")
+        return False
