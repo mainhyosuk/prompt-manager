@@ -631,6 +631,69 @@ def migrate_parent_prompt_id_field():
         conn.close()
 
 
+# --- 휴지통 및 기본 폴더 필드 마이그레이션 함수 추가 ---
+def migrate_soft_delete_fields():
+    """prompts 테이블에 isDeleted, deletedAt 필드를, folders 테이블에 isDefault 필드가 없으면 추가합니다."""
+    conn = None
+    should_commit = False
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # --- prompts 테이블 변경 ---
+        cursor.execute("PRAGMA table_info(prompts)")
+        prompt_columns = [column[1] for column in cursor.fetchall()]
+
+        # isDeleted 필드 추가
+        if "isDeleted" not in prompt_columns:
+            try:
+                # SQLite는 BOOLEAN 대신 INTEGER 0/1 사용
+                cursor.execute(
+                    "ALTER TABLE prompts ADD COLUMN isDeleted INTEGER DEFAULT 0"
+                )
+                print("프롬프트 테이블에 isDeleted 필드가 추가되었습니다.")
+                should_commit = True
+            except Exception as e:
+                print(f"isDeleted 필드 추가 실패: {str(e)}")
+
+        # deletedAt 필드 추가
+        if "deletedAt" not in prompt_columns:
+            try:
+                # 날짜/시간은 TEXT (ISO8601) 또는 INTEGER (Unix timestamp) 사용
+                # 다른 TIMESTAMP 필드가 있으므로 TEXT 형식으로 통일 (필요시 INTEGER로 변경)
+                cursor.execute("ALTER TABLE prompts ADD COLUMN deletedAt TEXT")
+                print("프롬프트 테이블에 deletedAt 필드가 추가되었습니다.")
+                should_commit = True
+            except Exception as e:
+                print(f"deletedAt 필드 추가 실패: {str(e)}")
+
+        # --- folders 테이블 변경 ---
+        cursor.execute("PRAGMA table_info(folders)")
+        folder_columns = [column[1] for column in cursor.fetchall()]
+
+        # isDefault 필드 추가
+        if "isDefault" not in folder_columns:
+            try:
+                cursor.execute(
+                    "ALTER TABLE folders ADD COLUMN isDefault INTEGER DEFAULT 0"
+                )
+                print("폴더 테이블에 isDefault 필드가 추가되었습니다.")
+                should_commit = True
+            except Exception as e:
+                print(f"isDefault 필드 추가 실패: {str(e)}")
+
+        if should_commit:
+            conn.commit()
+
+    except Exception as e:
+        print(f"휴지통/기본폴더 필드 마이그레이션 오류: {str(e)}")
+        if conn:
+            conn.rollback()  # 오류 발생 시 롤백 추가
+    finally:
+        if conn:
+            conn.close()
+
+
 # --- 마이그레이션 함수 추가 끝 ---
 
 
@@ -656,6 +719,10 @@ def setup_database():
         # --- 사용자 프롬프트 필드 마이그레이션 호출 추가 ---
         migrate_user_prompt_fields()
         migrate_parent_prompt_id_field()
+        # --- 호출 추가 끝 ---
+
+        # --- 휴지통/기본폴더 필드 마이그레이션 호출 추가 ---
+        migrate_soft_delete_fields()
         # --- 호출 추가 끝 ---
 
         # 데이터베이스가 새로 생성된 경우에만 샘플 프롬프트 추가
