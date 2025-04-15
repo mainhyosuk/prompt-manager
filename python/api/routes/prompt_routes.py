@@ -10,6 +10,25 @@ def get_current_utc_iso():
 
 # --- 헬퍼 함수 추가 끝 ---
 
+
+# --- 기본 폴더 ID 조회 헬퍼 함수 추가 ---
+def _get_default_folder_id(conn):
+    """데이터베이스에서 isDefault=1인 폴더의 ID를 반환합니다."""
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM folders WHERE isDefault = 1 LIMIT 1")
+    result = cursor.fetchone()
+    if result:
+        return result["id"]
+    else:
+        # 기본 폴더가 없는 예외적인 경우 처리 (오류 로깅 등)
+        print("오류: isDefault=1 인 기본 폴더를 찾을 수 없습니다!")
+        # 기본 폴더 생성을 시도하거나 None 반환 (None 반환 시 folder_id는 NULL로 저장됨)
+        # 여기서는 None을 반환하여 folder_id를 NULL로 두도록 함
+        return None
+
+
+# --- 헬퍼 함수 추가 끝 ---
+
 prompt_bp = Blueprint("prompts", __name__)
 
 
@@ -207,7 +226,7 @@ def get_prompt(id):
     return jsonify(prompt)
 
 
-# 프롬프트 생성 - 사용자 프롬프트 지원 추가
+# 프롬프트 생성 - 사용자 프롬프트 지원 추가, 기본 폴더 할당 로직 추가
 @prompt_bp.route("/api/prompts", methods=["POST"])
 def create_prompt():
     data = request.json
@@ -233,7 +252,14 @@ def create_prompt():
             data.get("parentId") if is_user_prompt else None
         )  # <<< parentId 읽기 추가
 
-        # 프롬프트 기본 정보 저장 - parent_prompt_id 추가
+        # --- folder_id 처리: 없으면 기본 폴더 ID 할당 ---
+        folder_id = data.get("folder_id")
+        if folder_id is None:
+            folder_id = _get_default_folder_id(conn)
+            print(f"folder_id가 제공되지 않아 기본 폴더 ID({folder_id})를 사용합니다.")
+        # --- folder_id 처리 끝 ---
+
+        # 프롬프트 기본 정보 저장 - parent_prompt_id 추가, folder_id 변수 사용
         cursor.execute(
             """
             INSERT INTO prompts (title, content, folder_id, is_favorite, is_user_prompt, user_id, memo, parent_prompt_id)
@@ -242,7 +268,7 @@ def create_prompt():
             (
                 data["title"],
                 data["content"],
-                data.get("folder_id"),
+                folder_id,  # 수정된 folder_id 사용
                 1 if data.get("is_favorite") else 0,
                 1 if is_user_prompt else 0,
                 user_id,
@@ -1021,3 +1047,176 @@ def update_prompt_memo(id):
             jsonify({"error": f"메모 업데이트 중 오류가 발생했습니다: {str(e)}"}),
             500,
         )
+
+
+# --- 휴지통 목록 조회 API 추가 ---
+@prompt_bp.route("/api/prompts/trash", methods=["GET"])
+def get_trashed_prompts():
+    """휴지통에 있는 프롬프트 목록 (isDeleted = 1)을 반환합니다."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # userId 쿼리 파라미터는 현재 휴지통 조회 시 사용하지 않음 (필요시 추가)
+    # parentId 쿼리 파라미터도 사용하지 않음
+
+    query = """
+        SELECT p.id, p.title, p.content, p.folder_id, f.name as folder,
+               p.created_at, p.updated_at, p.is_favorite,
+               p.use_count, p.last_used_at, p.memo,
+               p.is_user_prompt, p.user_id, p.parent_prompt_id,
+               p.deletedAt -- 삭제 시간 정보 추가
+        FROM prompts p
+        LEFT JOIN folders f ON p.folder_id = f.id
+        WHERE p.isDeleted = 1 -- 삭제된 항목만 조회
+        ORDER BY p.deletedAt DESC -- 최근 삭제된 순서로 정렬
+    """
+
+    cursor.execute(query)
+
+    prompts = []
+    for row in cursor.fetchall():
+        prompt = dict(row)
+
+        # 태그 정보는 휴지통 목록에서 필요 없을 수 있으나, 일단 포함 (필요시 제거)
+        cursor.execute(
+            """
+            SELECT t.id, t.name, t.color
+            FROM tags t
+            JOIN prompt_tags pt ON t.id = pt.tag_id
+            WHERE pt.prompt_id = ?
+        """,
+            (prompt["id"],),
+        )
+        prompt["tags"] = [dict(tag) for tag in cursor.fetchall()]
+
+        # 변수 정보도 일단 포함 (필요시 제거)
+        cursor.execute(
+            """
+            SELECT id, name, default_value
+            FROM variables
+            WHERE prompt_id = ?
+        """,
+            (prompt["id"],),
+        )
+        prompt["variables"] = [dict(variable) for variable in cursor.fetchall()]
+
+        # last_used_at 포맷팅 (get_prompts 함수 로직 재사용 가능 - 추후 리팩토링 고려)
+        # ... (get_prompts의 시간 포맷팅 로직과 동일하게 추가)
+        # deletedAt 포맷팅 추가 (예: '며칠 전 삭제됨') - 프론트에서 처리하는 것이 더 나을 수 있음
+
+        # is_user_added 플래그 추가
+        prompt["is_user_added"] = bool(prompt.get("is_user_prompt"))
+
+        prompts.append(prompt)
+
+    conn.close()
+    return jsonify(prompts)
+
+
+# --- 휴지통 목록 조회 API 추가 끝 ---
+
+
+# --- 프롬프트 복구 API 추가 ---
+@prompt_bp.route("/api/prompts/<int:id>/restore", methods=["POST"])
+def restore_prompt(id):
+    """휴지통에 있는 프롬프트를 복구하고 기본 폴더로 이동시킵니다."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # 복구할 프롬프트가 휴지통에 있는지 확인 (isDeleted = 1)
+        cursor.execute("SELECT id FROM prompts WHERE id = ? AND isDeleted = 1", (id,))
+        if not cursor.fetchone():
+            conn.close()
+            return (
+                jsonify({"error": "복구할 프롬프트를 휴지통에서 찾을 수 없습니다."}),
+                404,
+            )
+
+        # 기본 폴더 ID 가져오기
+        default_folder_id = _get_default_folder_id(conn)
+        if default_folder_id is None:
+            # 기본 폴더가 없는 치명적 오류
+            conn.close()
+            return (
+                jsonify({"error": "기본 폴더를 찾을 수 없어 복구할 수 없습니다."}),
+                500,
+            )
+
+        conn.execute("BEGIN")
+
+        # 프롬프트 복구: isDeleted, deletedAt 업데이트 및 기본 폴더로 이동
+        cursor.execute(
+            """
+            UPDATE prompts
+            SET isDeleted = 0, deletedAt = NULL, folder_id = ?, updated_at = datetime('now')
+            WHERE id = ?
+            """,
+            (default_folder_id, id),
+        )
+
+        # 관련 데이터(태그, 변수)는 삭제되지 않았으므로 별도 복구 로직 불필요
+
+        conn.commit()
+
+        # 복구된 프롬프트 정보 반환 (get_prompt 활용)
+        return get_prompt(id)
+
+    except Exception as e:
+        conn.rollback()
+        print(f"프롬프트 복구 오류 (ID: {id}): {e}")
+        return jsonify({"error": f"프롬프트 복구 중 오류 발생: {str(e)}"}), 500
+
+    finally:
+        conn.close()
+
+
+# --- 프롬프트 복구 API 추가 끝 ---
+
+
+# --- 프롬프트 영구 삭제 API 추가 ---
+@prompt_bp.route("/api/prompts/<int:id>/permanent-delete", methods=["DELETE"])
+def permanent_delete_prompt(id):
+    """프롬프트를 데이터베이스에서 영구적으로 삭제합니다."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # 삭제할 프롬프트가 존재하는지 확인 (isDeleted 상태는 상관 없음)
+        # 휴지통에 없는 것도 영구 삭제 요청이 올 수 있으므로 isDeleted 조건 제거
+        cursor.execute("SELECT id FROM prompts WHERE id = ?", (id,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({"error": "영구 삭제할 프롬프트를 찾을 수 없습니다."}), 404
+
+        conn.execute("BEGIN")
+
+        # 관련 데이터 삭제 (CASCADE 제약 조건이 있다면 prompts만 삭제해도 됨)
+        # 하지만 명시적으로 삭제하는 것이 안전할 수 있음
+        cursor.execute("DELETE FROM variables WHERE prompt_id = ?", (id,))
+        cursor.execute("DELETE FROM prompt_tags WHERE prompt_id = ?", (id,))
+        # 컬렉션 연결 정보도 삭제
+        cursor.execute("DELETE FROM collection_prompts WHERE prompt_id = ?", (id,))
+
+        # 프롬프트 영구 삭제
+        cursor.execute("DELETE FROM prompts WHERE id = ?", (id,))
+
+        if cursor.rowcount == 0:
+            # 이미 삭제되었거나 다른 이유로 삭제되지 않은 경우
+            conn.rollback()
+            return jsonify({"error": "프롬프트 영구 삭제에 실패했습니다."}), 500
+
+        conn.commit()
+
+        return jsonify({"message": "프롬프트가 영구적으로 삭제되었습니다.", "id": id})
+
+    except Exception as e:
+        conn.rollback()
+        print(f"프롬프트 영구 삭제 오류 (ID: {id}): {e}")
+        return jsonify({"error": f"프롬프트 영구 삭제 중 오류 발생: {str(e)}"}), 500
+
+    finally:
+        conn.close()
+
+
+# --- 프롬프트 영구 삭제 API 추가 끝 ---

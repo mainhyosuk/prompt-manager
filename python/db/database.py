@@ -264,7 +264,30 @@ def create_default_data(conn=None):
 
     cursor = conn.cursor()
 
-    # 기본 폴더 생성 (아직 없는 경우에만)
+    # 1. '기본 폴더' (isDefault=1) 추가
+    cursor.execute(
+        "SELECT COUNT(*) FROM folders WHERE name = '기본 폴더' AND isDefault = 1"
+    )
+    if cursor.fetchone()[0] == 0:
+        # 혹시 이름만 같은 폴더가 있을 수 있으니, isDefault=1 조건으로 한 번 더 확인
+        cursor.execute("SELECT COUNT(*) FROM folders WHERE isDefault = 1")
+        if cursor.fetchone()[0] == 0:
+            # isDefault=1인 폴더가 아예 없을 때만 새로 생성
+            cursor.execute(
+                "INSERT INTO folders (name, parent_id, position, isDefault) VALUES (?, NULL, ?, 1)",
+                (
+                    "기본 폴더",
+                    -1,
+                ),  # 기본 폴더는 최상단, position은 음수로 하여 다른 폴더와 구분
+            )
+            print("시스템 '기본 폴더'(isDefault=1)가 생성되었습니다.")
+        else:
+            # isDefault=1인 폴더가 이미 존재하면 (이름이 다르더라도), 기존 것을 사용
+            print(
+                "이미 isDefault=1 인 폴더가 존재하여 '기본 폴더'를 새로 생성하지 않습니다."
+            )
+
+    # 2. 기존 기본 데이터 생성 (모든 프롬프트, 즐겨찾기 등)
     cursor.execute("SELECT COUNT(*) FROM folders WHERE name = '모든 프롬프트'")
     if cursor.fetchone()[0] == 0:
         cursor.execute(
