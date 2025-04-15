@@ -140,12 +140,14 @@ def init_db():
 
     conn.commit()
 
-    # 기존 DB가 없는 경우에만 기본 데이터 추가
+    # 기존 DB 존재 여부와 관계없이 기본 데이터 생성/확인 시도
+    create_default_data(conn)
+
+    # 기존 DB가 없는 경우에만 샘플 프롬프트 추가 및 초기 폴더 위치 마이그레이션
     if not db_exists:
-        create_default_data(conn)
         migrate_folder_positions(conn)
     else:
-        # 기졸 DB에는 폴더 위치 속성만 마이그레이션
+        # 기존 DB에는 폴더 위치 속성만 마이그레이션 (필요한 경우)
         migrate_folder_positions(conn)
 
     conn.close()

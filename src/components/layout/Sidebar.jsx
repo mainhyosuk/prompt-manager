@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FolderPlus, X, Plus } from 'lucide-react';
+import { FolderPlus, X, Plus, Trash2 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import FolderTree from '../folders/FolderTree';
 import TagList from '../tags/TagList';
+import { Link, useLocation } from 'react-router-dom';
 
 // 사이드바 설정 관련 상수
 const SIDEBAR_WIDTH_KEY = 'prompt-manager-sidebar-width';
@@ -220,6 +221,10 @@ const Sidebar = () => {
     );
   };
   
+  // 현재 경로 가져오기
+  const location = useLocation();
+  const isTrashActive = location.pathname === '/trash';
+
   return (
     <div 
       ref={sidebarRef}
@@ -244,7 +249,7 @@ const Sidebar = () => {
       </div>
       
       {/* 태그 섹션 */}
-      <div>
+      <div className="mb-6">
         <h3 className="font-medium text-gray-700 mb-2 dark:text-gray-300">태그</h3>
         {isLoading && tags.length === 0 ? (
           <div className="text-sm text-gray-500 dark:text-gray-400">
@@ -253,6 +258,22 @@ const Sidebar = () => {
         ) : (
           <TagList tags={tags} />
         )}
+      </div>
+
+      {/* 휴지통 섹션 추가 */}
+      <div className="mb-6">
+        <h3 className="font-medium text-gray-700 mb-2 dark:text-gray-300">휴지통</h3>
+        <Link 
+          to="/trash" 
+          className={`flex items-center px-3 py-2 rounded-md text-sm ${
+            isTrashActive 
+              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200' 
+              : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+          }`}
+        >
+          <Trash2 size={16} className="mr-2" />
+          삭제된 프롬프트
+        </Link>
       </div>
       
       {/* 크기 조절 핸들 */}

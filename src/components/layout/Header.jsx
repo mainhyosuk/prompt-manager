@@ -3,6 +3,7 @@ import {
   Filter, Grid, List, Settings, FilePlus, 
   X, ChevronUp, ChevronDown
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useAppContext } from '../../context/AppContext';
 import SearchBar from '../search/SearchBar';
 import TagFilter from '../filters/TagFilter';
@@ -55,12 +56,12 @@ const Header = () => {
             </button>
           </div>
           
-          <button 
-            className="p-2 bg-white border rounded hover:bg-gray-50"
-            onClick={goToSettings}
+          <Link 
+            to="/settings"
+            className="p-2 bg-white border rounded hover:bg-gray-50 inline-flex"
           >
             <Settings size={18} />
-          </button>
+          </Link>
           
           <button 
             className="ml-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center"

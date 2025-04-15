@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Sun, Moon, Download, Upload, Save, Folder, Info, Plus, Trash2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { getSettings, updateSettings, backupDatabase, restoreDatabase } from '../api/settingsApi';
 
@@ -132,12 +133,12 @@ const Settings = () => {
     <div className="bg-white min-h-screen">
       {/* 헤더 */}
       <header className="bg-blue-600 text-white px-6 py-4 flex items-center">
-        <button 
-          onClick={goToDashboard}
+        <Link 
+          to="/"
           className="mr-4 hover:bg-blue-700 p-1 rounded"
         >
           <ArrowLeft size={24} />
-        </button>
+        </Link>
         <h1 className="text-2xl font-bold">설정</h1>
       </header>
       

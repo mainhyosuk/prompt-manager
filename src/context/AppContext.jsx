@@ -9,7 +9,6 @@ import UserPromptDetailModal from '../modals/UserPromptDetailModal';
 // 초기 상태
 const initialState = {
   // UI 상태
-  currentScreen: 'main',
   isAddEditModalOpen: false,
   isDetailModalOpen: false,
   isOverlayModalOpen: false,
@@ -54,7 +53,6 @@ const AppContext = createContext(initialState);
 
 export const AppProvider = ({ children }) => {
   // 상태 관리
-  const [currentScreen, setCurrentScreen] = useState(initialState.currentScreen);
   const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(initialState.isAddEditModalOpen);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(initialState.isDetailModalOpen);
   const [isOverlayModalOpen, setIsOverlayModalOpen] = useState(initialState.isOverlayModalOpen);
@@ -694,12 +692,14 @@ export const AppProvider = ({ children }) => {
 
   // 설정 페이지로 이동
   const goToSettings = useCallback(() => {
-    setCurrentScreen('settings');
+    // 라우터 기반 화면 전환 (리디렉션은 컴포넌트에서 처리)
+    window.location.href = '/settings';
   }, []);
 
   // 메인 대시보드로 돌아가기
   const goToDashboard = useCallback(() => {
-    setCurrentScreen('main');
+    // 라우터 기반 화면 전환 (리디렉션은 컴포넌트에서 처리)
+    window.location.href = '/';
   }, []);
 
   // 프롬프트 아이템 업데이트 함수 (내부 상태 업데이트용)
@@ -915,7 +915,6 @@ export const AppProvider = ({ children }) => {
   // 제공할 컨텍스트 값
   const value = useMemo(() => ({ 
     // 상태
-    currentScreen,
     isAddEditModalOpen,
     isDetailModalOpen,
     isLoading,
@@ -955,12 +954,6 @@ export const AppProvider = ({ children }) => {
     setIsDetailModalOpen,
     setIsLoading,
     setError,
-    setCurrentScreen,
-    setSearchQuery,
-    setFilterTags,
-    setSortBy,
-    setSortDirection,
-    setViewMode,
     setSelectedFolder,
     setInitialFolderInfo,
     setExpandedFolders,
@@ -999,10 +992,17 @@ export const AppProvider = ({ children }) => {
     setParentFolderId,
     setFolderError,
     handleMoveMultiplePrompts,
-    handleDeleteFolder
+    handleDeleteFolder,
+
+    // 상태 변경 함수
+    setSearchQuery,
+    setFilterTags,
+    setSortBy,
+    setSortDirection,
+    setViewMode
   }), [
     // 원래의 전체 의존성 배열 복구
-    currentScreen, isAddEditModalOpen, isDetailModalOpen, isLoading, error, theme, prompts, folders, tags, 
+    isAddEditModalOpen, isDetailModalOpen, isLoading, error, theme, prompts, folders, tags, 
     selectedPrompt, selectedFolder, editMode, initialFolderInfo, expandedFolders, searchQuery, filterTags, 
     sortBy, sortDirection, viewMode, isOverlayModalOpen, overlayPrompt, isUserPromptModalOpen, userPrompt, 
     userPromptUpdateTimestamp, previousPrompt, userAddedPrompts, isFolderModalOpen, newFolderName, 
@@ -1015,7 +1015,7 @@ export const AppProvider = ({ children }) => {
     switchToPrompt, handleGoBack, handleCloseModal, handleUpdatePromptTitle, openFolderModal, 
     closeFolderModal, handleCreateFolder, handleMoveMultiplePrompts, handleDeleteFolder,
     // setState 함수들
-    setIsAddEditModalOpen, setIsDetailModalOpen, setIsLoading, setError, setCurrentScreen, setSearchQuery,
+    setIsAddEditModalOpen, setIsDetailModalOpen, setIsLoading, setError, setSearchQuery,
     setFilterTags, setSortBy, setSortDirection, setViewMode, setSelectedFolder, setInitialFolderInfo,
     setExpandedFolders, setIsOverlayModalOpen, setOverlayPrompt, setIsUserPromptModalOpen, setUserPrompt,
     setUserPromptUpdateTimestamp, setNewFolderName, setParentFolderId, setFolderError

@@ -1358,12 +1358,26 @@ const FolderTree = React.memo(() => {
     // parent_id가 null인 폴더 (최상위)
     const topLevelFolders = folders.filter(f => f.parent_id === null);
     
-    // position 기준으로 정렬 (null 값을 마지막으로 처리)
+    // --- 폴더 정렬 로직 수정: 기본 폴더 위치 고정 ---
     topLevelFolders.sort((a, b) => {
+      // '모든 프롬프트'는 항상 첫번째
+      if (a.name === '모든 프롬프트') return -1;
+      if (b.name === '모든 프롬프트') return 1;
+      
+      // '즐겨찾기'는 항상 두번째
+      if (a.name === '즐겨찾기') return -1;
+      if (b.name === '즐겨찾기') return 1;
+      
+      // 기본 폴더(isDefault=1)는 항상 '모든 프롬프트', '즐겨찾기' 다음
+      if (a.isDefault === 1) return -1;
+      if (b.isDefault === 1) return 1;
+      
+      // 나머지는 position 기준으로 정렬
       const posA = a.position === null ? Infinity : a.position;
       const posB = b.position === null ? Infinity : b.position;
       return posA - posB;
     });
+    // --- 정렬 로직 수정 끝 ---
     
     // 계층 구조 빌드
     const buildHierarchy = (folderList) => {
