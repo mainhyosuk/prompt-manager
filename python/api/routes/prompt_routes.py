@@ -2,6 +2,14 @@ from flask import Blueprint, jsonify, request
 from db.database import get_db_connection
 import datetime
 
+
+# --- 현재 UTC 시간을 ISO 형식으로 반환하는 헬퍼 함수 추가 ---
+def get_current_utc_iso():
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+# --- 헬퍼 함수 추가 끝 ---
+
 prompt_bp = Blueprint("prompts", __name__)
 
 
@@ -25,6 +33,10 @@ def get_prompts():
     """
     params = []
     conditions = []
+
+    # --- isDeleted 필터링 기본 조건 추가 ---
+    conditions.append("p.isDeleted = 0")
+    # --- 필터링 추가 끝 ---
 
     # userId 필터링 조건 추가
     if user_id_filter:
@@ -154,6 +166,7 @@ def get_prompt(id):
         FROM prompts p
         LEFT JOIN folders f ON p.folder_id = f.id
         WHERE p.id = ?
+        AND p.isDeleted = 0
     """,
         (id,),
     )
@@ -447,39 +460,54 @@ def update_prompt(id):
         conn.close()
 
 
-# 프롬프트 삭제 (단일)
+# 프롬프트 삭제 (단일) - Soft Delete 적용
 @prompt_bp.route("/api/prompts/<int:id>", methods=["DELETE"])
 def delete_prompt(id):
     conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
-        # 프롬프트 존재 여부 확인
-        cursor.execute("SELECT id FROM prompts WHERE id = ?", (id,))
+        # 프롬프트 존재 여부 확인 (삭제되지 않은 것 중에)
+        cursor.execute("SELECT id FROM prompts WHERE id = ? AND isDeleted = 0", (id,))
         if not cursor.fetchone():
             conn.close()
-            return jsonify({"error": "프롬프트를 찾을 수 없습니다."}), 404
+            # 이미 삭제되었거나 없는 경우 404 반환 유지
+            return (
+                jsonify({"error": "프롬프트를 찾을 수 없거나 이미 삭제되었습니다."}),
+                404,
+            )
 
         conn.execute("BEGIN")
 
-        # 관련 데이터 삭제 (CASCADE로 처리되지만 명시적으로 작성)
-        cursor.execute("DELETE FROM variables WHERE prompt_id = ?", (id,))
-        cursor.execute("DELETE FROM prompt_tags WHERE prompt_id = ?", (id,))
-        cursor.execute("DELETE FROM prompts WHERE id = ?", (id,))
+        # Soft Delete: isDeleted 플래그 업데이트 및 삭제 시간 기록
+        deleted_time = get_current_utc_iso()
+        cursor.execute(
+            """
+            UPDATE prompts 
+            SET isDeleted = 1, deletedAt = ? 
+            WHERE id = ?
+            """,
+            (deleted_time, id),
+        )
+
+        # 관련 데이터 삭제는 영구 삭제 시 처리하도록 주석 처리 (필요시 복구)
+        # cursor.execute("DELETE FROM variables WHERE prompt_id = ?", (id,))
+        # cursor.execute("DELETE FROM prompt_tags WHERE prompt_id = ?", (id,))
 
         conn.commit()
 
-        return jsonify({"message": "프롬프트가 삭제되었습니다.", "id": id})
+        return jsonify({"message": "프롬프트가 휴지통으로 이동되었습니다.", "id": id})
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        print(f"프롬프트 삭제 오류 (ID: {id}): {e}")  # 오류 로깅 개선
+        return jsonify({"error": f"프롬프트 삭제 중 오류 발생: {str(e)}"}), 500
 
     finally:
         conn.close()
 
 
-# 여러 프롬프트 삭제 (벌크)
+# 여러 프롬프트 삭제 (벌크) - Soft Delete 적용
 @prompt_bp.route("/api/prompts/bulk-delete", methods=["POST"])
 def bulk_delete_prompts():
     data = request.json
@@ -494,40 +522,50 @@ def bulk_delete_prompts():
     conn = get_db_connection()
     cursor = conn.cursor()
     deleted_count = 0
+    deleted_ids = []  # 삭제(휴지통 이동) 성공한 ID 목록
 
     try:
         conn.execute("BEGIN")
+        deleted_time = get_current_utc_iso()  # 현재 시간 한 번만 가져오기
 
         for prompt_id in prompt_ids:
-            # 사용자 추가 프롬프트 ID 형식인지 확인 (문자열이고 'user-added-' 시작)
-            # 백엔드에서는 현재 사용자 추가 프롬프트를 직접 처리하지 않으므로,
-            # 숫자 ID만 처리하도록 가정하거나, userPromptApi.py와 연동 필요.
-            # 여기서는 숫자 ID만 처리하는 것으로 가정합니다.
             if not isinstance(prompt_id, int):
                 print(f"Skipping non-integer prompt ID: {prompt_id}")
                 continue
 
-            # 프롬프트 존재 여부 확인 (선택 사항, 성능 고려)
-            cursor.execute("SELECT id FROM prompts WHERE id = ?", (prompt_id,))
+            # 프롬프트 존재 여부 확인 (삭제되지 않은 것 중에)
+            cursor.execute(
+                "SELECT id FROM prompts WHERE id = ? AND isDeleted = 0", (prompt_id,)
+            )
             if not cursor.fetchone():
-                print(f"Prompt ID not found, skipping: {prompt_id}")
-                continue  # 없는 ID는 건너뜀
+                print(f"Prompt ID {prompt_id} not found or already deleted, skipping.")
+                continue  # 없는 ID 또는 이미 삭제된 ID 건너뜀
 
-            # 관련 데이터 삭제 (CASCADE 설정되어 있다면 prompts 테이블만 삭제해도 됨)
-            cursor.execute("DELETE FROM variables WHERE prompt_id = ?", (prompt_id,))
-            cursor.execute("DELETE FROM prompt_tags WHERE prompt_id = ?", (prompt_id,))
-            # 프롬프트 삭제
-            cursor.execute("DELETE FROM prompts WHERE id = ?", (prompt_id,))
+            # Soft Delete 적용
+            cursor.execute(
+                """ 
+                UPDATE prompts 
+                SET isDeleted = 1, deletedAt = ? 
+                WHERE id = ?
+                """,
+                (deleted_time, prompt_id),
+            )
+
+            # 관련 데이터 삭제는 영구 삭제 시 처리 (주석 처리)
+            # cursor.execute("DELETE FROM variables WHERE prompt_id = ?", (prompt_id,))
+            # cursor.execute("DELETE FROM prompt_tags WHERE prompt_id = ?", (prompt_id,))
 
             if cursor.rowcount > 0:
                 deleted_count += 1
+                deleted_ids.append(prompt_id)  # 성공한 ID 추가
 
         conn.commit()
 
         return jsonify(
             {
-                "message": f"{deleted_count}개의 프롬프트가 성공적으로 삭제되었습니다.",
+                "message": f"{deleted_count}개의 프롬프트가 휴지통으로 이동되었습니다.",
                 "deleted_count": deleted_count,
+                "deleted_ids": deleted_ids,  # 삭제된 ID 목록 반환
             }
         )
 
