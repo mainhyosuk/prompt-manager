@@ -251,6 +251,9 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
       });
       setIsConfirmPopupOpen(false); // 팝업 닫기
       
+      // 저장 성공 후 모달 닫기
+      onClose();
+      
     } catch (error) {
       console.error('업데이트 오류:', error);
       alert('프롬프트 업데이트에 실패했습니다.');

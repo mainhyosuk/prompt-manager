@@ -450,8 +450,6 @@ export const AppProvider = ({ children }) => {
         savedPrompt = await createPrompt(promptData);
       }
       
-      // 전역 모달 닫기 (이 함수는 주로 전역 모달에서 호출될 것이므로)
-      setIsAddEditModalOpen(false);
       await loadData(); // 데이터 전체 리로드
       return savedPrompt;
     } catch (err) {

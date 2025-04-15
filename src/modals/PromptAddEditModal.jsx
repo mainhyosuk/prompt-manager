@@ -127,9 +127,9 @@ const PromptAddEditModal = ({
   
   // 초기 데이터 로드 및 초기 상태 저장
   useEffect(() => {
-    // 디버깅 로그는 유지
-    console.log('PromptAddEditModal useEffect: initialPrompt =', initialPrompt);
-    console.log('PromptAddEditModal useEffect: editMode =', editMode);
+    // 디버깅 로그 제거
+    // console.log('PromptAddEditModal useEffect: initialPrompt =', initialPrompt);
+    // console.log('PromptAddEditModal useEffect: editMode =', editMode);
     
     let currentTitle = '';
     let currentContent = '';
@@ -253,9 +253,9 @@ const PromptAddEditModal = ({
       // editMode와 initialPrompt.id를 사용하여 저장/업데이트 구분
       // promptIdToUpdate 결정: 편집 모드이고 initialPrompt가 존재하면 그 ID 사용
       const promptIdToUpdate = editMode && initialPrompt ? initialPrompt.id : null;
-      // 디버깅: handleSavePrompt 호출 전 ID와 데이터 확인
-      console.log('PromptAddEditModal handleSubmit: promptIdToUpdate =', promptIdToUpdate);
-      console.log('PromptAddEditModal handleSubmit: initialPrompt =', initialPrompt);
+      // 디버깅 로그 제거
+      // console.log('PromptAddEditModal handleSubmit: promptIdToUpdate =', promptIdToUpdate);
+      // console.log('PromptAddEditModal handleSubmit: initialPrompt =', initialPrompt);
       await handleSavePrompt(promptData, promptIdToUpdate);
       
       // 저장 성공 시 초기 상태 업데이트 (다음 변경 감지 위함)
@@ -268,6 +268,15 @@ const PromptAddEditModal = ({
         isFavorite
       });
       setIsConfirmPopupOpen(false); // 팝업 닫기
+      
+      // 저장 성공 후 모달 닫기
+      if (onCloseProp) {
+        // Props로 onClose가 전달된 경우 (오버레이 모달 등)
+        onCloseProp();
+      } else {
+        // Props로 onClose가 전달되지 않은 경우 (전역 모달)
+        setIsAddEditModalOpen(false); 
+      }
       
     } catch (error) {
       console.error('프롬프트 저장 오류:', error);
@@ -428,7 +437,7 @@ const PromptAddEditModal = ({
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
             )}
-            {editMode ? '업데이트' : '저장'}
+            {'저장'}
           </button>
         </div>
       </div>
