@@ -1,3 +1,85 @@
+## [v1.63] - 2025-04-13
+
+### 주요 개선사항
+
+- 프롬프트 편집 모달 상호작용 및 UI 개선:
+    - 모든 편집 경로(1, 2, 3, 4)에서 일관된 사용자 경험 제공
+    - 편집 중 변경사항이 있을 경우, 모달 닫기 시 확인 팝업(`UnsavedChangesPopup`) 표시하여 데이터 유실 방지
+    - 상세 모달에서 편집 버튼 클릭 시, 기존 모달 위에 오버레이 형태로 편집 모달을 띄워 작업 흐름 연속성 유지
+    - 저장 성공 시 모든 경로에서 편집 모달이 자동으로 닫히도록 로직 수정
+    - 모달 외부 클릭 또는 ESC 키 입력 시에도 변경 사항 확인 후 닫기 로직 적용
+    - 편집 모달의 확인 버튼 텍스트를 '저장'으로 통일하여 명확성 향상
+
+- 변수 미리보기 영역 스타일 개선:
+    - 편집 모달 내 '변수 미리보기' 영역에 고정 높이(약 8줄), 세로 스크롤, 세로 크기 조정 핸들 추가
+    - '내용' 입력 영역(`textarea`)과 유사한 스타일(패딩, 보더, 배경색) 적용으로 시각적 통일성 확보
+    - 크기 조정 핸들이 작게 보이던 문제 완화 (하단 여백 추가)
+
+### 문제 원인 분석
+
+- 편집 모달 닫기 로직 불일치:
+    - 모달 호출 방식(전역 상태 vs Props 전달)에 따라 저장 후 닫기 동작이 달랐음.
+    - 오버레이 형태로 열린 모달(`PromptAddEditModal`)에서 `handleSavePrompt` 함수가 `onCloseProp`을 호출하지 않아 닫히지 않음.
+    - `UserPromptEditModal`의 `handleUpdate` 함수에 저장 후 `onClose` 호출 로직 누락.
+    - 전역 상태로 열린 모달(`PromptAddEditModal`)의 경우, `handleSavePrompt`에서 전역 상태 변경 로직(`setIsAddEditModalOpen(false)`) 제거 후 호출 측에서 처리하도록 변경.
+
+- 변경 사항 확인 로직 부재:
+    - 편집 중 내용을 수정했음에도 불구하고, '취소' 또는 'X' 버튼 클릭 시 별도 확인 없이 모달이 닫혀 데이터 유실 가능성 존재.
+
+- 변수 미리보기 영역 스타일 미흡:
+    - `VariableHighlighter` 컴포넌트(`div` 요소)의 기본 스타일이 `textarea`와 달라 스크롤바/크기 조정 핸들 크기 등에 차이 발생.
+    - 부모 모달 레이아웃 및 스크롤 구조의 영향으로 크기 조정 핸들이 가려지는 현상 발생.
+
+### 코드 변경 사항
+
+- src/modals/PromptAddEditModal.jsx:
+    - Props (`isOpenProp`, `onCloseProp` 등) 및 Context 상태 통합 관리 로직 추가.
+    - 변경 사항 감지 로직(`hasUnsavedChanges`) 및 확인 팝업(`UnsavedChangesPopup`) 연동 구현.
+    - 모달 닫기 시도(`attemptClose`) 함수 구현 (외부 클릭, ESC 키, 버튼 클릭 시 공통 호출).
+    - `handleSubmit` 함수 수정: 저장 성공 시 `onCloseProp` 또는 `setIsAddEditModalOpen` 호출하여 모달 닫기.
+    - 버튼 텍스트 '저장'으로 고정.
+    - 디버깅용 `console.log` 제거.
+
+- src/modals/UserPromptEditModal.jsx:
+    - 변경 사항 감지 로직(`hasUnsavedChanges`) 및 확인 팝업(`UnsavedChangesPopup`) 연동 구현.
+    - 모달 닫기 시도(`attemptClose`) 함수 구현.
+    - `handleUpdate` 함수 수정: 저장 성공 시 `onClose` 호출 추가.
+    - 외부 클릭, ESC 키, 버튼 클릭 핸들러에서 `attemptClose` 호출하도록 수정.
+
+- src/context/AppContext.jsx:
+    - `handleSavePrompt` 함수 수정: 전역 모달 닫기 로직(`setIsAddEditModalOpen(false)`) 제거.
+    - `handleEditPrompt` 함수 수정: 전역 편집 모달 열기 상태 설정 로직 복구.
+    - 디버깅용 `console.log` 제거.
+
+- src/components/variables/VariableHighlighter.jsx:
+    - 최상위 `div` 요소 `className` 수정:
+        - `w-full h-32 px-3 py-2 border rounded-lg text-sm font-mono overflow-y-auto resize-y bg-gray-50 mb-1` 적용.
+        - 고정 높이, 스크롤, 리사이즈, 패딩, 배경색, 하단 여백 스타일 적용.
+
+- src/modals/PromptDetailModal.jsx:
+    - 편집 버튼 클릭 시 `handleEditPrompt`(AppContext) 대신 로컬 상태(`isEditOverlayOpen`) 변경하여 `PromptAddEditModal`을 오버레이로 열도록 수정.
+    - `PromptAddEditModal` 컴포넌트 임포트 및 렌더링 로직 추가.
+
+- src/modals/UserPromptDetailModal.jsx:
+    - 편집 버튼 클릭 시 로컬 상태(`isEditOverlayOpen`) 변경하여 `UserPromptEditModal`을 오버레이로 열도록 수정.
+    - `UserPromptEditModal` 컴포넌트 임포트 및 렌더링 로직 추가 (업데이트 콜백 포함).
+    - ESC 키 핸들러 수정: 편집 오버레이 모달 열려있을 경우 닫기 동작 스킵.
+
+- src/components/common/UnsavedChangesPopup.jsx:
+    - 변경 사항 확인 팝업 컴포넌트 신규 추가.
+
+### 기술적 개선
+
+- 모달 관리 로직 개선:
+    - Props와 Context 상태를 결합하여 다양한 모달 호출 방식(전역, 오버레이) 지원.
+    - 모달 닫기 로직(`attemptClose`) 중앙화 및 표준화.
+    - 변경 사항 감지 로직 추가로 데이터 무결성 강화.
+
+- UI 일관성 및 사용성 향상:
+    - 모든 편집 경로에서 동일한 모달 닫기 및 저장 동작 제공.
+    - '변수 미리보기' 영역 스타일 통일성 확보.
+    - 오버레이 모달 도입으로 작업 흐름 전환 개선.
+
 ## [v1.61] - 2025-04-14
 
 ## 주요 변경 사항
