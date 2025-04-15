@@ -5,7 +5,7 @@ const VariableHighlighter = ({ content }) => {
   const contentParts = splitContentByVariables(content);
   
   return (
-    <div className="bg-gray-50 p-3 border rounded-lg text-sm font-mono">
+    <div className="w-full h-32 px-3 py-2 border rounded-lg text-sm font-mono overflow-y-auto resize-y bg-gray-50">
       {contentParts.map((part, index) => {
         if (part.type === 'variable') {
           return (
