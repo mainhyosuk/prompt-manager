@@ -5,6 +5,8 @@ import { useAppContext } from '../context/AppContext';
 import { useMultiSelect } from '../hooks/useMultiSelect';
 import { RotateCcw, Trash2 } from 'lucide-react';
 import { getTrashedPrompts, restorePrompt, permanentDeletePrompt } from '../api/trashApi';
+import PromptAddEditModal from '../modals/PromptAddEditModal';
+import PromptDetailModal from '../modals/PromptDetailModal';
 
 // 휴지통 페이지 컴포넌트
 const TrashPage = () => {
@@ -12,7 +14,9 @@ const TrashPage = () => {
     viewMode, 
     isLoading,
     error,
-    loadData
+    loadData,
+    isAddEditModalOpen,
+    isDetailModalOpen
   } = useAppContext();
   
   // 삭제된 프롬프트 목록 상태

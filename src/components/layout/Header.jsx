@@ -63,13 +63,17 @@ const Header = () => {
             <Settings size={18} />
           </Link>
           
-          <button 
+          <Link
+            to="/"
             className="ml-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center"
-            onClick={handleAddPrompt}
+            onClick={(e) => {
+              e.preventDefault(); // 기본 동작 방지
+              handleAddPrompt(); // 원래 함수 실행
+            }}
           >
             <FilePlus size={18} className="mr-2" />
             새 프롬프트
-          </button>
+          </Link>
         </div>
       </div>
       

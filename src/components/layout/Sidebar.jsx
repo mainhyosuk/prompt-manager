@@ -248,19 +248,7 @@ const Sidebar = () => {
         <FolderTree />
       </div>
       
-      {/* 태그 섹션 */}
-      <div className="mb-6">
-        <h3 className="font-medium text-gray-700 mb-2 dark:text-gray-300">태그</h3>
-        {isLoading && tags.length === 0 ? (
-          <div className="text-sm text-gray-500 dark:text-gray-400">
-            태그 정보를 불러오는 중...
-          </div>
-        ) : (
-          <TagList tags={tags} />
-        )}
-      </div>
-
-      {/* 휴지통 섹션 추가 */}
+      {/* 휴지통 섹션 - 태그 위로 이동 */}
       <div className="mb-6">
         <h3 className="font-medium text-gray-700 mb-2 dark:text-gray-300">휴지통</h3>
         <Link 
@@ -274,6 +262,18 @@ const Sidebar = () => {
           <Trash2 size={16} className="mr-2" />
           삭제된 프롬프트
         </Link>
+      </div>
+      
+      {/* 태그 섹션 */}
+      <div className="mb-6">
+        <h3 className="font-medium text-gray-700 mb-2 dark:text-gray-300">태그</h3>
+        {isLoading && tags.length === 0 ? (
+          <div className="text-sm text-gray-500 dark:text-gray-400">
+            태그 정보를 불러오는 중...
+          </div>
+        ) : (
+          <TagList tags={tags} />
+        )}
       </div>
       
       {/* 크기 조절 핸들 */}

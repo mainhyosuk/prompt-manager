@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useLayoutEffect, useMe
 import { ChevronDown, ChevronRight, Star, Folder, FolderOpen, Package, Edit, Trash2, ArrowUp, ArrowDown, FilePlus, FolderPlus } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { updateFolder, deleteFolder, reorderFolder } from '../../api/folderApi';
+import { useNavigate } from 'react-router-dom';
 
 // 쓰로틀링 함수 추가
 const throttle = (func, delay) => {
@@ -471,6 +472,9 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
     openFolderModal
   } = useAppContext();
   
+  // React Router history 객체 추가
+  const navigate = useNavigate();
+
   // 컨텍스트 메뉴 관리
   const { contextMenu, closeContextMenu, folderItemRef } = useContextMenu(folder.name);
   
@@ -513,13 +517,16 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
     FolderIcon = FolderOpen;
   }
   
-  // 폴더 클릭 처리
-  const handleClick = () => {
-    if (!isRenaming) {
-      setSelectedFolder(folder.name);
-      if (hasChildren) {
-        toggleFolder(folder.name);
-      }
+  // 폴더 클릭 핸들러 - React Router와 호환되도록 수정
+  const handleFolderClick = (e) => {
+    e.preventDefault();
+    setSelectedFolder(folder.name);
+    
+    // 메인 페이지(/)로 이동
+    navigate('/');
+
+    if (hasChildren) {
+      toggleFolder(folder.name);
     }
   };
   
@@ -800,7 +807,7 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
     <li className={`${isLast ? '' : 'mb-1'} relative`}>
       <div 
         className={folderItemClasses}
-        onClick={handleClick}
+        onClick={handleFolderClick}
         ref={folderItemRef}
         style={{ userSelect: 'none', position: 'relative', pointerEvents: 'auto' }}
         data-folder-id={folder.id}
