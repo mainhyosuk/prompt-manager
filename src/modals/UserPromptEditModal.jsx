@@ -146,7 +146,6 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
   const handleContentChange = (newContent) => {
     setContent(newContent);
     const extracted = extractVariablesFromContent(newContent);
-    console.log('UserPromptEditModal - Extracted variables:', extracted);
     // 모든 변수는 content에서 온 것으로 간주하고, type: 'content' 부여
     const newVariables = extracted.map(v => ({ ...v, type: 'content' }));
     setVariables(newVariables);
