@@ -411,7 +411,7 @@ def update_prompt(id):
                 )
 
         # --- 변수 처리 (수정: 기존 변수 업데이트) ---
-        if "variables" in data and data["variables"]:
+        if "variables" in data: # 수정: data["variables"]가 빈 배열이어도 이 블록이 실행되어야 함
             current_vars = {}
             # DB에서 현재 변수 목록 가져오기
             cursor.execute(

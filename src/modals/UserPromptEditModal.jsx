@@ -146,8 +146,12 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
   const handleContentChange = (newContent) => {
     setContent(newContent);
     const extracted = extractVariablesFromContent(newContent);
+    console.log('UserPromptEditModal - Extracted variables:', extracted);
     // 모든 변수는 content에서 온 것으로 간주하고, type: 'content' 부여
-    setVariables(extracted.map(v => ({ ...v, type: 'content' }))); // 직접 설정
+    const newVariables = extracted.map(v => ({ ...v, type: 'content' }));
+    setVariables(newVariables);
+    // setVariables는 비동기적일 수 있으므로, 여기서 바로 console.log(variables)는 이전 상태를 보여줄 수 있습니다.
+    // useEffect 등을 사용하여 variables 상태 변화를 감지하고 로깅하는 것이 더 정확합니다.
   };
   
   // 폼 검증
