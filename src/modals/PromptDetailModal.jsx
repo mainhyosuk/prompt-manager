@@ -283,7 +283,12 @@ const PromptDetailModal = () => {
       console.error(`변수 '${variableName}'을 찾을 수 없습니다.`);
       return;
     }
-    const newValue = explicitValue !== null ? explicitValue : (variableValues[variableName] || '');
+    let newValue; // 수정된 로직 시작
+    if (explicitValue !== null) { // 텍스트 에디터로부터 값이 명시적으로 제공된 경우
+      newValue = explicitValue;   // 해당 값을 그대로 사용 (null일 수도 있음)
+    } else { // 그 외의 경우 (예: 인라인 저장 버튼)
+      newValue = variableValues[variableName] || ''; // variableValues에서 값을 가져오거나 빈 문자열로 기본값 설정
+    } // 수정된 로직 끝
 
     // 변경된 경우에만 업데이트
     if (newValue !== selectedPrompt.variables[variableIndex].default_value) {
@@ -291,7 +296,7 @@ const PromptDetailModal = () => {
       try {
         const updatedVariables = selectedPrompt.variables.map((v, index) => {
           if (index === variableIndex) {
-            return { ...v, default_value: newValue };
+            return { ...v, default_value: newValue }; // newValue 사용
           }
           return v;
         });
@@ -303,14 +308,14 @@ const PromptDetailModal = () => {
           console.log(`[handleSaveVariableDefaultValue] Updated user-added prompt ${selectedPrompt.id} via userPromptApi`);
         } else {
           // 일반 프롬프트: AppContext의 서버 API 래퍼 호출
-          await handleUpdateVariableDefaultValue(selectedPrompt.id, variableName, newValue);
+          await handleUpdateVariableDefaultValue(selectedPrompt.id, variableName, newValue); // newValue 사용
           console.log(`[handleSaveVariableDefaultValue] Updated server prompt ${selectedPrompt.id} via AppContext handler`);
         }
 
         // AppContext 상태 업데이트
         updatePromptItem(selectedPrompt.id, { variables: updatedVariables });
         // 로컬 상태 업데이트
-        setVariableValues(prev => ({ ...prev, [variableName]: newValue }));
+        setVariableValues(prev => ({ ...prev, [variableName]: newValue })); // newValue 사용
 
         setSavingStates(prev => ({ ...prev, [variableName]: 'saved' }));
         setTimeout(() => {
@@ -335,7 +340,8 @@ const PromptDetailModal = () => {
   // 텍스트 에디터 열기
   const openTextEditor = (variable) => {
     setEditingVariable(variable);
-    setTextEditorValue(variableValues[variable.name] || '');
+    // setTextEditorValue(variableValues[variable.name] || ''); // 기존 로직
+    setTextEditorValue(variable.default_value || ''); // 수정된 로직: variable 객체의 default_value 직접 사용
     setIsTextEditorOpen(true);
   };
   
