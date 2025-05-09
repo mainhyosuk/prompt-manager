@@ -45,7 +45,7 @@ def get_prompts():
     query = """
         SELECT p.id, p.title, p.content, p.folder_id, f.name as folder,
                p.created_at, p.updated_at, p.is_favorite,
-               p.use_count, p.last_used_at, p.memo,
+               p.usage_count, p.last_used_at, p.memo,
                p.is_user_prompt, p.user_id, p.parent_prompt_id
         FROM prompts p
         LEFT JOIN folders f ON p.folder_id = f.id
@@ -53,8 +53,8 @@ def get_prompts():
     params = []
     conditions = []
 
-    # --- isDeleted 필터링 기본 조건 추가 ---
-    conditions.append("p.isDeleted = 0")
+    # --- is_deleted 필터링 기본 조건 추가 ---
+    conditions.append("p.is_deleted = 0")
     # --- 필터링 추가 끝 ---
 
     # userId 필터링 조건 추가
@@ -181,11 +181,11 @@ def get_prompt(id):
         """
         SELECT p.id, p.title, p.content, p.folder_id, f.name as folder,
                p.created_at, p.updated_at, p.is_favorite, 
-               p.use_count, p.last_used_at, p.memo
+               p.usage_count, p.last_used_at, p.memo
         FROM prompts p
         LEFT JOIN folders f ON p.folder_id = f.id
         WHERE p.id = ?
-        AND p.isDeleted = 0
+        AND p.is_deleted = 0
     """,
         (id,),
     )
@@ -494,7 +494,7 @@ def delete_prompt(id):
 
     try:
         # 프롬프트 존재 여부 확인 (삭제되지 않은 것 중에)
-        cursor.execute("SELECT id FROM prompts WHERE id = ? AND isDeleted = 0", (id,))
+        cursor.execute("SELECT id FROM prompts WHERE id = ? AND is_deleted = 0", (id,))
         if not cursor.fetchone():
             conn.close()
             # 이미 삭제되었거나 없는 경우 404 반환 유지
@@ -510,7 +510,7 @@ def delete_prompt(id):
         cursor.execute(
             """
             UPDATE prompts 
-            SET isDeleted = 1, deletedAt = ? 
+            SET is_deleted = 1, deleted_at = ? 
             WHERE id = ?
             """,
             (deleted_time, id),
@@ -542,7 +542,7 @@ def bulk_delete_prompts():
     if not prompt_ids or not isinstance(prompt_ids, list):
         return jsonify({"error": "삭제할 프롬프트 ID 목록(ids)이 필요합니다."}), 400
 
-    if not prompt_ids:  # 빈 배열인 경우
+    if not prompt_ids:
         return jsonify({"message": "삭제할 프롬프트가 없습니다.", "deleted_count": 0})
 
     conn = get_db_connection()
@@ -561,7 +561,7 @@ def bulk_delete_prompts():
 
             # 프롬프트 존재 여부 확인 (삭제되지 않은 것 중에)
             cursor.execute(
-                "SELECT id FROM prompts WHERE id = ? AND isDeleted = 0", (prompt_id,)
+                "SELECT id FROM prompts WHERE id = ? AND is_deleted = 0", (prompt_id,)
             )
             if not cursor.fetchone():
                 print(f"Prompt ID {prompt_id} not found or already deleted, skipping.")
@@ -571,7 +571,7 @@ def bulk_delete_prompts():
             cursor.execute(
                 """ 
                 UPDATE prompts 
-                SET isDeleted = 1, deletedAt = ? 
+                SET is_deleted = 1, deleted_at = ? 
                 WHERE id = ?
                 """,
                 (deleted_time, prompt_id),
@@ -703,7 +703,7 @@ def increment_use_count(id):
         cursor.execute(
             """
             UPDATE prompts
-            SET use_count = use_count + 1, last_used_at = ?
+            SET usage_count = usage_count + 1, last_used_at = ?
             WHERE id = ?
         """,
             (current_utc_time, id),
@@ -1062,13 +1062,12 @@ def get_trashed_prompts():
     query = """
         SELECT p.id, p.title, p.content, p.folder_id, f.name as folder,
                p.created_at, p.updated_at, p.is_favorite,
-               p.use_count, p.last_used_at, p.memo,
+               p.usage_count, p.last_used_at, p.memo,
                p.is_user_prompt, p.user_id, p.parent_prompt_id,
-               p.deletedAt -- 삭제 시간 정보 추가
+               p.is_deleted, p.deleted_at
         FROM prompts p
         LEFT JOIN folders f ON p.folder_id = f.id
-        WHERE p.isDeleted = 1 -- 삭제된 항목만 조회
-        ORDER BY p.deletedAt DESC -- 최근 삭제된 순서로 정렬
+        WHERE p.is_deleted = 1  # is_deleted 사용 (SQLite에서는 1)
     """
 
     cursor.execute(query)
@@ -1102,7 +1101,7 @@ def get_trashed_prompts():
 
         # last_used_at 포맷팅 (get_prompts 함수 로직 재사용 가능 - 추후 리팩토링 고려)
         # ... (get_prompts의 시간 포맷팅 로직과 동일하게 추가)
-        # deletedAt 포맷팅 추가 (예: '며칠 전 삭제됨') - 프론트에서 처리하는 것이 더 나을 수 있음
+        # deleted_at 포맷팅 추가 (예: '며칠 전 삭제됨') - 프론트에서 처리하는 것이 더 나을 수 있음
 
         # is_user_added 플래그 추가
         prompt["is_user_added"] = bool(prompt.get("is_user_prompt"))
@@ -1124,8 +1123,8 @@ def restore_prompt(id):
     cursor = conn.cursor()
 
     try:
-        # 복구할 프롬프트가 휴지통에 있는지 확인 (isDeleted = 1)
-        cursor.execute("SELECT id FROM prompts WHERE id = ? AND isDeleted = 1", (id,))
+        # 복구할 프롬프트가 휴지통에 있는지 확인 (is_deleted = 1)
+        cursor.execute("SELECT id FROM prompts WHERE id = ? AND is_deleted = 1", (id,))
         if not cursor.fetchone():
             conn.close()
             return (
@@ -1149,7 +1148,7 @@ def restore_prompt(id):
         cursor.execute(
             """
             UPDATE prompts
-            SET isDeleted = 0, deletedAt = NULL, folder_id = ?, updated_at = datetime('now')
+            SET is_deleted = 0, deleted_at = NULL, folder_id = ?, updated_at = datetime('now')
             WHERE id = ?
             """,
             (default_folder_id, id),

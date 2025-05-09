@@ -114,7 +114,7 @@ def get_collection_prompts(id):
         """
         SELECT p.id, p.title, p.content, p.folder_id, f.name as folder,
                p.created_at, p.updated_at, p.is_favorite, 
-               p.use_count, p.last_used_at, p.memo,
+               p.usage_count, p.last_used_at, p.memo,
                cp.position, cp.added_at
         FROM prompts p
         JOIN collection_prompts cp ON p.id = cp.prompt_id
@@ -319,66 +319,96 @@ def get_similar_prompts(id):
 
     # 프롬프트의 태그 가져오기
     cursor.execute("SELECT tag_id FROM prompt_tags WHERE prompt_id = ?", (prompt_id,))
-    tag_ids = [row["tag_id"] for row in cursor.fetchall()]
-
-    # 유사 프롬프트 조회 (태그 및 폴더 기반)
-    query = """
-        SELECT p.id, p.title, p.content, p.folder_id, f.name as folder,
-            p.is_favorite, p.use_count, 
-            (
-                -- 태그 유사도 (50%)
-                (CASE WHEN pt.tag_match_count IS NOT NULL THEN pt.tag_match_count * 50.0 / CASE WHEN ? = 0 THEN 1 ELSE ? END ELSE 0 END) +
-                
-                -- 폴더 유사도 (30%)
-                (CASE WHEN p.folder_id = ? THEN 30 ELSE 0 END) +
-                
-                -- 사용 빈도 유사도 (20%)
-                (p.use_count * 20.0 / CASE WHEN (SELECT MAX(use_count) FROM prompts) = 0 THEN 1 ELSE (SELECT MAX(use_count) FROM prompts) END)
-            ) as similarity_score
-        FROM prompts p
-        LEFT JOIN folders f ON p.folder_id = f.id
-        LEFT JOIN (
-            SELECT pt.prompt_id, COUNT(*) as tag_match_count
-            FROM prompt_tags pt
-            WHERE pt.tag_id IN ({})
-            GROUP BY pt.prompt_id
-        ) pt ON p.id = pt.prompt_id
-        WHERE p.id != ?
-        ORDER BY similarity_score DESC
-        LIMIT 10
-    """
-
-    # 태그 ID 플레이스홀더 생성
-    placeholders = ", ".join(["?"] * len(tag_ids))
-    if not tag_ids:
-        placeholders = "0"  # 태그가 없는 경우 대비 (SQL 오류 방지)
-        tag_ids = []
-
-    # 쿼리에 태그 플레이스홀더 삽입
-    query = query.format(placeholders)
-
-    # 파라미터 준비
-    params = [len(tag_ids), len(tag_ids), folder_id] + tag_ids + [prompt_id]
-
-    cursor.execute(query, params)
+    prompt_tags = [row["tag_id"] for row in cursor.fetchall()]
 
     similar_prompts = []
-    for row in cursor.fetchall():
-        similar_prompt = dict(row)
+    params = [prompt_id]
+    query_parts = []
 
-        # 태그 조회
+    # 기본 SELECT 절
+    base_select = """
+        SELECT p.id, p.title, p.content, p.folder_id, f.name as folder_name, 
+               p.is_favorite, p.usage_count, p.last_used_at
+        FROM prompts p
+        LEFT JOIN folders f ON p.folder_id = f.id
+    """
+
+    # 1. 같은 폴더 내 프롬프트 (최대 5개)
+    if folder_id:
+        folder_query = f" {base_select} WHERE p.folder_id = ? AND p.id != ? ORDER BY p.last_used_at DESC LIMIT 5"
+        try:
+            cursor.execute(folder_query, (folder_id, prompt_id))
+            for row in cursor.fetchall():
+                if row["id"] not in [sp["id"] for sp in similar_prompts]: 
+                    similar_prompts.append(dict(row))
+        except Exception as e:
+            print(f"Error executing folder_query: {e}") 
+
+    # 2. 같은 태그를 가진 프롬프트 (최대 5개, 이미 추가된 것 제외)
+    if prompt_tags:
+        existing_ids_placeholder = ",".join("?" for _ in [sp["id"] for sp in similar_prompts] + [prompt_id])
+        
+        tag_query = f"""
+            {base_select}
+            WHERE p.id IN (SELECT DISTINCT pt.prompt_id FROM prompt_tags pt WHERE pt.tag_id IN ({','.join('?' for _ in prompt_tags)}))
+        """
+        tag_params = list(prompt_tags)
+
+        current_similar_ids = [sp["id"] for sp in similar_prompts]
+        all_excluded_ids = [prompt_id] + current_similar_ids
+
+        if all_excluded_ids:
+            tag_query += f" AND p.id NOT IN ({','.join('?' for _ in all_excluded_ids)})"
+            tag_params.extend(all_excluded_ids)
+        
+        tag_query += " ORDER BY p.last_used_at DESC LIMIT 5"
+
+        try:
+            cursor.execute(tag_query, tag_params)
+            for row in cursor.fetchall():
+                if row["id"] not in [sp["id"] for sp in similar_prompts]: 
+                    similar_prompts.append(dict(row))
+        except Exception as e:
+            print(f"Error executing tag_query: {e}") 
+
+    # 결과가 5개 미만이면 최근 사용 프롬프트로 채움 (최대 5개, 이미 추가된 것 제외)
+    if len(similar_prompts) < 5:
+        limit_recent = 5 - len(similar_prompts)
+        current_similar_ids = [sp["id"] for sp in similar_prompts]
+        all_excluded_ids = [prompt_id] + current_similar_ids
+
+        recent_query_parts = [base_select, "WHERE 1=1"]
+        params_recent = []
+
+        if all_excluded_ids:
+            recent_query_parts.append(f"AND p.id NOT IN ({','.join('?' for _ in all_excluded_ids)})")
+            params_recent.extend(all_excluded_ids)
+        
+        recent_query_parts.append("ORDER BY p.last_used_at DESC LIMIT ?")
+        params_recent.append(limit_recent)
+
+        recent_query = " ".join(recent_query_parts)
+
+        try:
+            cursor.execute(recent_query, params_recent)
+            for row in cursor.fetchall():
+                if row["id"] not in [sp["id"] for sp in similar_prompts]: 
+                    similar_prompts.append(dict(row))
+        except Exception as e:
+            print(f"Error executing recent_query: {e}") 
+
+    # 각 유사 프롬프트에 태그 정보 추가
+    for sp in similar_prompts:
         cursor.execute(
             """
             SELECT t.id, t.name, t.color
             FROM tags t
             JOIN prompt_tags pt ON t.id = pt.tag_id
             WHERE pt.prompt_id = ?
-        """,
-            (similar_prompt["id"],),
+            """,
+            (sp["id"],)
         )
-
-        similar_prompt["tags"] = [dict(tag) for tag in cursor.fetchall()]
-        similar_prompts.append(similar_prompt)
+        sp["tags"] = [dict(tag_row) for tag_row in cursor.fetchall()]
 
     conn.close()
     return jsonify(similar_prompts)
@@ -396,7 +426,7 @@ def get_recent_prompts():
     cursor.execute(
         """
         SELECT p.id, p.title, p.content, p.folder_id, f.name as folder,
-               p.is_favorite, p.use_count, p.last_used_at
+               p.is_favorite, p.usage_count, p.last_used_at
         FROM prompts p
         LEFT JOIN folders f ON p.folder_id = f.id
         WHERE p.id != ? AND p.last_used_at IS NOT NULL

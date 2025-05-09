@@ -325,7 +325,7 @@ def delete_folder(id):
             return jsonify({"error": "먼저 하위 폴더를 삭제해주세요."}), 400
 
         # 폴더 내 프롬프트 확인
-        cursor.execute("SELECT id FROM prompts WHERE folder_id = ?", (id,))
+        cursor.execute("SELECT id FROM prompts WHERE folder_id = ? AND deleted_at IS NULL", (id,))
         if cursor.fetchone():
             conn.close()
             return (

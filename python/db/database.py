@@ -34,15 +34,17 @@ def init_db():
         folder_id INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        is_favorite BOOLEAN DEFAULT 0,
-        use_count INTEGER DEFAULT 0,
-        last_used_at TIMESTAMP,
-        memo TEXT,
-        is_user_prompt BOOLEAN DEFAULT 0, -- 사용자 추가 프롬프트 여부
-        user_id TEXT, -- 사용자 식별자 (추후 확장 가능성 고려하여 TEXT)
-        parent_prompt_id INTEGER, -- 부모 프롬프트 ID 추가
-        FOREIGN KEY (folder_id) REFERENCES folders(id),
-        FOREIGN KEY (parent_prompt_id) REFERENCES prompts(id) ON DELETE SET NULL -- 부모 삭제 시 연결 해제
+        is_user_prompt INTEGER DEFAULT 0,      -- 사용자 정의 프롬프트 여부
+        user_id TEXT,                          -- 사용자 ID (is_user_prompt가 1인 경우)
+        parent_prompt_id INTEGER,              -- 부모 프롬프트 ID (선택 사항)
+        is_favorite INTEGER DEFAULT 0,         -- 즐겨찾기 여부 (0 또는 1)
+        usage_count INTEGER DEFAULT 0,         -- 사용 횟수
+        last_used_at TIMESTAMP,                -- 마지막 사용 일시
+        is_deleted INTEGER DEFAULT 0,          -- 삭제 여부 (0 또는 1)
+        deleted_at TIMESTAMP,                  -- 삭제 일시 (실제 삭제 시간)
+        memo TEXT,                             -- 프롬프트 메모
+        FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL,
+        FOREIGN KEY (parent_prompt_id) REFERENCES prompts(id) ON DELETE SET NULL
     )
     """
     )
@@ -105,7 +107,7 @@ def init_db():
         id INTEGER PRIMARY KEY CHECK (id = 1),
         theme TEXT DEFAULT 'light',
         backup_path TEXT,
-        auto_backup BOOLEAN DEFAULT 0,
+        auto_backup INTEGER DEFAULT 0,
         backup_interval INTEGER DEFAULT 7
     )
     """
@@ -588,7 +590,7 @@ def migrate_user_prompt_fields():
         if "is_user_prompt" not in columns:
             try:
                 cursor.execute(
-                    "ALTER TABLE prompts ADD COLUMN is_user_prompt BOOLEAN DEFAULT 0"
+                    "ALTER TABLE prompts ADD COLUMN is_user_prompt INTEGER DEFAULT 0"
                 )
                 print("프롬프트 테이블에 is_user_prompt 필드가 추가되었습니다.")
                 should_commit = True
@@ -658,7 +660,7 @@ def migrate_parent_prompt_id_field():
 
 # --- 휴지통 및 기본 폴더 필드 마이그레이션 함수 추가 ---
 def migrate_soft_delete_fields():
-    """prompts 테이블에 isDeleted, deletedAt 필드를, folders 테이블에 isDefault 필드가 없으면 추가합니다."""
+    """prompts 테이블에 is_deleted, deleted_at 필드를, folders 테이블에 isDefault 필드가 없으면 추가합니다."""
     conn = None
     should_commit = False
     try:
@@ -669,30 +671,26 @@ def migrate_soft_delete_fields():
         cursor.execute("PRAGMA table_info(prompts)")
         prompt_columns = [column[1] for column in cursor.fetchall()]
 
-        # isDeleted 필드 추가
-        if "isDeleted" not in prompt_columns:
+        # is_deleted 필드 추가
+        if "is_deleted" not in prompt_columns:
             try:
                 # SQLite는 BOOLEAN 대신 INTEGER 0/1 사용
-                cursor.execute(
-                    "ALTER TABLE prompts ADD COLUMN isDeleted INTEGER DEFAULT 0"
-                )
-                print("프롬프트 테이블에 isDeleted 필드가 추가되었습니다.")
+                cursor.execute("ALTER TABLE prompts ADD COLUMN is_deleted INTEGER DEFAULT 0")
+                print("프롬프트 테이블에 is_deleted 필드가 추가되었습니다.")
                 should_commit = True
             except Exception as e:
-                print(f"isDeleted 필드 추가 실패: {str(e)}")
+                print(f"is_deleted 필드 추가 실패: {str(e)}")
 
-        # deletedAt 필드 추가
-        if "deletedAt" not in prompt_columns:
+        # deleted_at 필드 추가
+        if "deleted_at" not in prompt_columns:
             try:
-                # 날짜/시간은 TEXT (ISO8601) 또는 INTEGER (Unix timestamp) 사용
-                # 다른 TIMESTAMP 필드가 있으므로 TEXT 형식으로 통일 (필요시 INTEGER로 변경)
-                cursor.execute("ALTER TABLE prompts ADD COLUMN deletedAt TEXT")
-                print("프롬프트 테이블에 deletedAt 필드가 추가되었습니다.")
+                cursor.execute("ALTER TABLE prompts ADD COLUMN deleted_at TIMESTAMP")
+                print("프롬프트 테이블에 deleted_at 필드가 추가되었습니다.")
                 should_commit = True
             except Exception as e:
-                print(f"deletedAt 필드 추가 실패: {str(e)}")
+                print(f"deleted_at 필드 추가 실패: {str(e)}")
 
-        # --- folders 테이블 변경 ---
+        # --- folders 테이블 변경 (isDefault 필드) ---
         cursor.execute("PRAGMA table_info(folders)")
         folder_columns = [column[1] for column in cursor.fetchall()]
 
