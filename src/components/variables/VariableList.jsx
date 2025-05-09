@@ -1,24 +1,22 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Plus, FileText } from 'lucide-react';
 
-const VariableList = ({ variables, setVariables }) => {
+const VariableList = ({ variables, onAddVariable, onVariableChange, onRemoveVariable }) => {
   const [isTextEditorOpen, setIsTextEditorOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState(null);
   const [textEditorValue, setTextEditorValue] = useState('');
   const textEditorRef = useRef(null);
 
   const addVariable = () => {
-    setVariables([...variables, { name: '', default_value: '' }]);
+    onAddVariable();
   };
 
   const updateVariable = (index, field, value) => {
-    const updatedVariables = [...variables];
-    updatedVariables[index] = { ...updatedVariables[index], [field]: value };
-    setVariables(updatedVariables);
+    onVariableChange(index, field, value);
   };
 
   const removeVariable = (index) => {
-    setVariables(variables.filter((_, i) => i !== index));
+    onRemoveVariable(index);
   };
 
   const openTextEditor = (index) => {
@@ -35,12 +33,11 @@ const VariableList = ({ variables, setVariables }) => {
 
   const saveTextEditorValue = () => {
     if (editingIndex !== null) {
-      updateVariable(editingIndex, 'default_value', textEditorValue);
+      onVariableChange(editingIndex, 'default_value', textEditorValue);
     }
     closeTextEditor();
   };
 
-  // 텍스트 에디터 외부 클릭 감지
   useEffect(() => {
     const handleTextEditorOutsideClick = (event) => {
       if (isTextEditorOpen && textEditorRef.current && !textEditorRef.current.contains(event.target)) {
@@ -57,7 +54,6 @@ const VariableList = ({ variables, setVariables }) => {
     };
   }, [isTextEditorOpen]);
 
-  // ESC 키 입력 감지
   useEffect(() => {
     const handleEscKey = (event) => {
       if (event.key === 'Escape' && isTextEditorOpen) {

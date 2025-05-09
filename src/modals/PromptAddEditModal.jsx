@@ -51,6 +51,7 @@ const PromptAddEditModal = ({
   
   // 모달 참조
   const modalRef = useRef(null);
+  const initialPromptVariablesRef = useRef([]); // 초기 변수 목록 저장
   
   // --- 변경 감지 및 확인 팝업 관련 상태 추가 ---
   const [initialState, setInitialState] = useState(null); // 모달 열릴 때 초기 상태 저장
@@ -127,9 +128,7 @@ const PromptAddEditModal = ({
   
   // 초기 데이터 로드 및 초기 상태 저장
   useEffect(() => {
-    // 디버깅 로그 제거
-    // console.log('PromptAddEditModal useEffect: initialPrompt =', initialPrompt);
-    // console.log('PromptAddEditModal useEffect: editMode =', editMode);
+    console.log('[DEBUG] PromptAddEditModal: useEffect - editMode:', editMode, 'initialPrompt:', initialPrompt);
     
     let currentTitle = '';
     let currentContent = '';
@@ -147,9 +146,13 @@ const PromptAddEditModal = ({
       } : null;
       currentTags = initialPrompt.tags || [];
       currentVariables = initialPrompt.variables || [];
+      initialPromptVariablesRef.current = initialPrompt.variables ? [...initialPrompt.variables].map(v => ({...v})) : []; // Store deep copy of initial variables
+      console.log('[DEBUG] PromptAddEditModal: useEffect - initialPromptVariablesRef.current set to:', JSON.parse(JSON.stringify(initialPromptVariablesRef.current)));
       currentIsFavorite = !!initialPrompt.is_favorite;
     } else {
+      // New prompt
       currentFolderInfo = initialFolderInfo || null;
+      initialPromptVariablesRef.current = []; // No initial variables for new prompt
     }
     
     // 폼 상태 업데이트
@@ -159,14 +162,18 @@ const PromptAddEditModal = ({
     setTags(currentTags);
     setVariables(currentVariables);
     setIsFavorite(currentIsFavorite);
+    console.log('[DEBUG] PromptAddEditModal: useEffect - variables state set to:', JSON.parse(JSON.stringify(currentVariables)));
     
     // 초기 상태 저장 (변경 감지용)
+    // Make sure currentVariables used here is the one derived above
+    const initialVarsForState = currentVariables.map(({ name, default_value, type }) => ({ name, default_value, type })).sort((a, b) => a.name.localeCompare(b.name));
+
     setInitialState({
       title: currentTitle,
       content: currentContent,
       folderId: currentFolderInfo?.id,
       tags: currentTags.map(t => t.name).sort(),
-      variables: currentVariables.map(({ name, default_value, type }) => ({ name, default_value, type })).sort((a, b) => a.name.localeCompare(b.name)),
+      variables: initialVarsForState, // Use the mapped and sorted version
       isFavorite: currentIsFavorite
     });
     
@@ -178,32 +185,116 @@ const PromptAddEditModal = ({
   // 내용 변경 시 변수 자동 추출
   const handleContentChange = (newContent) => {
     setContent(newContent);
+    console.log('[DEBUG] PromptAddEditModal: handleContentChange - newContent:', newContent);
     
     // 내용에서 변수 추출
-    const extractedVariables = extractVariablesFromContent(newContent);
+    const extractedVariablesFromText = extractVariablesFromContent(newContent);
+    console.log('[DEBUG] PromptAddEditModal: handleContentChange - extractedVariablesFromText:', JSON.parse(JSON.stringify(extractedVariablesFromText)));
     
-    // 기존 변수 정보 유지하면서 새 변수 추가
-    const updatedVariables = [...variables];
-    
-    extractedVariables.forEach(newVar => {
-      // 이미 같은 이름의 변수가 있는지 확인
-      const existingVarIndex = updatedVariables.findIndex(v => v.name === newVar.name);
-      
-      if (existingVarIndex === -1) {
-        // 없으면 추가
-        updatedVariables.push(newVar);
-      }
+    setVariables(currentVariablesInState => {
+      console.log('[DEBUG] PromptAddEditModal: handleContentChange - setVariables - currentVariablesInState:', JSON.parse(JSON.stringify(currentVariablesInState)));
+      console.log('[DEBUG] PromptAddEditModal: handleContentChange - setVariables - initialPromptVariablesRef.current:', JSON.parse(JSON.stringify(initialPromptVariablesRef.current)));
+      let newCalculatedVariables = [...currentVariablesInState];
+
+      extractedVariablesFromText.forEach(variableFromContent => {
+        const existingVarIndexInCurrentState = newCalculatedVariables.findIndex(
+          v => v.name === variableFromContent.name
+        );
+        console.log(`[DEBUG] PromptAddEditModal: handleContentChange - processing contentVar '${variableFromContent.name}', existingVarIndexInCurrentState: ${existingVarIndexInCurrentState}`);
+
+        if (existingVarIndexInCurrentState === -1) {
+          // Variable from content is not in the current list.
+          // Only add it if it was NOT an original variable that the user explicitly deleted from the list during this session.
+          const wasThisVariableInInitialPrompt = initialPromptVariablesRef.current.some(
+            initialVar => initialVar.name === variableFromContent.name
+          );
+          const isItInCurrentState = currentVariablesInState.some(stateVar => stateVar.name === variableFromContent.name); // Should be false here
+          const userDeletedIt = wasThisVariableInInitialPrompt && !isItInCurrentState;
+          
+          console.log(`[DEBUG] PromptAddEditModal: handleContentChange - contentVar '${variableFromContent.name}' not in current state. wasInInitial: ${wasThisVariableInInitialPrompt}, isInCurrent(pre-check): ${isItInCurrentState}, userDeletedIt: ${userDeletedIt}`);
+
+          if (!userDeletedIt) { // If user didn't delete it (or it wasn't initial), add it.
+            newCalculatedVariables.push({ ...variableFromContent, default_value: '', type: variableFromContent.type || 'content' });
+            console.log(`[DEBUG] PromptAddEditModal: handleContentChange - ADDED contentVar '${variableFromContent.name}' to newCalculatedVariables.`);
+          } else {
+            console.log(`[DEBUG] PromptAddEditModal: handleContentChange - SKIPPED ADDING contentVar '${variableFromContent.name}' as it was initial and user deleted it.`);
+          }
+        } else {
+          console.log(`[DEBUG] PromptAddEditModal: handleContentChange - contentVar '${variableFromContent.name}' already in current state. Type in content: ${variableFromContent.type}, Type in state: ${newCalculatedVariables[existingVarIndexInCurrentState].type}`);
+          // Variable from content is already in the current list.
+          // Potentially update its type if it changed (e.g. from manual add to content-derived)
+          if (newCalculatedVariables[existingVarIndexInCurrentState].type !== variableFromContent.type && variableFromContent.type) {
+            newCalculatedVariables[existingVarIndexInCurrentState] = {
+              ...newCalculatedVariables[existingVarIndexInCurrentState],
+              type: variableFromContent.type
+            };
+            console.log(`[DEBUG] PromptAddEditModal: handleContentChange - UPDATED TYPE for var '${variableFromContent.name}' to '${variableFromContent.type}'.`);
+          }
+        }
+      });
+      console.log('[DEBUG] PromptAddEditModal: handleContentChange - setVariables - newCalculatedVariables after processing content vars:', JSON.parse(JSON.stringify(newCalculatedVariables)));
+
+      // Remove variables from the list if they are no longer in the content,
+      // UNLESS they were manually added by the user (type is 'manual')
+      newCalculatedVariables = newCalculatedVariables.filter(listedVariable => {
+        const isPresentInContent = extractedVariablesFromText.some(
+          contentVar => contentVar.name === listedVariable.name
+        );
+        const wasOriginallyInPrompt = initialPromptVariablesRef.current.some(
+          initialVar => initialVar.name === listedVariable.name
+        );
+        console.log(`[DEBUG] PromptAddEditModal: handleContentChange - filtering listedVar '${listedVariable.name}'. isPresentInContent: ${isPresentInContent}, wasOriginallyInPrompt: ${wasOriginallyInPrompt}, type: ${listedVariable.type}`);
+
+        if (isPresentInContent) {
+          console.log(`[DEBUG] PromptAddEditModal: handleContentChange - KEEPING listedVar '${listedVariable.name}' (present in content).`);
+          return true; // Always keep if it's in the content
+        }
+        // Not in content
+        if (wasOriginallyInPrompt) {
+            // If it was an original variable and now not in content, it should be removed from list
+            console.log(`[DEBUG] PromptAddEditModal: handleContentChange - REMOVING listedVar '${listedVariable.name}' (original, not in content).`);
+            return false;
+        }
+        // Not in content, and was not an original variable (i.e. user added it manually in this session)
+        // Keep if it's a blank new entry, or if it's marked as 'manual'
+        const keepManualOrBlank = listedVariable.name === '' || listedVariable.type === 'manual';
+        console.log(`[DEBUG] PromptAddEditModal: handleContentChange - listedVar '${listedVariable.name}' (not original, not in content). Keeping if manual/blank: ${keepManualOrBlank}.`);
+        return keepManualOrBlank; 
+      });
+      console.log('[DEBUG] PromptAddEditModal: handleContentChange - setVariables - FINAL newCalculatedVariables after filtering:', JSON.parse(JSON.stringify(newCalculatedVariables)));
+      return newCalculatedVariables;
     });
-    
-    // 내용에 없는 변수 제거 (수동으로 추가한 변수는 유지)
-    const contentVariableNames = extractedVariables.map(v => v.name);
-    const finalVariables = updatedVariables.filter(v => 
-      contentVariableNames.includes(v.name) || v.name === ''
-    );
-    
-    setVariables(finalVariables);
   };
-  
+
+  const handleAddVariable = () => {
+    console.log('[DEBUG] PromptAddEditModal: handleAddVariable called.');
+    setVariables(prev => {
+      const newState = [...prev, { name: '', default_value: '', type: 'manual' }];
+      console.log('[DEBUG] PromptAddEditModal: handleAddVariable - new state:', JSON.parse(JSON.stringify(newState)));
+      return newState;
+    });
+  };
+
+  const handleVariableChange = (index, field, value) => {
+    console.log(`[DEBUG] PromptAddEditModal: handleVariableChange called - index: ${index}, field: ${field}, value: ${value}`);
+    setVariables(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      console.log('[DEBUG] PromptAddEditModal: handleVariableChange - new state:', JSON.parse(JSON.stringify(updated)));
+      return updated;
+    });
+  };
+
+  const handleRemoveVariable = (indexToRemove) => {
+    console.log('[DEBUG] PromptAddEditModal: handleRemoveVariable called - indexToRemove:', indexToRemove);
+    setVariables(prev => {
+      console.log('[DEBUG] PromptAddEditModal: handleRemoveVariable - state BEFORE removal:', JSON.parse(JSON.stringify(prev)));
+      const newState = prev.filter((_, i) => i !== indexToRemove);
+      console.log('[DEBUG] PromptAddEditModal: handleRemoveVariable - state AFTER removal:', JSON.parse(JSON.stringify(newState)));
+      return newState;
+    });
+  };
+
   // 폼 검증
   const validateForm = useCallback(() => {
     const newErrors = {};
@@ -253,9 +344,8 @@ const PromptAddEditModal = ({
       // editMode와 initialPrompt.id를 사용하여 저장/업데이트 구분
       // promptIdToUpdate 결정: 편집 모드이고 initialPrompt가 존재하면 그 ID 사용
       const promptIdToUpdate = editMode && initialPrompt ? initialPrompt.id : null;
-      // 디버깅 로그 제거
-      // console.log('PromptAddEditModal handleSubmit: promptIdToUpdate =', promptIdToUpdate);
-      // console.log('PromptAddEditModal handleSubmit: initialPrompt =', initialPrompt);
+      console.log('[DEBUG] PromptAddEditModal: handleSubmit - promptData to be saved:', JSON.parse(JSON.stringify(promptData)));
+
       await handleSavePrompt(promptData, promptIdToUpdate);
       
       // 저장 성공 시 초기 상태 업데이트 (다음 변경 감지 위함)
@@ -376,7 +466,9 @@ const PromptAddEditModal = ({
             {/* 변수 관리 */}
             <VariableList 
               variables={variables} 
-              setVariables={setVariables} 
+              onAddVariable={handleAddVariable}
+              onVariableChange={handleVariableChange}
+              onRemoveVariable={handleRemoveVariable}
             />
             {errors.variables && (
               <p className="mt-1 mb-4 text-sm text-red-500 flex items-center">

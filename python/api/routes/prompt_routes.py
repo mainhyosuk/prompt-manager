@@ -458,15 +458,15 @@ def update_prompt(id):
                 )
                 print(f"새 변수 추가: {var_data['name']} = {var_data['default_value']}")
 
-            # 요청에 없고 DB에만 있는 변수 삭제 (선택 사항 - 필요시 주석 해제)
-            # vars_to_delete = set(current_vars.keys()) - vars_in_request
-            # if vars_to_delete:
-            #     delete_placeholders = ','.join('?' * len(vars_to_delete))
-            #     cursor.execute(
-            #         f"DELETE FROM variables WHERE prompt_id = ? AND name IN ({delete_placeholders})",
-            #         (id, *list(vars_to_delete))
-            #     )
-            #     print(f"변수 삭제: {vars_to_delete}")
+            # 요청에 없고 DB에만 있는 변수 삭제
+            vars_to_delete = set(current_vars.keys()) - vars_in_request
+            if vars_to_delete:
+                delete_placeholders = ','.join('?' * len(vars_to_delete))
+                cursor.execute(
+                    f"DELETE FROM variables WHERE prompt_id = ? AND name IN ({delete_placeholders})",
+                    (id, *list(vars_to_delete))
+                )
+                print(f"변수 삭제: {vars_to_delete}")
 
         # --- 변수 처리 끝 ---
 
