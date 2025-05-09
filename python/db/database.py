@@ -732,23 +732,18 @@ def setup_database():
         # 데이터 디렉토리가 없으면 생성
         os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
-        # 데이터베이스 및 테이블 생성
+        # --- 마이그레이션 순서 원복 ---
+        # 데이터베이스 및 테이블 생성 (기본 데이터 포함)
         init_db()
 
-        # memo 필드 마이그레이션
+        # 나머지 마이그레이션 진행
         migrate_memo_field()
-
-        # collections 테이블 마이그레이션
         migrate_collections_tables()
-
-        # --- 사용자 프롬프트 필드 마이그레이션 호출 추가 ---
         migrate_user_prompt_fields()
         migrate_parent_prompt_id_field()
-        # --- 호출 추가 끝 ---
 
-        # --- 휴지통/기본폴더 필드 마이그레이션 호출 추가 ---
+        # --- 휴지통/기본폴더 필드 마이그레이션 호출 (원래 위치) ---
         migrate_soft_delete_fields()
-        # --- 호출 추가 끝 ---
 
         # 데이터베이스가 새로 생성된 경우에만 샘플 프롬프트 추가
         if not db_exists:
