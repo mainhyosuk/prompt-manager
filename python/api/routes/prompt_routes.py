@@ -1067,7 +1067,7 @@ def get_trashed_prompts():
                p.is_deleted, p.deleted_at
         FROM prompts p
         LEFT JOIN folders f ON p.folder_id = f.id
-        WHERE p.is_deleted = 1  # is_deleted 사용 (SQLite에서는 1)
+        WHERE p.is_deleted = 1
     """
 
     cursor.execute(query)

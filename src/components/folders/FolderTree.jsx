@@ -867,8 +867,15 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
           />
         )}
         
+        {/* 폴더 내 프롬프트 개수 표시 - 상위 프롬프트 개수만 표시 */}
+        {folder.count !== undefined && folder.count > 0 && (
+          <span className="ml-1 text-xs text-gray-500" title={`프롬프트: ${folder.count}`}>
+            {folder.count}
+          </span>
+        )}
+        
         {/* 폴더 내 프롬프트 개수 표시 - total_count와 count 함께 표시 */}
-        {folder.total_count !== undefined && (
+        {/* {folder.total_count !== undefined && (
           <span className="text-gray-500 text-xs bg-gray-100 px-1.5 py-0.5 rounded-full flex items-center dark:bg-gray-700 dark:text-gray-400">
             {folder.count !== folder.total_count ? (
               <span title={`직접 포함된 프롬프트: ${folder.count} / 하위 폴더 포함 전체: ${folder.total_count}`}>
@@ -882,7 +889,7 @@ const FolderItem = React.memo(({ folder, level = 0, isLast = false }) => {
               </span>
             )}
           </span>
-        )}
+        )} */}
       </div>
       
       {/* 컨텍스트 메뉴 */}

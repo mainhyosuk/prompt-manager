@@ -34,16 +34,20 @@ def get_folders():
         }
 
         # 모든 프롬프트 개수 계산
-        cursor.execute("SELECT COUNT(*) AS count FROM prompts")
+        # count: non-deleted parent prompts
+        cursor.execute("SELECT COUNT(*) AS count FROM prompts WHERE parent_prompt_id IS NULL AND is_deleted = 0 AND is_favorite = 0")
         all_prompts_folder["count"] = cursor.fetchone()["count"]
-        all_prompts_folder["total_count"] = all_prompts_folder[
-            "count"
-        ]  # 총 개수는 동일
+        # total_count: all non-deleted prompts
+        cursor.execute("SELECT COUNT(*) AS total_count FROM prompts WHERE is_deleted = 0")
+        all_prompts_folder["total_count"] = cursor.fetchone()["total_count"]
 
         # 즐겨찾기 프롬프트 개수 계산
-        cursor.execute("SELECT COUNT(*) AS count FROM prompts WHERE is_favorite = 1")
+        # count: non-deleted, favorited parent prompts
+        cursor.execute("SELECT COUNT(*) AS count FROM prompts WHERE is_favorite = 1 AND parent_prompt_id IS NULL AND is_deleted = 0")
         favorites_folder["count"] = cursor.fetchone()["count"]
-        favorites_folder["total_count"] = favorites_folder["count"]  # 총 개수는 동일
+        # total_count: all non-deleted, favorited prompts
+        cursor.execute("SELECT COUNT(*) AS total_count FROM prompts WHERE is_favorite = 1 AND is_deleted = 0")
+        favorites_folder["total_count"] = cursor.fetchone()["total_count"]
 
         # 사용자 정의 폴더 가져오기
         cursor.execute(
@@ -66,14 +70,22 @@ def get_folders():
         folder_rows = cursor.fetchall()
         folder_dict = {}
 
-        # 폴더별 직접 프롬프트 개수 계산
+        # 폴더별 프롬프트 개수 계산
         for row in folder_rows:
             folder = dict(row)
+            # count: non-deleted parent prompts in this folder (for display like "7" in "7/34")
             cursor.execute(
-                "SELECT COUNT(*) AS count FROM prompts WHERE folder_id = ?",
+                "SELECT COUNT(*) AS count FROM prompts WHERE folder_id = ? AND parent_prompt_id IS NULL AND is_deleted = 0",
                 (folder["id"],),
             )
             folder["count"] = cursor.fetchone()["count"]
+
+            # all_prompts_in_folder_count: all non-deleted prompts directly in this folder (for total_count recursion)
+            cursor.execute(
+                "SELECT COUNT(*) AS all_prompts_in_folder_count FROM prompts WHERE folder_id = ? AND is_deleted = 0",
+                (folder["id"],),
+            )
+            folder["all_prompts_in_folder_count"] = cursor.fetchone()["all_prompts_in_folder_count"]
             folder_dict[folder["id"]] = folder
 
         # 폴더 계층 구조 구성
@@ -103,14 +115,14 @@ def get_folders():
                 if "children" in folder and folder["children"]:
                     folder["children"] = process_folders(folder["children"])
 
-                    # total_count 계산: 자신의 count + 모든 하위 폴더의 total_count 합계
-                    children_count = sum(
+                    # total_count 계산: 자신의 all_prompts_in_folder_count + 모든 하위 폴더의 total_count 합계
+                    children_total_count = sum(
                         child.get("total_count", 0) for child in folder["children"]
                     )
-                    folder["total_count"] = folder.get("count", 0) + children_count
+                    folder["total_count"] = folder.get("all_prompts_in_folder_count", 0) + children_total_count
                 else:
-                    # 하위 폴더가 없는 경우 total_count는 자신의 count와 동일
-                    folder["total_count"] = folder.get("count", 0)
+                    # 하위 폴더가 없는 경우 total_count는 자신의 all_prompts_in_folder_count와 동일
+                    folder["total_count"] = folder.get("all_prompts_in_folder_count", 0)
 
             return folders_list
 
@@ -130,7 +142,6 @@ def get_folders():
                 final_result.append(folder)
 
         conn.close()
-        # print(f"DEBUG: Folders data being sent to frontend: {final_result}") # Debug log removed
         return jsonify(final_result)
     except Exception as e:
         print(f"폴더 조회 오류: {str(e)}")
