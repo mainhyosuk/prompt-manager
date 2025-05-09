@@ -1,22 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Plus, FileText } from 'lucide-react';
 
-const VariableList = ({ variables, onAddVariable, onVariableChange, onRemoveVariable }) => {
+const VariableList = ({ variables, onVariableChange }) => {
   const [isTextEditorOpen, setIsTextEditorOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState(null);
   const [textEditorValue, setTextEditorValue] = useState('');
   const textEditorRef = useRef(null);
 
-  const addVariable = () => {
-    onAddVariable();
-  };
-
   const updateVariable = (index, field, value) => {
     onVariableChange(index, field, value);
-  };
-
-  const removeVariable = (index) => {
-    onRemoveVariable(index);
   };
 
   const openTextEditor = (index) => {
@@ -72,14 +64,6 @@ const VariableList = ({ variables, onAddVariable, onVariableChange, onRemoveVari
     <div className="mb-4">
       <div className="flex justify-between items-center mb-2">
         <h3 className="font-medium text-gray-700">변수</h3>
-        <button
-          type="button"
-          onClick={addVariable}
-          className="text-blue-600 hover:text-blue-800 flex items-center text-sm"
-        >
-          <Plus size={16} className="mr-1" />
-          변수 추가
-        </button>
       </div>
 
       {variables.length === 0 ? (
@@ -94,7 +78,7 @@ const VariableList = ({ variables, onAddVariable, onVariableChange, onRemoveVari
                 <input
                   type="text"
                   value={variable.name}
-                  onChange={(e) => updateVariable(index, 'name', e.target.value)}
+                  readOnly
                   placeholder="변수명"
                   className="flex-grow px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
                 />
@@ -116,13 +100,6 @@ const VariableList = ({ variables, onAddVariable, onVariableChange, onRemoveVari
                   </button>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => removeVariable(index)}
-                className="text-gray-400 hover:text-red-500"
-              >
-                <X size={18} />
-              </button>
             </div>
           ))}
         </div>

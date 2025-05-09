@@ -20,7 +20,7 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
   const [memo, setMemo] = useState('');
   const [folderInfo, setFolderInfo] = useState(null);
   const [tags, setTags] = useState([]);
-  const [variables, setVariables] = useState([]);
+  const [variables, setVariables] = useState([]); // 형태: [{ name: string, default_value: string, type: string }]
   const [isFavorite, setIsFavorite] = useState(false);
   
   // 검증 상태
@@ -43,11 +43,10 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
       memo,
       folderId: folderInfo?.id,
       tags: tags.map(t => t.name).sort(),
-      variables: variables.map(({ name, default_value, type }) => ({ name, default_value, type })).sort((a, b) => a.name.localeCompare(b.name)),
       isFavorite
     };
     return JSON.stringify(initialState) !== JSON.stringify(currentState);
-  }, [initialState, title, content, memo, folderInfo, tags, variables, isFavorite]);
+  }, [initialState, title, content, memo, folderInfo, tags, isFavorite]);
   
   // 모달 닫기 시도 함수
   const attemptClose = useCallback(() => {
@@ -64,7 +63,6 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
       const currentTitle = prompt.title || '';
       const currentContent = prompt.content || '';
       const currentMemo = prompt.memo || '';
-      const currentVariables = prompt.variables || [];
       const currentTags = prompt.tags || [];
       const currentFolderInfo = prompt.folder_id ? {
         id: prompt.folder_id,
@@ -73,21 +71,21 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
       const currentIsFavorite = !!prompt.is_favorite;
       
       setTitle(currentTitle);
-      setContent(currentContent);
+      setContent(currentContent); // 이 호출이 handleContentChange를 트리거하여 variables 설정
       setMemo(currentMemo);
-      setVariables(currentVariables);
       setTags(currentTags);
       setFolderInfo(currentFolderInfo);
       setIsFavorite(currentIsFavorite);
       
       // 초기 상태 저장
+      const initialExtractedVariables = extractVariablesFromContent(currentContent);
       setInitialState({
         title: currentTitle,
         content: currentContent,
         memo: currentMemo,
         folderId: currentFolderInfo?.id,
         tags: currentTags.map(t => t.name).sort(),
-        variables: currentVariables.map(({ name, default_value, type }) => ({ name, default_value, type })).sort((a, b) => a.name.localeCompare(b.name)),
+        variables: initialExtractedVariables.map(({ name, default_value }) => ({ name, default_value, type: 'content' })).sort((a, b) => a.name.localeCompare(b.name)),
         isFavorite: currentIsFavorite
       });
       
@@ -147,30 +145,9 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
   // 내용 변경 시 변수 자동 추출
   const handleContentChange = (newContent) => {
     setContent(newContent);
-    
-    // 내용에서 변수 추출
-    const extractedVariables = extractVariablesFromContent(newContent);
-    
-    // 기존 변수 정보 유지하면서 새 변수 추가
-    const updatedVariables = [...variables];
-    
-    extractedVariables.forEach(newVar => {
-      // 이미 같은 이름의 변수가 있는지 확인
-      const existingVarIndex = updatedVariables.findIndex(v => v.name === newVar.name);
-      
-      if (existingVarIndex === -1) {
-        // 없으면 추가
-        updatedVariables.push(newVar);
-      }
-    });
-    
-    // 내용에 없는 변수 제거 (수동으로 추가한 변수는 유지)
-    const contentVariableNames = extractedVariables.map(v => v.name);
-    const finalVariables = updatedVariables.filter(v => 
-      contentVariableNames.includes(v.name) || v.name === ''
-    );
-    
-    setVariables(finalVariables);
+    const extracted = extractVariablesFromContent(newContent);
+    // 모든 변수는 content에서 온 것으로 간주하고, type: 'content' 부여
+    setVariables(extracted.map(v => ({ ...v, type: 'content' }))); // 직접 설정
   };
   
   // 폼 검증
@@ -185,13 +162,13 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
       newErrors.content = '내용을 입력해주세요.';
     }
     
-    // 빈 변수명 검사
+    // 빈 변수명 검사 (content에서 추출된 변수 기준)
     if (variables.some(v => v.name.trim() === '')) {
-      newErrors.variables = '변수명을 모두 입력해주세요.';
+      newErrors.variables = '내용에서 추출된 변수 중 이름이 비어있는 것이 있습니다.';
     }
     
-    // 중복 변수명 검사
-    const varNames = variables.map(v => v.name.trim());
+    // 중복 변수명 검사 (content에서 추출된 변수 기준)
+    const varNames = variables.map(v => v.name.trim()).filter(name => name !== '');
     const uniqueVarNames = new Set(varNames);
     if (varNames.length !== uniqueVarNames.size) {
       newErrors.variables = '중복된 변수명이 있습니다.';
@@ -226,8 +203,8 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
         title,
         content,
         memo,
-        variables,
-        tags,
+        variables: variables.map(v => ({ name: v.name, default_value: v.default_value || '', type: v.type || 'content' })), // API 스펙 준수. type 정보 포함
+        tags: tags.map(t => ({ name: t.name, color: t.color })), // API가 tag 객체를 받는다면 이 형태로, 아니면 이름 배열로.
         folder_id: folderInfo?.id,
         folder: folderInfo?.name,
         is_favorite: isFavorite,
@@ -343,7 +320,6 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
             {/* 변수 관리 */}
             <VariableList 
               variables={variables} 
-              setVariables={setVariables} 
             />
             {errors.variables && (
               <p className="mt-1 mb-4 text-sm text-red-500 flex items-center">
@@ -441,8 +417,8 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
               title,
               content,
               memo,
-              variables,
-              tags,
+              variables: variables.map(v => ({ name: v.name, default_value: v.default_value || '', type: v.type || 'content' })), // API 스펙 준수. type 정보 포함
+              tags: tags.map(t => ({ name: t.name, color: t.color })), // API가 tag 객체를 받는다면 이 형태로, 아니면 이름 배열로.
               folder_id: folderInfo?.id,
               folder: folderInfo?.name,
               is_favorite: isFavorite,
