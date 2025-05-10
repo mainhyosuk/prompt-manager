@@ -152,22 +152,32 @@ const PromptAddEditModal = ({
     
     // 폼 상태 업데이트
     setTitle(currentTitle);
-    setContent(currentContent); // 이 호출이 handleContentChange를 트리거하여 variables 설정
+    setContent(currentContent);
     setFolderInfo(currentFolderInfo);
     setTags(currentTags);
     setIsFavorite(currentIsFavorite);
-    
-    // 초기 상태 저장 (변경 감지용)
-    // content 변경으로 자동 추출된 변수로 초기 상태 설정
-    const initialExtractedVariables = extractVariablesFromContent(currentContent);
 
+    // 변수 상태 초기화 로직 수정
+    let effectiveVariables = [];
+    const contentVariables = extractVariablesFromContent(currentContent).map(v => ({ ...v, type: 'content' }));
+
+    if (editMode && initialPrompt && initialPrompt.variables && initialPrompt.variables.length > 0) {
+      effectiveVariables = contentVariables.map(cv => {
+        const savedVariable = initialPrompt.variables.find(sv => sv.name === cv.name);
+        return savedVariable ? { ...cv, default_value: savedVariable.default_value } : cv;
+      });
+    } else {
+      effectiveVariables = contentVariables;
+    }
+    setVariables(effectiveVariables);
+    
+    // 초기 상태 저장 (변경 감지용, variables도 effectiveVariables 사용)
     setInitialState({
       title: currentTitle,
       content: currentContent,
       folderId: currentFolderInfo?.id,
       tags: currentTags.map(t => t.name).sort(),
-      // 초기 variables 상태는 content에서 파생된 것을 기준으로 합니다.
-      variables: initialExtractedVariables.map(({ name, default_value }) => ({ name, default_value, type: 'content' })).sort((a, b) => a.name.localeCompare(b.name)),
+      variables: effectiveVariables.map(({ name, default_value, type }) => ({ name, default_value, type })).sort((a, b) => a.name.localeCompare(b.name)),
       isFavorite: currentIsFavorite
     });
     
@@ -176,11 +186,18 @@ const PromptAddEditModal = ({
     
   }, [editMode, initialPrompt, initialFolderInfo, isOpen]); // isOpen 추가: 모달이 다시 열릴 때마다 초기 상태 재설정
   
-  // 내용 변경 시 변수 자동 추출
+  // 내용 변경 시 변수 자동 추출 (기존 default_value 보존하도록 수정)
   const handleContentChange = (newContent) => {
     setContent(newContent);
-    const extracted = extractVariablesFromContent(newContent);
-    setVariables(extracted.map(v => ({ ...v, type: 'content' }))); // 직접 설정 및 type 명시
+    const newContentVariables = extractVariablesFromContent(newContent).map(v => ({ ...v, type: 'content' }));
+
+    // 기존 variables 상태에서 default_value를 가져와 새 변수 목록에 병합
+    const updatedVariables = newContentVariables.map(ncv => {
+      const existingVariable = variables.find(ev => ev.name === ncv.name); // 'variables'는 현재 state
+      return existingVariable ? { ...ncv, default_value: existingVariable.default_value } : ncv;
+    });
+
+    setVariables(updatedVariables);
   };
 
   // 폼 검증
@@ -355,6 +372,11 @@ const PromptAddEditModal = ({
             {/* 변수 관리 */}
             <VariableList 
               variables={variables} 
+              onVariableChange={(index, field, value) => {
+                const newVars = [...variables];
+                newVars[index] = { ...newVars[index], [field]: value };
+                setVariables(newVars);
+              }}
             />
             {errors.variables && (
               <p className="mt-1 mb-4 text-sm text-red-500 flex items-center">

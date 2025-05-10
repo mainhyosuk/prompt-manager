@@ -71,21 +71,34 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
       const currentIsFavorite = !!prompt.is_favorite;
       
       setTitle(currentTitle);
-      setContent(currentContent); // 이 호출이 handleContentChange를 트리거하여 variables 설정
+      setContent(currentContent);
       setMemo(currentMemo);
       setTags(currentTags);
       setFolderInfo(currentFolderInfo);
       setIsFavorite(currentIsFavorite);
+
+      // 변수 상태 초기화 로직 수정
+      let effectiveVariables = [];
+      const contentVariables = extractVariablesFromContent(currentContent).map(v => ({ ...v, type: 'content' }));
+
+      if (prompt.variables && prompt.variables.length > 0) {
+        effectiveVariables = contentVariables.map(cv => {
+          const savedVariable = prompt.variables.find(sv => sv.name === cv.name);
+          return savedVariable ? { ...cv, default_value: savedVariable.default_value } : cv;
+        });
+      } else {
+        effectiveVariables = contentVariables;
+      }
+      setVariables(effectiveVariables);
       
-      // 초기 상태 저장
-      const initialExtractedVariables = extractVariablesFromContent(currentContent);
+      // 초기 상태 저장 (variables도 effectiveVariables 사용)
       setInitialState({
         title: currentTitle,
         content: currentContent,
         memo: currentMemo,
         folderId: currentFolderInfo?.id,
         tags: currentTags.map(t => t.name).sort(),
-        variables: initialExtractedVariables.map(({ name, default_value }) => ({ name, default_value, type: 'content' })).sort((a, b) => a.name.localeCompare(b.name)),
+        variables: effectiveVariables.map(({ name, default_value, type }) => ({ name, default_value, type })).sort((a, b) => a.name.localeCompare(b.name)),
         isFavorite: currentIsFavorite
       });
       
@@ -142,15 +155,18 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
     };
   }, [isOpen, attemptClose]); // attemptClose 의존성 추가
   
-  // 내용 변경 시 변수 자동 추출
+  // 내용 변경 시 변수 자동 추출 (기존 default_value 보존하도록 수정)
   const handleContentChange = (newContent) => {
     setContent(newContent);
-    const extracted = extractVariablesFromContent(newContent);
-    // 모든 변수는 content에서 온 것으로 간주하고, type: 'content' 부여
-    const newVariables = extracted.map(v => ({ ...v, type: 'content' }));
-    setVariables(newVariables);
-    // setVariables는 비동기적일 수 있으므로, 여기서 바로 console.log(variables)는 이전 상태를 보여줄 수 있습니다.
-    // useEffect 등을 사용하여 variables 상태 변화를 감지하고 로깅하는 것이 더 정확합니다.
+    const newContentVariables = extractVariablesFromContent(newContent).map(v => ({ ...v, type: 'content' }));
+
+    // 기존 variables 상태에서 default_value를 가져와 새 변수 목록에 병합
+    const updatedVariables = newContentVariables.map(ncv => {
+      const existingVariable = variables.find(ev => ev.name === ncv.name); // 'variables'는 현재 state
+      return existingVariable ? { ...ncv, default_value: existingVariable.default_value } : ncv;
+    });
+
+    setVariables(updatedVariables);
   };
   
   // 폼 검증
@@ -323,6 +339,11 @@ const UserPromptEditModal = ({ isOpen, onClose, prompt, onUpdate }) => {
             {/* 변수 관리 */}
             <VariableList 
               variables={variables} 
+              onVariableChange={(index, field, value) => {
+                const newVars = [...variables];
+                newVars[index] = { ...newVars[index], [field]: value };
+                setVariables(newVars);
+              }}
             />
             {errors.variables && (
               <p className="mt-1 mb-4 text-sm text-red-500 flex items-center">
